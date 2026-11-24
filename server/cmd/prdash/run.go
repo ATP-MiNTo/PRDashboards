@@ -17,9 +17,12 @@ import (
 	webui "github.com/ATP-MiNTo/PRDashboards/server"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/events"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/logging"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/netguard"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
@@ -41,6 +44,7 @@ type env struct {
 type fakeEnv struct {
 	Endpoints auth.Endpoints
 	GitHubAPI string
+	JiraAPI   string
 	Secrets   secrets.Store
 	Close     func()
 }
@@ -91,7 +95,7 @@ func run(ctx context.Context, o options, e env) error {
 
 	guard := netguard.New()
 	endpoints := auth.DefaultEndpoints()
-	githubAPI := github.DefaultAPIBase
+	githubAPI, jiraAPI := github.DefaultAPIBase, jira.DefaultBase
 	var sec secrets.Store
 	if o.fake {
 		if startFakes == nil {
@@ -102,7 +106,7 @@ func run(ctx context.Context, o options, e env) error {
 			return fmt.Errorf("start fakes: %w", err)
 		}
 		defer fake.Close()
-		sec, endpoints, githubAPI = fake.Secrets, fake.Endpoints, fake.GitHubAPI
+		sec, endpoints, githubAPI, jiraAPI = fake.Secrets, fake.Endpoints, fake.GitHubAPI, fake.JiraAPI
 	} else {
 		var backend string
 		if sec, backend, err = secrets.Open(dir, e.rand, e.prompt, log); err != nil {
@@ -137,30 +141,62 @@ func run(ctx context.Context, o options, e env) error {
 
 	httpClient := guard.Client()
 	ghClient := &github.Client{HTTP: httpClient, APIBase: githubAPI}
+	oauth := auth.NewOAuth(auth.Config{
+		Secrets:   sec,
+		States:    db,
+		HTTP:      httpClient,
+		GitHub:    ghClient,
+		Endpoints: endpoints,
+		Clock:     e.clock,
+		Rand:      e.rand,
+		Port:      o.port,
+	})
+	jiraClient := &jira.Client{HTTP: httpClient, Base: jiraAPI, Access: oauth.AtlassianAccess}
+	hub := events.NewHub(events.Options{})
+	acc := accounts{oauth: oauth, store: db}
+	snapshots := poller.New(poller.Config{
+		Store:     db,
+		GitHub:    ghClient,
+		Jira:      jiraClient,
+		Accounts:  acc,
+		Publisher: hub,
+		Log:       log,
+		Clock:     e.clock,
+	})
+	if err := snapshots.Load(ctx); err != nil {
+		return fmt.Errorf("load snapshot: %w", err)
+	}
 	handler, err := api.New(api.Config{
 		Port:     o.port,
 		Version:  e.version,
 		Sessions: sessions,
 		Launcher: launcher,
 		Store:    db,
-		OAuth: auth.NewOAuth(auth.Config{
-			Secrets:   sec,
-			States:    db,
-			HTTP:      httpClient,
-			GitHub:    ghClient,
-			Endpoints: endpoints,
-			Clock:     e.clock,
-			Rand:      e.rand,
-			Port:      o.port,
-		}),
-		Web:   webui.WebFS(),
-		Log:   log,
-		Clock: e.clock,
+		OAuth:    oauth,
+		Poller:   snapshots,
+		Jira:     jiraClient,
+		Accounts: acc,
+		Events:   hub,
+		Web:      webui.WebFS(),
+		Log:      log,
+		Clock:    e.clock,
 	})
 	if err != nil {
 		return err
 	}
 	srv := newHTTPServer(handler, log)
+	srv.RegisterOnShutdown(hub.Close)
+
+	pollCtx, stopPoll := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() {
+		defer close(polled)
+		snapshots.Run(pollCtx)
+	}()
+	defer func() {
+		stopPoll()
+		<-polled
+	}()
 
 	rotateCtx, stopRotate := context.WithCancel(ctx)
 	rotated := make(chan struct{})
@@ -175,7 +211,6 @@ func run(ctx context.Context, o options, e env) error {
 
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
-	log.Info("listening", "addr", ln.Addr().String(), "version", e.version)
 
 	url := launchURL(o.port, launcher.Current())
 	if o.noBrowser {
@@ -183,6 +218,7 @@ func run(ctx context.Context, o options, e env) error {
 	} else if err := e.open(url); err != nil {
 		fmt.Fprintf(e.stderr, "Could not open the browser (%v). Open %s\n", err, url)
 	}
+	log.Info("listening", "addr", ln.Addr().String(), "version", e.version)
 
 	select {
 	case err := <-served:

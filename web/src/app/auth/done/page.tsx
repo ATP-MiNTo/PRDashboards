@@ -72,7 +72,7 @@ export default function Done() {
               </p>
             )}
             <p>
-              <Link href="/">Back to the dashboard</Link>
+              <Link href="/accounts/">Back to accounts</Link>
             </p>
           </>
         )}

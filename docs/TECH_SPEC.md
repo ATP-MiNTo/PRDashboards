@@ -531,9 +531,17 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
    mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate
-   statusCheckRollup { state } } }`, `latestReviews(first: 10) { id state submittedAt author { login } }`,
+   statusCheckRollup { state contexts(first: 50) { totalCount nodes { __typename ... on CheckRun {
+   name status conclusion detailsUrl startedAt completedAt checkSuite { app { name } } } ... on
+   StatusContext { context state targetUrl createdAt } } } } } }`, `latestReviews(first: 10) { id state submittedAt author { login } }`,
    `reviewRequests(first: 10) { requestedReviewer { ... on User { id } ... on Team { id } } }`.
    The query also selects `rateLimit { cost remaining resetAt }`.
+
+   Per-check CI comes from the same query, so it costs no extra call. Each check is mapped to
+   `{name, app, state, url, startedAt, completedAt}` with state one of passing, failing, running,
+   pending, skipped, neutral or cancelled. `app` is the check suite's app name, or null for a
+   commit status. When `totalCount` is larger than the 50 returned, the snapshot keeps `total`
+   and the UI shows "+N more" linking to the PR's checks page.
 2. One search for recently merged PRs (7.5), only when PRs left the open list.
 
 No per-PR follow-up calls. The only single-PR call is the re-check right before a merge.
@@ -558,6 +566,23 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
   exponential backoff with jitter, with an injectable clock and sleep for tests.
 - The search cap of 1,000 results shows a warning when reached.
 
+### 10.4a Concrete choices (milestones 4 and 5)
+
+- Search results carry `isDraft`, `mergeable` and `reviewDecision` as GitHub reports them. A PR is
+  stale when its last commit is older than 3 days.
+- The snapshot is encoded once, stored gzip-compressed in the `snapshot` table and loaded at start.
+  `version` continues after a restart. The ETag is the quoted version.
+- The merged search is `is:pr assignee:@me is:merged updated:>=<since>`, where `since` is the
+  oldest last-seen time of the PRs that left the list, minus one minute. It runs only when the open
+  search was complete (no cap, no errors, no blocked organization).
+- SSE: heartbeat comment every 25 s, buffer of 16 events per client, a full buffer drops the client,
+  write deadline of 10 s per write. The hub replays the last event of each name to a new client.
+- Jira lookups are incremental between Jira intervals: only keys not asked before. A key Jira
+  does not return is remembered as missing until the next full Jira refresh.
+- The ticket picker JQL is `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`
+  with a cap of 100.
+- Manual links are limited to 20 keys, hidden keys to 20, validated server side.
+
 ### 10.5 Partial failures
 
 The snapshot carries per-source status: `github` (ok, rate limited, error), each blocked org, and
@@ -576,7 +601,11 @@ Based on the Command Table prototype:
 - Stat strip (open, ready, blocked, draft, stale) and filter chips.
 - Table columns, in this order: **Repo/PR, Ticket, Last commit, Review, CI, Method, Merge**.
   Stacks are grouped rows with a connector line. Each ticket shows key, status, title, matched rule
-  and source (branch, title, manual), plus unlink and the picker.
+  and source (branch, title, manual), plus unlink and the picker. The CI column shows the rollup
+  pill on top, then each check as a compact row (status dot, name, app, duration) that links to
+  its run page. Only https links are shown, github.com links are rebuilt from validated parts, and
+  a check from an external CI shows the host of its link. A PR with more than 50 checks ends the
+  list with "+N more".
 - Merge panel (7.7) opens inline under the row.
 - Settings drawer on the right with sections: Connected accounts, Repositories (search, default
   for new repos, per-repo default and branch rules, delete branch after merge), Status sync rules

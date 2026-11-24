@@ -2,26 +2,18 @@
 
 import { ApiError } from '@/api/client';
 import { useSession } from '@/api/queries';
-import { AccountsPanel } from '@/components/AccountsPanel';
+import { CommandTable } from '@/components/CommandTable/CommandTable';
 import styles from './page.module.css';
 
 export default function Home() {
   const session = useSession();
 
+  if (session.isSuccess) return <CommandTable />;
   return (
     <main className={styles.main}>
-      <section className={`${styles.card} ${styles.wide}`}>
+      <section className={styles.card}>
         <h1 className={styles.title}>PR Dashboards</h1>
         {session.isPending && <p className={styles.muted}>Loading</p>}
-        {session.isSuccess && (
-          <div className={styles.stack}>
-            <div>
-              <p>Signed in</p>
-              <p className={styles.muted}>Version {session.data.version}</p>
-            </div>
-            <AccountsPanel />
-          </div>
-        )}
         {session.isError &&
           (session.error instanceof ApiError && session.error.status === 401 ? (
             <p>Open the app with scripts/start.sh</p>

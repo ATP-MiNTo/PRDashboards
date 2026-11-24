@@ -1,0 +1,9 @@
+{
+  "status": 429,
+  "headers": {
+    "Retry-After": "900"
+  },
+  "body": {
+    "message": "Secondary rate limit"
+  }
+}

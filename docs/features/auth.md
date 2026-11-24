@@ -64,8 +64,8 @@ Web:
 
 - [web/src/app/setup/page.tsx](../../web/src/app/setup/page.tsx): `/setup`, with [ClientForm](../../web/src/components/ClientForm.tsx) and [PatForm](../../web/src/components/PatForm.tsx).
 - [web/src/app/oauth/finish/page.tsx](../../web/src/app/oauth/finish/page.tsx) and [web/src/lib/oauthFinish.ts](../../web/src/lib/oauthFinish.ts): clear the query, post to `/api/oauth/complete`, go to `/auth/done/`.
-- [web/src/app/auth/done/page.tsx](../../web/src/app/auth/done/page.tsx): result message.
-- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts on `/`.
+- [web/src/app/auth/done/page.tsx](../../web/src/app/auth/done/page.tsx): result message and a link back to `/accounts/`.
+- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts on `/accounts/`.
 - [web/src/api/queries.ts](../../web/src/api/queries.ts) and [providers.tsx](../../web/src/app/providers.tsx): TanStack Query hooks and client. [web/src/lib/problems.ts](../../web/src/lib/problems.ts): problem code to text.
 
 E2e:
@@ -159,4 +159,4 @@ minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlass
 - [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go), [oauth_api_test.go](../../server/internal/api/oauth_api_test.go), [providers_test.go](../../server/internal/api/providers_test.go): setup, PAT, accounts, the callback and complete flow over HTTP, with fake providers.
 - [server/cmd/prdash/fake_e2e_test.go](../../server/cmd/prdash/fake_e2e_test.go) and [fake_prod_test.go](../../server/cmd/prdash/fake_prod_test.go): `--fake` exists only with the e2e tag.
 - Web: [AccountsPanel.test.tsx](../../web/src/components/AccountsPanel.test.tsx), [setup/page.test.tsx](../../web/src/app/setup/page.test.tsx), [auth/done/page.test.tsx](../../web/src/app/auth/done/page.test.tsx), [oauth/finish/page.test.tsx](../../web/src/app/oauth/finish/page.test.tsx), [oauthFinish.test.ts](../../web/src/lib/oauthFinish.test.ts), [problems.test.ts](../../web/src/lib/problems.test.ts).
-- Playwright (`pnpm e2e`): [e2e/github.spec.ts](../../e2e/github.spec.ts) (cross-site OAuth sign-in, tampered state, replay, denial, PAT classic, missing scope, fine-grained, rejected) and [e2e/atlassian.spec.ts](../../e2e/atlassian.spec.ts) (sign-in, two-site pick, refresh with rotation, refresh failure and reconnect, denial).
+- Playwright (`pnpm e2e`): [e2e/github.spec.ts](../../e2e/github.spec.ts) (cross-site OAuth sign-in, tampered state, replay, denial, PAT classic, missing scope, fine-grained, rejected) and [e2e/atlassian.spec.ts](../../e2e/atlassian.spec.ts), plus [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts) for the SSO-blocked dashboard (sign-in, two-site pick, refresh with rotation, refresh failure and reconnect, denial).

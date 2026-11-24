@@ -1,0 +1,29 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "issues": [
+      {
+        "id": "1",
+        "key": "INP-1",
+        "fields": {
+          "summary": "Add login",
+          "status": {
+            "name": "In Review",
+            "statusCategory": {
+              "key": "indeterminate"
+            }
+          },
+          "project": {
+            "key": "INP"
+          },
+          "issuetype": {
+            "name": "Story"
+          }
+        }
+      }
+    ],
+    "isLast": false,
+    "nextPageToken": "T1"
+  }
+}

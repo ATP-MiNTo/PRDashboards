@@ -26,7 +26,7 @@ test.beforeEach(async ({ page, request }) => {
 test("sign-in with one site connects", async ({ page, request }) => {
   await page.getByRole("link", { name: "Connect Jira" }).click();
   await expect(page.getByRole("status")).toHaveText("Jira is connected.");
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
   await expect(page.getByText("Connected to 1 site")).toBeVisible();
   expect((await fakeState<State>(request, "atlassian")).exchanges).toBe(1);
 });
@@ -38,7 +38,7 @@ test("two sites require a pick, and the pick is kept", async ({
   await configure(request, "atlassian", { sites: 2, expiresIn: 3600 });
   await page.getByRole("link", { name: "Connect Jira" }).click();
   await expect(page.getByRole("status")).toHaveText("Jira is connected.");
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
 
   const select = page.getByLabel("Jira site");
   await expect(select).toHaveValue("");
@@ -60,15 +60,15 @@ test("an expiring token is refreshed and the refresh token rotates", async ({
   await configure(request, "atlassian", { expiresIn: 1, sites: 1 });
   await page.getByRole("link", { name: "Connect Jira" }).click();
   await expect(page.getByRole("status")).toHaveText("Jira is connected.");
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
 
+  // Connecting starts a refresh, whose Jira lookup may already have rotated the token once.
   const before = await fakeState<State>(request, "atlassian");
-  expect(before.refreshes).toBe(0);
 
   await page.getByRole("button", { name: "Check Jira" }).click();
   await expect
     .poll(async () => (await fakeState<State>(request, "atlassian")).refreshes)
-    .toBe(1);
+    .toBeGreaterThan(before.refreshes);
   const after = await fakeState<State>(request, "atlassian");
   expect(after.currentRefreshToken).not.toBe(before.currentRefreshToken);
   await expect(page.getByText("Connected to 1 site")).toBeVisible();
@@ -81,7 +81,7 @@ test("a rejected refresh asks to reconnect, and reconnecting recovers", async ({
   await configure(request, "atlassian", { expiresIn: 1, sites: 1 });
   await page.getByRole("link", { name: "Connect Jira" }).click();
   await expect(page.getByRole("status")).toHaveText("Jira is connected.");
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
 
   await configure(request, "atlassian", {
     expiresIn: 3600,
@@ -99,7 +99,7 @@ test("a rejected refresh asks to reconnect, and reconnecting recovers", async ({
   await configure(request, "atlassian", { expiresIn: 3600, sites: 1 });
   await page.getByRole("link", { name: "Reconnect Jira" }).click();
   await expect(page.getByRole("status")).toHaveText("Jira is connected.");
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
   await expect(page.getByText("Connected to 1 site")).toBeVisible();
 });
 
@@ -116,6 +116,6 @@ test("denying the authorization ends on a clear message", async ({
   await expect(page.getByRole("status")).toHaveText(
     "Jira access was not granted.",
   );
-  await page.goto(APP + "/");
+  await page.goto(APP + "/accounts/");
   await expect(page.getByText("Not connected").last()).toBeVisible();
 });

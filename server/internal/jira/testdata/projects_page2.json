@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "values": [
+      {
+        "key": "WEB"
+      }
+    ],
+    "isLast": true,
+    "total": 3
+  }
+}

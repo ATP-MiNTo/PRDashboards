@@ -13,9 +13,9 @@ describe('Auth done page', () => {
     at('?provider=github&result=ok');
     render(<Done />);
     expect(await screen.findByText('GitHub is connected.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to the dashboard' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to accounts' })).toHaveAttribute(
       'href',
-      '/',
+      expect.stringMatching(/^\/accounts\/?$/),
     );
   });
 

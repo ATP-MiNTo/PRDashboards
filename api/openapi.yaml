@@ -200,6 +200,106 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /api/snapshot:
+    get:
+      operationId: getSnapshot
+      summary: The latest dashboard snapshot
+      description: >
+        The ETag is the snapshot version. A matching If-None-Match answers 304 without a body. Before
+        the first refresh the version is 0 and the list is empty.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: The snapshot.
+          headers:
+            ETag:
+              description: The snapshot version as a quoted string.
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        '304':
+          description: The caller already has this version.
+  /api/sync:
+    post:
+      operationId: syncNow
+      summary: Start a refresh now
+      description: >
+        Joins the running refresh when there is one. The answer does not wait for the refresh. The
+        end is announced by the snapshot event on /events.
+      responses:
+        '202':
+          description: The refresh is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+  /api/tickets/assigned:
+    get:
+      operationId: getAssignedTickets
+      summary: Jira tickets assigned to the user, for the ticket picker
+      description: One JQL per Jira interval, served from a cache in between.
+      responses:
+        '200':
+          description: Up to 100 open tickets, newest update first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignedTickets'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/tickets/{key}/transitions:
+    get:
+      operationId: getTransitions
+      summary: Transitions available for a ticket, with the fields they require
+      description: Cached per ticket for 60 seconds.
+      parameters:
+        - $ref: '#/components/parameters/TicketKey'
+      responses:
+        '200':
+          description: The transitions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transitions'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/prs/{id}/tickets:
+    put:
+      operationId: putPrTickets
+      summary: Set the manual ticket links and the hidden keys of a pull request
+      description: >
+        Replaces both lists in one transaction, then rebuilds the snapshot from the data already
+        fetched, with one Jira lookup for keys it has not seen. No GitHub call. The two lists must
+        not share a key.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketLinks'
+      responses:
+        '204':
+          description: Saved. A snapshot event follows.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
 components:
   securitySchemes:
     cookieAuth:
@@ -366,6 +466,409 @@ components:
           $ref: '#/components/schemas/GithubAccount'
         jira:
           $ref: '#/components/schemas/JiraAccount'
+    TicketKey:
+      type: string
+      pattern: '^[A-Z][A-Z0-9]+-[0-9]+$'
+      maxLength: 64
+    TicketLinks:
+      type: object
+      additionalProperties: false
+      required: [manual, removed]
+      properties:
+        manual:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TicketKey'
+        removed:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TicketKey'
+    SyncStatus:
+      type: object
+      additionalProperties: false
+      required: [running, githubAt, jiraAt, nextGithubAt, nextJiraAt]
+      properties:
+        running:
+          type: boolean
+        githubAt:
+          type: string
+          format: date-time
+          nullable: true
+        jiraAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextGithubAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextJiraAt:
+          type: string
+          format: date-time
+          nullable: true
+    SourceState:
+      type: string
+      enum: [pending, ok, rate_limited, error, unreachable, disconnected]
+    SourceStatus:
+      type: object
+      additionalProperties: false
+      required: [state, syncedAt, error, resetAt]
+      properties:
+        state:
+          $ref: '#/components/schemas/SourceState'
+        syncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        resetAt:
+          type: string
+          format: date-time
+          nullable: true
+    BlockedOrg:
+      type: object
+      additionalProperties: false
+      required: [org]
+      properties:
+        org:
+          type: string
+          description: The organization login, or an empty string when GitHub did not name it.
+    Sources:
+      type: object
+      additionalProperties: false
+      required: [github, jira, blockedOrgs]
+      properties:
+        github:
+          $ref: '#/components/schemas/SourceStatus'
+        jira:
+          $ref: '#/components/schemas/SourceStatus'
+        blockedOrgs:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedOrg'
+    Warning:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [version, generatedAt, sources, prs, warnings]
+      properties:
+        version:
+          type: integer
+          format: int64
+        generatedAt:
+          type: string
+          format: date-time
+        sources:
+          $ref: '#/components/schemas/Sources'
+        prs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotPr'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+    SnapshotRepo:
+      type: object
+      additionalProperties: false
+      required: [id, nameWithOwner, isNew, squashAllowed, mergeAllowed, rebaseAllowed]
+      properties:
+        id:
+          type: string
+        nameWithOwner:
+          type: string
+        isNew:
+          type: boolean
+        squashAllowed:
+          type: boolean
+        mergeAllowed:
+          type: boolean
+        rebaseAllowed:
+          type: boolean
+    CheckState:
+      type: string
+      enum: [passing, failing, running, pending, skipped, neutral, cancelled]
+    CiState:
+      type: string
+      enum: [passing, failing, running, none]
+    Check:
+      type: object
+      additionalProperties: false
+      required: [name, app, state, url, startedAt, completedAt]
+      properties:
+        name:
+          type: string
+        app:
+          type: string
+          nullable: true
+        state:
+          $ref: '#/components/schemas/CheckState'
+        url:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    Ci:
+      type: object
+      additionalProperties: false
+      required: [state, total, checks]
+      properties:
+        state:
+          $ref: '#/components/schemas/CiState'
+        total:
+          type: integer
+          description: Number of checks GitHub reports. Larger than checks when the list was cut at 50.
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Check'
+    Review:
+      type: object
+      additionalProperties: false
+      required: [id, state, submittedAt, author]
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        author:
+          type: string
+          nullable: true
+    StackInfo:
+      type: object
+      additionalProperties: false
+      required: [id, position, size, parentId, parentNumber]
+      properties:
+        id:
+          type: string
+          description: Id of the PR at the base of the stack.
+        position:
+          type: integer
+          description: 1-based position in the stack.
+        size:
+          type: integer
+        parentId:
+          type: string
+          nullable: true
+        parentNumber:
+          type: integer
+          nullable: true
+    TicketSource:
+      type: string
+      enum: [branch, title, manual]
+    TicketSummary:
+      type: object
+      additionalProperties: false
+      required: [key, summary, status, statusCategory, project, issueType]
+      properties:
+        key:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+        statusCategory:
+          type: string
+          enum: [new, indeterminate, done]
+        project:
+          type: string
+        issueType:
+          type: string
+    SnapshotTicket:
+      type: object
+      additionalProperties: false
+      required: [key, source, found, summary, status, statusCategory, project, issueType, url]
+      properties:
+        key:
+          type: string
+        source:
+          $ref: '#/components/schemas/TicketSource'
+        found:
+          type: boolean
+          description: False when Jira has no such ticket, or has not been asked yet.
+        summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        statusCategory:
+          type: string
+          nullable: true
+        project:
+          type: string
+        issueType:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+          description: Browse URL built from the Jira site and the key. Null without a site.
+    TicketLookup:
+      type: string
+      enum: [ok, unverified, unreachable]
+    SnapshotPr:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - number
+        - title
+        - repo
+        - isDraft
+        - mergeable
+        - mergeStateStatus
+        - reviewDecision
+        - headRef
+        - headSha
+        - baseRef
+        - committedAt
+        - ci
+        - reviews
+        - reviewRequests
+        - stack
+        - tickets
+        - removedKeys
+        - ticketLookup
+      properties:
+        id:
+          type: string
+        number:
+          type: integer
+        title:
+          type: string
+        repo:
+          $ref: '#/components/schemas/SnapshotRepo'
+        isDraft:
+          type: boolean
+        mergeable:
+          type: string
+          enum: [MERGEABLE, CONFLICTING, UNKNOWN]
+        mergeStateStatus:
+          type: string
+        reviewDecision:
+          type: string
+          nullable: true
+          enum: [APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null]
+        headRef:
+          type: string
+        headSha:
+          type: string
+        baseRef:
+          type: string
+        committedAt:
+          type: string
+          format: date-time
+          nullable: true
+        ci:
+          $ref: '#/components/schemas/Ci'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        reviewRequests:
+          type: array
+          items:
+            type: string
+        stack:
+          allOf:
+            - $ref: '#/components/schemas/StackInfo'
+          nullable: true
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotTicket'
+        removedKeys:
+          type: array
+          items:
+            type: string
+        ticketLookup:
+          $ref: '#/components/schemas/TicketLookup'
+    AssignedTickets:
+      type: object
+      additionalProperties: false
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketSummary'
+    TransitionField:
+      type: object
+      additionalProperties: false
+      required: [id, name, required, type, allowedValues]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        required:
+          type: boolean
+        type:
+          type: string
+        allowedValues:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedId'
+    NamedId:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    Transition:
+      type: object
+      additionalProperties: false
+      required: [id, name, toStatus, toCategory, fields]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        toStatus:
+          type: string
+        toCategory:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionField'
+    Transitions:
+      type: object
+      additionalProperties: false
+      required: [key, transitions]
+      properties:
+        key:
+          type: string
+        transitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transition'
     Problem:
       type: object
       additionalProperties: false
@@ -382,6 +885,19 @@ components:
         detail:
           type: string
   parameters:
+    TicketKey:
+      name: key
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TicketKey'
+    PrId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_=-]{1,128}$'
     Provider:
       name: provider
       in: path
@@ -403,6 +919,12 @@ components:
             $ref: '#/components/schemas/Problem'
     Conflict:
       description: The current state does not allow it (for example not_connected or provider_not_configured).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: No such pull request.
       content:
         application/problem+json:
           schema:

@@ -88,6 +88,12 @@ func (o *OAuth) GitHubAccount() (GitHubToken, bool, error) {
 	return t, err == nil, err
 }
 
+// GitHubAccessToken returns the stored GitHub token, or ErrNotConnected.
+func (o *OAuth) GitHubAccessToken() (string, error) {
+	t, err := loadJSON[GitHubToken](o.cfg.Secrets, GitHub.tokenItem())
+	return t.Token, err
+}
+
 // CheckGitHub asks GitHub who the stored token belongs to and updates the stored login.
 func (o *OAuth) CheckGitHub(ctx context.Context) (GitHubToken, error) {
 	t, err := loadJSON[GitHubToken](o.cfg.Secrets, GitHub.tokenItem())

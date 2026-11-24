@@ -1,0 +1,62 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "expand": "transitions",
+    "transitions": [
+      {
+        "id": "31",
+        "name": "Done",
+        "to": {
+          "name": "Done",
+          "statusCategory": {
+            "key": "done"
+          }
+        },
+        "fields": {
+          "resolution": {
+            "required": true,
+            "name": "Resolution",
+            "schema": {
+              "type": "resolution"
+            },
+            "allowedValues": [
+              {
+                "id": "10",
+                "name": "Fixed"
+              },
+              {
+                "id": "11",
+                "name": "Won't Do"
+              }
+            ]
+          },
+          "customfield_10010": {
+            "required": false,
+            "name": "Release",
+            "schema": {
+              "type": "option"
+            },
+            "allowedValues": [
+              {
+                "id": "1",
+                "value": "2026.11"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "21",
+        "name": "In Review",
+        "to": {
+          "name": "In Review",
+          "statusCategory": {
+            "key": "indeterminate"
+          }
+        },
+        "fields": {}
+      }
+    ]
+  }
+}

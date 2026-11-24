@@ -13,8 +13,25 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/mw"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
+
+// Poller is what the handlers need from the poller.
+type Poller interface {
+	Current() *poller.Published
+	PR(id string) (gen.SnapshotPr, bool)
+	Trigger() gen.SyncStatus
+	Relink(ctx context.Context) error
+	Reschedule()
+}
+
+// Jira is what the handlers need from the Jira client.
+type Jira interface {
+	Assigned(ctx context.Context, site string, ttl time.Duration) ([]jira.Issue, error)
+	Transitions(ctx context.Context, site, key string) ([]jira.Transition, error)
+}
 
 // Config holds what the handler needs.
 type Config struct {
@@ -24,6 +41,11 @@ type Config struct {
 	Launcher *auth.Launcher
 	Store    *store.Store
 	OAuth    *auth.OAuth
+	Poller   Poller
+	Jira     Jira
+	Accounts poller.Accounts
+	// Events serves GET /events, the server-sent events stream.
+	Events http.Handler
 	// Web is the exported UI. It may be empty when the UI has not been built.
 	Web   fs.FS
 	Log   *slog.Logger
@@ -60,6 +82,9 @@ func New(cfg Config) (http.Handler, error) {
 	gen.HandlerFromMux(strict, mux)
 	mux.HandleFunc("GET /oauth/{provider}/start", h.oauthStart)
 	mux.HandleFunc("GET /oauth/{provider}/callback", h.oauthCallback)
+	if cfg.Events != nil {
+		mux.Handle("GET /events", cfg.Events)
+	}
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		mw.WriteProblem(w, http.StatusNotFound, mw.CodeNotFound, "")
 	})

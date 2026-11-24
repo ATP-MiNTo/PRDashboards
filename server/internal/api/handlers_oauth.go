@@ -97,6 +97,7 @@ func (h *handlers) CompleteOAuth(ctx context.Context, req gen.CompleteOAuthReque
 	err := h.cfg.OAuth.Complete(ctx, p, req.Body.Code, req.Body.State, sess.Key)
 	switch {
 	case err == nil:
+		h.kick()
 		return gen.CompleteOAuth204Response{}, nil
 	case errors.Is(err, auth.ErrInvalidState):
 		return nil, problem(http.StatusBadRequest, codeInvalidState, "the authorization expired or was already used; start again")

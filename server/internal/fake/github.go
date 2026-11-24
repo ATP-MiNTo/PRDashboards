@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 type ghCode struct{ challenge, redirect string }
@@ -140,6 +141,19 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	sso := g.st.Config.SSO
 	g.mu.Unlock()
+	var req struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req)
+	if q, ok := req.Variables["q"].(string); ok {
+		header, body := searchBody(q, sso, time.Now())
+		for k, v := range header {
+			w.Header().Set(k, v)
+		}
+		writeJSON(w, http.StatusOK, body)
+		return
+	}
 	if sso {
 		w.Header().Set("X-GitHub-SSO", "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=FAKE")
 		writeJSON(w, http.StatusOK, map[string]any{

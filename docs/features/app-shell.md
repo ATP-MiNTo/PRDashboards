@@ -5,15 +5,15 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 ## Purpose
 
 Starts the single binary, serves the embedded UI and the API on `127.0.0.1`, and signs the browser
-in with a one-time launch URL. The home page shows "Signed in", the server version and the
-Connected accounts panel ([auth.md](auth.md)). The dashboard and the poller come in later
-milestones.
+in with a one-time launch URL. `/` is the dashboard ([command-table.md](command-table.md)) and
+`/accounts/` shows "Signed in", the server version and the Connected accounts panel
+([auth.md](auth.md)). The poller runs inside the binary ([poller.md](poller.md)).
 
 Differences from the spec:
 
-- No SSE route and no web app manifest or service worker. The PWA part of TECH_SPEC 4.3 is
-  milestone 9.
-- The Next export has pages `/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
+- `GET /events` streams server-sent events ([poller.md](poller.md)). There is no web app manifest
+  or service worker. The PWA part of TECH_SPEC 4.3 is milestone 9.
+- The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
 
 ## Data model
@@ -45,7 +45,8 @@ Server:
 
 Web:
 
-- [web/src/app/page.tsx](../../web/src/app/page.tsx): `/`, calls `GET /api/session` and shows the accounts panel.
+- [web/src/app/page.tsx](../../web/src/app/page.tsx): `/`, calls `GET /api/session` and shows the Command Table.
+- [web/src/app/accounts/page.tsx](../../web/src/app/accounts/page.tsx): `/accounts/`, the signed-in state and the accounts panel.
 - Other pages: `/setup/`, `/auth/done/` and `/oauth/finish/` are described in [auth.md](auth.md).
 - [web/src/app/auth/launch/page.tsx](../../web/src/app/auth/launch/page.tsx): reads the fragment, posts the token, goes to `/`.
 - [web/src/lib/launch.ts](../../web/src/lib/launch.ts): `parseLaunchToken` and `runLaunch` (pure logic, no DOM).
@@ -77,14 +78,15 @@ Scripts and CI:
    secrets store (keychain, else the passphrase prompt, else exit when there is no terminal), open
    SQLite, load or create the session key, load sessions, create the `Launcher` (writes
    `launch.token` with the port), build the `netguard` client, the GitHub client and `auth.OAuth`,
-   build the handler with `api.New`, serve, and open the browser or print the URL to stderr.
-   Rotation runs every 60 s. With `--fake` (e2e build) the fakes start first and secrets are in
+   build the Jira client, the SSE hub and the poller (which loads the stored snapshot), build the
+   handler with `api.New`, serve, start the poller, and open the browser or print the URL to
+   stderr. Rotation runs every 60 s. With `--fake` (e2e build) the fakes start first and secrets are in
    memory.
 5. Browser: `/auth/launch/#t=...` loads the static page, which clears the fragment with
    `history.replaceState`, posts `{launchToken}` to `POST /api/session`, and on `204` calls
-   `location.replace('/')`. `/` calls `GET /api/session` and shows "Signed in" and the version,
-   or "Open the app with scripts/start.sh" on `401`.
-6. SIGINT or SIGTERM: `srv.Shutdown` with a 10 s limit, stop rotation, remove `launch.token`,
+   `location.replace('/')`. `/` calls `GET /api/session` and shows the dashboard, or "Open the app
+   with scripts/start.sh" on `401`. `/accounts/` shows "Signed in" and the version.
+6. SIGINT or SIGTERM: `srv.Shutdown` with a 10 s limit (the SSE hub closes its streams first), stop the poller and rotation, remove `launch.token`,
    release the lock.
 
 ## Outside calls
@@ -105,8 +107,8 @@ None.
   unknown path gets `404.html` from the export when present. With no web build embedded, every
   non-API path answers `503` with a plain page that says to run `scripts/start.sh`.
 - The HTTP server sets `ReadHeaderTimeout` 10 s and `ReadTimeout` 30 s. `WriteTimeout` stays unset
-  on purpose: a write deadline would cut off the long-lived SSE stream (`/events`) that arrives with
-  the poller. Handlers that must not hang rely on the request context and the outbound client
+  on purpose: a write deadline would cut off the long-lived SSE stream (`/events`). The hub sets a
+  deadline per write instead. Handlers that must not hang rely on the request context and the outbound client
   timeouts instead.
 - The web app has no inline script beyond what Next emits, no external fonts or CDNs, and no
   `dangerouslySetInnerHTML` (ESLint enforces it).
@@ -120,5 +122,5 @@ None.
 - [e2e/](../../e2e/playwright.config.ts): Playwright specs, see [auth.md](auth.md).
 - [server/internal/api/static_test.go](../../server/internal/api/static_test.go): static serving, redirect, 404 page, empty embed fallback.
 - [server/internal/api/api_test.go](../../server/internal/api/api_test.go): launch flow end to end.
-- [web/src/lib/launch.test.ts](../../web/src/lib/launch.test.ts), [web/src/app/page.test.tsx](../../web/src/app/page.test.tsx), [web/src/app/auth/launch/page.test.tsx](../../web/src/app/auth/launch/page.test.tsx), [web/src/api/client.test.ts](../../web/src/api/client.test.ts).
+- [web/src/lib/launch.test.ts](../../web/src/lib/launch.test.ts), [web/src/app/accounts/page.test.tsx](../../web/src/app/accounts/page.test.tsx), [web/src/app/auth/launch/page.test.tsx](../../web/src/app/auth/launch/page.test.tsx), [web/src/api/client.test.ts](../../web/src/api/client.test.ts).
 - [scripts/check-docs.test.mjs](../../scripts/check-docs.test.mjs) and [scripts/check-version.test.mjs](../../scripts/check-version.test.mjs) (`pnpm test:scripts`).

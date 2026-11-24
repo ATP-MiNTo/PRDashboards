@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
 )
@@ -33,6 +34,15 @@ type Client struct {
 	HTTP    *http.Client
 	APIBase string
 	Backoff backoff.Policy
+	// Clock defaults to time.Now.
+	Clock func() time.Time
+}
+
+func (c *Client) now() time.Time {
+	if c.Clock != nil {
+		return c.Clock()
+	}
+	return time.Now()
 }
 
 func (c *Client) base() string {

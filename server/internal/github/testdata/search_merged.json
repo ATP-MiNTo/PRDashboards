@@ -1,0 +1,36 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "data": {
+      "rateLimit": {
+        "limit": 5000,
+        "cost": 1,
+        "remaining": 4980,
+        "resetAt": "2026-11-24T10:00:00Z"
+      },
+      "search": {
+        "issueCount": 2,
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
+        "nodes": [
+          {
+            "__typename": "PullRequest",
+            "id": "PR_9",
+            "mergedAt": "2026-11-24T08:45:00Z"
+          },
+          {
+            "__typename": "PullRequest",
+            "id": "PR_10",
+            "mergedAt": null
+          },
+          {
+            "__typename": "Issue"
+          }
+        ]
+      }
+    }
+  }
+}

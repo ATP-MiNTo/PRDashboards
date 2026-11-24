@@ -27,6 +27,63 @@ const (
 	CookieAuthScopes = "cookieAuth.Scopes"
 )
 
+// Defines values for CheckState.
+const (
+	CheckStateCancelled CheckState = "cancelled"
+	CheckStateFailing   CheckState = "failing"
+	CheckStateNeutral   CheckState = "neutral"
+	CheckStatePassing   CheckState = "passing"
+	CheckStatePending   CheckState = "pending"
+	CheckStateRunning   CheckState = "running"
+	CheckStateSkipped   CheckState = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the CheckState enum.
+func (e CheckState) Valid() bool {
+	switch e {
+	case CheckStateCancelled:
+		return true
+	case CheckStateFailing:
+		return true
+	case CheckStateNeutral:
+		return true
+	case CheckStatePassing:
+		return true
+	case CheckStatePending:
+		return true
+	case CheckStateRunning:
+		return true
+	case CheckStateSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CiState.
+const (
+	CiStateFailing CiState = "failing"
+	CiStateNone    CiState = "none"
+	CiStatePassing CiState = "passing"
+	CiStateRunning CiState = "running"
+)
+
+// Valid indicates whether the value is a known member of the CiState enum.
+func (e CiState) Valid() bool {
+	switch e {
+	case CiStateFailing:
+		return true
+	case CiStateNone:
+		return true
+	case CiStatePassing:
+		return true
+	case CiStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GithubAccountMethod.
 const (
 	Oauth GithubAccountMethod = "oauth"
@@ -132,11 +189,185 @@ func (e SettingsTheme) Valid() bool {
 	}
 }
 
+// Defines values for SnapshotPrMergeable.
+const (
+	CONFLICTING SnapshotPrMergeable = "CONFLICTING"
+	MERGEABLE   SnapshotPrMergeable = "MERGEABLE"
+	UNKNOWN     SnapshotPrMergeable = "UNKNOWN"
+)
+
+// Valid indicates whether the value is a known member of the SnapshotPrMergeable enum.
+func (e SnapshotPrMergeable) Valid() bool {
+	switch e {
+	case CONFLICTING:
+		return true
+	case MERGEABLE:
+		return true
+	case UNKNOWN:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SnapshotPrReviewDecision.
+const (
+	APPROVED         SnapshotPrReviewDecision = "APPROVED"
+	CHANGESREQUESTED SnapshotPrReviewDecision = "CHANGES_REQUESTED"
+	LessThannil      SnapshotPrReviewDecision = "<nil>"
+	REVIEWREQUIRED   SnapshotPrReviewDecision = "REVIEW_REQUIRED"
+)
+
+// Valid indicates whether the value is a known member of the SnapshotPrReviewDecision enum.
+func (e SnapshotPrReviewDecision) Valid() bool {
+	switch e {
+	case APPROVED:
+		return true
+	case CHANGESREQUESTED:
+		return true
+	case LessThannil:
+		return true
+	case REVIEWREQUIRED:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SourceState.
+const (
+	SourceStateDisconnected SourceState = "disconnected"
+	SourceStateError        SourceState = "error"
+	SourceStateOk           SourceState = "ok"
+	SourceStatePending      SourceState = "pending"
+	SourceStateRateLimited  SourceState = "rate_limited"
+	SourceStateUnreachable  SourceState = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the SourceState enum.
+func (e SourceState) Valid() bool {
+	switch e {
+	case SourceStateDisconnected:
+		return true
+	case SourceStateError:
+		return true
+	case SourceStateOk:
+		return true
+	case SourceStatePending:
+		return true
+	case SourceStateRateLimited:
+		return true
+	case SourceStateUnreachable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TicketLookup.
+const (
+	TicketLookupOk          TicketLookup = "ok"
+	TicketLookupUnreachable TicketLookup = "unreachable"
+	TicketLookupUnverified  TicketLookup = "unverified"
+)
+
+// Valid indicates whether the value is a known member of the TicketLookup enum.
+func (e TicketLookup) Valid() bool {
+	switch e {
+	case TicketLookupOk:
+		return true
+	case TicketLookupUnreachable:
+		return true
+	case TicketLookupUnverified:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TicketSource.
+const (
+	Branch TicketSource = "branch"
+	Manual TicketSource = "manual"
+	Title  TicketSource = "title"
+)
+
+// Valid indicates whether the value is a known member of the TicketSource enum.
+func (e TicketSource) Valid() bool {
+	switch e {
+	case Branch:
+		return true
+	case Manual:
+		return true
+	case Title:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TicketSummaryStatusCategory.
+const (
+	Done          TicketSummaryStatusCategory = "done"
+	Indeterminate TicketSummaryStatusCategory = "indeterminate"
+	New           TicketSummaryStatusCategory = "new"
+)
+
+// Valid indicates whether the value is a known member of the TicketSummaryStatusCategory enum.
+func (e TicketSummaryStatusCategory) Valid() bool {
+	switch e {
+	case Done:
+		return true
+	case Indeterminate:
+		return true
+	case New:
+		return true
+	default:
+		return false
+	}
+}
+
 // Accounts defines model for Accounts.
 type Accounts struct {
 	Github GithubAccount `json:"github"`
 	Jira   JiraAccount   `json:"jira"`
 }
+
+// AssignedTickets defines model for AssignedTickets.
+type AssignedTickets struct {
+	Tickets []TicketSummary `json:"tickets"`
+}
+
+// BlockedOrg defines model for BlockedOrg.
+type BlockedOrg struct {
+	// Org The organization login, or an empty string when GitHub did not name it.
+	Org string `json:"org"`
+}
+
+// Check defines model for Check.
+type Check struct {
+	App         *string    `json:"app"`
+	CompletedAt *time.Time `json:"completedAt"`
+	Name        string     `json:"name"`
+	StartedAt   *time.Time `json:"startedAt"`
+	State       CheckState `json:"state"`
+	Url         *string    `json:"url"`
+}
+
+// CheckState defines model for CheckState.
+type CheckState string
+
+// Ci defines model for Ci.
+type Ci struct {
+	Checks []Check `json:"checks"`
+	State  CiState `json:"state"`
+
+	// Total Number of checks GitHub reports. Larger than checks when the list was cut at 50.
+	Total int `json:"total"`
+}
+
+// CiState defines model for CiState.
+type CiState string
 
 // ClientCredentials defines model for ClientCredentials.
 type ClientCredentials struct {
@@ -175,6 +406,12 @@ type JiraSite struct {
 	Url  string `json:"url"`
 }
 
+// NamedId defines model for NamedId.
+type NamedId struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // OAuthComplete defines model for OAuthComplete.
 type OAuthComplete struct {
 	Code     string   `json:"code"`
@@ -208,6 +445,14 @@ type ProviderSetup struct {
 	Configured  bool   `json:"configured"`
 }
 
+// Review defines model for Review.
+type Review struct {
+	Author      *string    `json:"author"`
+	Id          string     `json:"id"`
+	State       string     `json:"state"`
+	SubmittedAt *time.Time `json:"submittedAt"`
+}
+
 // Session defines model for Session.
 type Session struct {
 	CsrfToken string    `json:"csrfToken"`
@@ -239,6 +484,170 @@ type Setup struct {
 	Github    ProviderSetup `json:"github"`
 }
 
+// Snapshot defines model for Snapshot.
+type Snapshot struct {
+	GeneratedAt time.Time    `json:"generatedAt"`
+	Prs         []SnapshotPr `json:"prs"`
+	Sources     Sources      `json:"sources"`
+	Version     int64        `json:"version"`
+	Warnings    []Warning    `json:"warnings"`
+}
+
+// SnapshotPr defines model for SnapshotPr.
+type SnapshotPr struct {
+	BaseRef          string                    `json:"baseRef"`
+	Ci               Ci                        `json:"ci"`
+	CommittedAt      *time.Time                `json:"committedAt"`
+	HeadRef          string                    `json:"headRef"`
+	HeadSha          string                    `json:"headSha"`
+	Id               string                    `json:"id"`
+	IsDraft          bool                      `json:"isDraft"`
+	MergeStateStatus string                    `json:"mergeStateStatus"`
+	Mergeable        SnapshotPrMergeable       `json:"mergeable"`
+	Number           int                       `json:"number"`
+	RemovedKeys      []string                  `json:"removedKeys"`
+	Repo             SnapshotRepo              `json:"repo"`
+	ReviewDecision   *SnapshotPrReviewDecision `json:"reviewDecision"`
+	ReviewRequests   []string                  `json:"reviewRequests"`
+	Reviews          []Review                  `json:"reviews"`
+	Stack            *StackInfo                `json:"stack"`
+	TicketLookup     TicketLookup              `json:"ticketLookup"`
+	Tickets          []SnapshotTicket          `json:"tickets"`
+	Title            string                    `json:"title"`
+}
+
+// SnapshotPrMergeable defines model for SnapshotPr.Mergeable.
+type SnapshotPrMergeable string
+
+// SnapshotPrReviewDecision defines model for SnapshotPr.ReviewDecision.
+type SnapshotPrReviewDecision string
+
+// SnapshotRepo defines model for SnapshotRepo.
+type SnapshotRepo struct {
+	Id            string `json:"id"`
+	IsNew         bool   `json:"isNew"`
+	MergeAllowed  bool   `json:"mergeAllowed"`
+	NameWithOwner string `json:"nameWithOwner"`
+	RebaseAllowed bool   `json:"rebaseAllowed"`
+	SquashAllowed bool   `json:"squashAllowed"`
+}
+
+// SnapshotTicket defines model for SnapshotTicket.
+type SnapshotTicket struct {
+	// Found False when Jira has no such ticket, or has not been asked yet.
+	Found          bool         `json:"found"`
+	IssueType      *string      `json:"issueType"`
+	Key            string       `json:"key"`
+	Project        string       `json:"project"`
+	Source         TicketSource `json:"source"`
+	Status         *string      `json:"status"`
+	StatusCategory *string      `json:"statusCategory"`
+	Summary        *string      `json:"summary"`
+
+	// Url Browse URL built from the Jira site and the key. Null without a site.
+	Url *string `json:"url"`
+}
+
+// SourceState defines model for SourceState.
+type SourceState string
+
+// SourceStatus defines model for SourceStatus.
+type SourceStatus struct {
+	Error    *string     `json:"error"`
+	ResetAt  *time.Time  `json:"resetAt"`
+	State    SourceState `json:"state"`
+	SyncedAt *time.Time  `json:"syncedAt"`
+}
+
+// Sources defines model for Sources.
+type Sources struct {
+	BlockedOrgs []BlockedOrg `json:"blockedOrgs"`
+	Github      SourceStatus `json:"github"`
+	Jira        SourceStatus `json:"jira"`
+}
+
+// StackInfo defines model for StackInfo.
+type StackInfo struct {
+	// Id Id of the PR at the base of the stack.
+	Id           string  `json:"id"`
+	ParentId     *string `json:"parentId"`
+	ParentNumber *int    `json:"parentNumber"`
+
+	// Position 1-based position in the stack.
+	Position int `json:"position"`
+	Size     int `json:"size"`
+}
+
+// SyncStatus defines model for SyncStatus.
+type SyncStatus struct {
+	GithubAt     *time.Time `json:"githubAt"`
+	JiraAt       *time.Time `json:"jiraAt"`
+	NextGithubAt *time.Time `json:"nextGithubAt"`
+	NextJiraAt   *time.Time `json:"nextJiraAt"`
+	Running      bool       `json:"running"`
+}
+
+// TicketKey defines model for TicketKey.
+type TicketKey = string
+
+// TicketLinks defines model for TicketLinks.
+type TicketLinks struct {
+	Manual  []TicketKey `json:"manual"`
+	Removed []TicketKey `json:"removed"`
+}
+
+// TicketLookup defines model for TicketLookup.
+type TicketLookup string
+
+// TicketSource defines model for TicketSource.
+type TicketSource string
+
+// TicketSummary defines model for TicketSummary.
+type TicketSummary struct {
+	IssueType      string                      `json:"issueType"`
+	Key            string                      `json:"key"`
+	Project        string                      `json:"project"`
+	Status         string                      `json:"status"`
+	StatusCategory TicketSummaryStatusCategory `json:"statusCategory"`
+	Summary        string                      `json:"summary"`
+}
+
+// TicketSummaryStatusCategory defines model for TicketSummary.StatusCategory.
+type TicketSummaryStatusCategory string
+
+// Transition defines model for Transition.
+type Transition struct {
+	Fields     []TransitionField `json:"fields"`
+	Id         string            `json:"id"`
+	Name       string            `json:"name"`
+	ToCategory string            `json:"toCategory"`
+	ToStatus   string            `json:"toStatus"`
+}
+
+// TransitionField defines model for TransitionField.
+type TransitionField struct {
+	AllowedValues []NamedId `json:"allowedValues"`
+	Id            string    `json:"id"`
+	Name          string    `json:"name"`
+	Required      bool      `json:"required"`
+	Type          string    `json:"type"`
+}
+
+// Transitions defines model for Transitions.
+type Transitions struct {
+	Key         string       `json:"key"`
+	Transitions []Transition `json:"transitions"`
+}
+
+// Warning defines model for Warning.
+type Warning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// PrId defines model for PrId.
+type PrId = string
+
 // BadGateway defines model for BadGateway.
 type BadGateway = Problem
 
@@ -251,14 +660,25 @@ type Conflict = Problem
 // InvalidLaunchToken defines model for InvalidLaunchToken.
 type InvalidLaunchToken = Problem
 
+// NotFound defines model for NotFound.
+type NotFound = Problem
+
 // Unprocessable defines model for Unprocessable.
 type Unprocessable = Problem
+
+// GetSnapshotParams defines parameters for GetSnapshot.
+type GetSnapshotParams struct {
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
+}
 
 // PutGithubPatJSONRequestBody defines body for PutGithubPat for application/json ContentType.
 type PutGithubPatJSONRequestBody = PatRequest
 
 // CompleteOAuthJSONRequestBody defines body for CompleteOAuth for application/json ContentType.
 type CompleteOAuthJSONRequestBody = OAuthComplete
+
+// PutPrTicketsJSONRequestBody defines body for PutPrTickets for application/json ContentType.
+type PutPrTicketsJSONRequestBody = TicketLinks
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody = CreateSessionRequest
@@ -286,6 +706,9 @@ type ServerInterface interface {
 	// Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(w http.ResponseWriter, r *http.Request)
+	// Set the manual ticket links and the hidden keys of a pull request
+	// (PUT /api/prs/{id}/tickets)
+	PutPrTickets(w http.ResponseWriter, r *http.Request, id PrId)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(w http.ResponseWriter, r *http.Request)
@@ -307,6 +730,18 @@ type ServerInterface interface {
 	// Store the OAuth app client credentials of a provider in the secrets store
 	// (PUT /api/setup/{provider})
 	PutSetupClient(w http.ResponseWriter, r *http.Request, provider Provider)
+	// The latest dashboard snapshot
+	// (GET /api/snapshot)
+	GetSnapshot(w http.ResponseWriter, r *http.Request, params GetSnapshotParams)
+	// Start a refresh now
+	// (POST /api/sync)
+	SyncNow(w http.ResponseWriter, r *http.Request)
+	// Jira tickets assigned to the user, for the ticket picker
+	// (GET /api/tickets/assigned)
+	GetAssignedTickets(w http.ResponseWriter, r *http.Request)
+	// Transitions available for a ticket, with the fields they require
+	// (GET /api/tickets/{key}/transitions)
+	GetTransitions(w http.ResponseWriter, r *http.Request, key TicketKey)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -431,6 +866,37 @@ func (siw *ServerInterfaceWrapper) CompleteOAuth(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CompleteOAuth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutPrTickets operation middleware
+func (siw *ServerInterfaceWrapper) PutPrTickets(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id PrId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutPrTickets(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -585,6 +1051,123 @@ func (siw *ServerInterfaceWrapper) PutSetupClient(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetSnapshot operation middleware
+func (siw *ServerInterfaceWrapper) GetSnapshot(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSnapshotParams
+
+	headers := r.Header
+
+	// ------------- Optional header parameter "If-None-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-None-Match")]; found {
+		var IfNoneMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-None-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-None-Match", valueList[0], &IfNoneMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-None-Match", Err: err})
+			return
+		}
+
+		params.IfNoneMatch = &IfNoneMatch
+
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSnapshot(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SyncNow operation middleware
+func (siw *ServerInterfaceWrapper) SyncNow(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SyncNow(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAssignedTickets operation middleware
+func (siw *ServerInterfaceWrapper) GetAssignedTickets(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAssignedTickets(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTransitions operation middleware
+func (siw *ServerInterfaceWrapper) GetTransitions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "key" -------------
+	var key TicketKey
+
+	err = runtime.BindStyledParameterWithOptions("simple", "key", r.PathValue("key"), &key, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "key", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTransitions(w, r, key)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -710,6 +1293,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/api/accounts/{provider}/check", wrapper.CheckAccount)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/github/pat", wrapper.PutGithubPat)
 	m.HandleFunc("POST "+options.BaseURL+"/api/oauth/complete", wrapper.CompleteOAuth)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/prs/{id}/tickets", wrapper.PutPrTickets)
 	m.HandleFunc("GET "+options.BaseURL+"/api/session", wrapper.GetSession)
 	m.HandleFunc("POST "+options.BaseURL+"/api/session", wrapper.CreateSession)
 	m.HandleFunc("POST "+options.BaseURL+"/api/sessions/revoke-all", wrapper.RevokeAllSessions)
@@ -717,6 +1301,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("PUT "+options.BaseURL+"/api/settings", wrapper.PutSettings)
 	m.HandleFunc("GET "+options.BaseURL+"/api/setup", wrapper.GetSetup)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/setup/{provider}", wrapper.PutSetupClient)
+	m.HandleFunc("GET "+options.BaseURL+"/api/snapshot", wrapper.GetSnapshot)
+	m.HandleFunc("POST "+options.BaseURL+"/api/sync", wrapper.SyncNow)
+	m.HandleFunc("GET "+options.BaseURL+"/api/tickets/assigned", wrapper.GetAssignedTickets)
+	m.HandleFunc("GET "+options.BaseURL+"/api/tickets/{key}/transitions", wrapper.GetTransitions)
 
 	return m
 }
@@ -728,6 +1316,8 @@ type BadRequestApplicationProblemPlusJSONResponse Problem
 type ConflictApplicationProblemPlusJSONResponse Problem
 
 type InvalidLaunchTokenApplicationProblemPlusJSONResponse Problem
+
+type NotFoundApplicationProblemPlusJSONResponse Problem
 
 type UnprocessableApplicationProblemPlusJSONResponse Problem
 
@@ -901,6 +1491,45 @@ func (response CompleteOAuth502ApplicationProblemPlusJSONResponse) VisitComplete
 	return json.NewEncoder(w).Encode(response)
 }
 
+type PutPrTicketsRequestObject struct {
+	Id   PrId `json:"id"`
+	Body *PutPrTicketsJSONRequestBody
+}
+
+type PutPrTicketsResponseObject interface {
+	VisitPutPrTicketsResponse(w http.ResponseWriter) error
+}
+
+type PutPrTickets204Response struct {
+}
+
+func (response PutPrTickets204Response) VisitPutPrTicketsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PutPrTickets404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response PutPrTickets404ApplicationProblemPlusJSONResponse) VisitPutPrTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutPrTickets422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response PutPrTickets422ApplicationProblemPlusJSONResponse) VisitPutPrTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type GetSessionRequestObject struct {
 }
 
@@ -1048,6 +1677,132 @@ func (response PutSetupClient204Response) VisitPutSetupClientResponse(w http.Res
 	return nil
 }
 
+type GetSnapshotRequestObject struct {
+	Params GetSnapshotParams
+}
+
+type GetSnapshotResponseObject interface {
+	VisitGetSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetSnapshot200ResponseHeaders struct {
+	ETag string
+}
+
+type GetSnapshot200JSONResponse struct {
+	Body    Snapshot
+	Headers GetSnapshot200ResponseHeaders
+}
+
+func (response GetSnapshot200JSONResponse) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type GetSnapshot304Response struct {
+}
+
+func (response GetSnapshot304Response) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.WriteHeader(304)
+	return nil
+}
+
+type SyncNowRequestObject struct {
+}
+
+type SyncNowResponseObject interface {
+	VisitSyncNowResponse(w http.ResponseWriter) error
+}
+
+type SyncNow202JSONResponse SyncStatus
+
+func (response SyncNow202JSONResponse) VisitSyncNowResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAssignedTicketsRequestObject struct {
+}
+
+type GetAssignedTicketsResponseObject interface {
+	VisitGetAssignedTicketsResponse(w http.ResponseWriter) error
+}
+
+type GetAssignedTickets200JSONResponse AssignedTickets
+
+func (response GetAssignedTickets200JSONResponse) VisitGetAssignedTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAssignedTickets409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response GetAssignedTickets409ApplicationProblemPlusJSONResponse) VisitGetAssignedTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAssignedTickets502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response GetAssignedTickets502ApplicationProblemPlusJSONResponse) VisitGetAssignedTicketsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTransitionsRequestObject struct {
+	Key TicketKey `json:"key"`
+}
+
+type GetTransitionsResponseObject interface {
+	VisitGetTransitionsResponse(w http.ResponseWriter) error
+}
+
+type GetTransitions200JSONResponse Transitions
+
+func (response GetTransitions200JSONResponse) VisitGetTransitionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTransitions409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response GetTransitions409ApplicationProblemPlusJSONResponse) VisitGetTransitionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTransitions502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response GetTransitions502ApplicationProblemPlusJSONResponse) VisitGetTransitionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Connection state of GitHub and Jira
@@ -1065,6 +1820,9 @@ type StrictServerInterface interface {
 	// Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(ctx context.Context, request CompleteOAuthRequestObject) (CompleteOAuthResponseObject, error)
+	// Set the manual ticket links and the hidden keys of a pull request
+	// (PUT /api/prs/{id}/tickets)
+	PutPrTickets(ctx context.Context, request PutPrTicketsRequestObject) (PutPrTicketsResponseObject, error)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(ctx context.Context, request GetSessionRequestObject) (GetSessionResponseObject, error)
@@ -1086,6 +1844,18 @@ type StrictServerInterface interface {
 	// Store the OAuth app client credentials of a provider in the secrets store
 	// (PUT /api/setup/{provider})
 	PutSetupClient(ctx context.Context, request PutSetupClientRequestObject) (PutSetupClientResponseObject, error)
+	// The latest dashboard snapshot
+	// (GET /api/snapshot)
+	GetSnapshot(ctx context.Context, request GetSnapshotRequestObject) (GetSnapshotResponseObject, error)
+	// Start a refresh now
+	// (POST /api/sync)
+	SyncNow(ctx context.Context, request SyncNowRequestObject) (SyncNowResponseObject, error)
+	// Jira tickets assigned to the user, for the ticket picker
+	// (GET /api/tickets/assigned)
+	GetAssignedTickets(ctx context.Context, request GetAssignedTicketsRequestObject) (GetAssignedTicketsResponseObject, error)
+	// Transitions available for a ticket, with the fields they require
+	// (GET /api/tickets/{key}/transitions)
+	GetTransitions(ctx context.Context, request GetTransitionsRequestObject) (GetTransitionsResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1248,6 +2018,39 @@ func (sh *strictHandler) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CompleteOAuthResponseObject); ok {
 		if err := validResponse.VisitCompleteOAuthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutPrTickets operation middleware
+func (sh *strictHandler) PutPrTickets(w http.ResponseWriter, r *http.Request, id PrId) {
+	var request PutPrTicketsRequestObject
+
+	request.Id = id
+
+	var body PutPrTicketsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutPrTickets(ctx, request.(PutPrTicketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutPrTickets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutPrTicketsResponseObject); ok {
+		if err := validResponse.VisitPutPrTicketsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1446,52 +2249,188 @@ func (sh *strictHandler) PutSetupClient(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// GetSnapshot operation middleware
+func (sh *strictHandler) GetSnapshot(w http.ResponseWriter, r *http.Request, params GetSnapshotParams) {
+	var request GetSnapshotRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSnapshot(ctx, request.(GetSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSnapshot")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSnapshotResponseObject); ok {
+		if err := validResponse.VisitGetSnapshotResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SyncNow operation middleware
+func (sh *strictHandler) SyncNow(w http.ResponseWriter, r *http.Request) {
+	var request SyncNowRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SyncNow(ctx, request.(SyncNowRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SyncNow")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SyncNowResponseObject); ok {
+		if err := validResponse.VisitSyncNowResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetAssignedTickets operation middleware
+func (sh *strictHandler) GetAssignedTickets(w http.ResponseWriter, r *http.Request) {
+	var request GetAssignedTicketsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAssignedTickets(ctx, request.(GetAssignedTicketsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAssignedTickets")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAssignedTicketsResponseObject); ok {
+		if err := validResponse.VisitGetAssignedTicketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTransitions operation middleware
+func (sh *strictHandler) GetTransitions(w http.ResponseWriter, r *http.Request, key TicketKey) {
+	var request GetTransitionsRequestObject
+
+	request.Key = key
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTransitions(ctx, request.(GetTransitionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTransitions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTransitionsResponseObject); ok {
+		if err := validResponse.VisitGetTransitionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"AP//pYavoxcoAAA=",
+	"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",
+	"55v1zfr/AgAA//88AdvYxlMAAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

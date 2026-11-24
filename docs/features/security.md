@@ -18,7 +18,7 @@ Differences from the spec:
   (cookie-less by design, see [auth.md](auth.md)). `GET /oauth/{provider}/start` is protected.
 - The session cookie has no `Secure` flag. The app is served over plain `http` on loopback, and a
   `Secure` cookie is not sent back on `http://127.0.0.1`. `HttpOnly` and `SameSite=Strict` stay.
-- `/events` is guarded like `/api/*` but has no route yet.
+- `GET /events` (server-sent events, [poller.md](poller.md)) is guarded like `/api/*`: the same chain runs, so it needs a session. It sets `Cache-Control: no-store` and the hub sets a write deadline per write.
 
 ## Data model
 

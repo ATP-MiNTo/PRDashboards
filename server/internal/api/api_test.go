@@ -54,7 +54,7 @@ func webFS() fs.FS {
 	}
 }
 
-func newRig(t *testing.T, web fs.FS) *rig {
+func newRig(t *testing.T, web fs.FS, mods ...func(*api.Config)) *rig {
 	t.Helper()
 	clock := testutil.NewClock()
 	rnd := &testutil.Rand{}
@@ -83,7 +83,7 @@ func newRig(t *testing.T, web fs.FS) *rig {
 		Port:      4317,
 	})
 	sessions := auth.NewSessions([]byte("0123456789abcdef0123456789abcdef"), clock.Now, rnd, db, log)
-	h, err := api.New(api.Config{
+	cfg := api.Config{
 		Port:     4317,
 		Version:  "9.9.9",
 		Sessions: sessions,
@@ -93,7 +93,11 @@ func newRig(t *testing.T, web fs.FS) *rig {
 		Web:      web,
 		Log:      log,
 		Clock:    clock.Now,
-	})
+	}
+	for _, m := range mods {
+		m(&cfg)
+	}
+	h, err := api.New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

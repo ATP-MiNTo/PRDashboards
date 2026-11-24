@@ -32,7 +32,7 @@ test("OAuth sign-in through the cross-site callback and the finish page", async 
   expect(page.url()).not.toContain("code=");
   expect(page.url()).not.toContain("state=");
 
-  await page.getByRole("link", { name: "Back to the dashboard" }).click();
+  await page.getByRole("link", { name: "Back to accounts" }).click();
   await expect(page.getByText("Connected as octocat (OAuth)")).toBeVisible();
 
   const state = await fakeState<{
@@ -55,7 +55,7 @@ test("a tampered state is rejected and nothing is connected", async ({
   expect(
     (await fakeState<{ exchanges: number }>(request, "github")).exchanges,
   ).toBe(0);
-  await page.goto(APP + "/");
+  await page.goto(APP + "/accounts/");
   await expect(page.getByText("Not connected").first()).toBeVisible();
 });
 
@@ -107,7 +107,7 @@ test.describe("access token", () => {
   test("a classic token with the needed scopes connects", async ({ page }) => {
     await submit(page, "ghp_classic_ok");
     await expect(page.getByText("Connected as octocat")).toBeVisible();
-    await page.goto(APP + "/");
+    await page.goto(APP + "/accounts/");
     await expect(
       page.getByText("Connected as octocat (access token)"),
     ).toBeVisible();

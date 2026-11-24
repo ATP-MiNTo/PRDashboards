@@ -48,7 +48,6 @@ let cookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
 export async function signIn(page: Page) {
   if (cookies) {
     await page.context().addCookies(cookies);
-    await page.goto(`${APP}/`);
   } else {
     const { token } = JSON.parse(
       readFileSync(join(dataDir, "launch.token"), "utf8"),
@@ -56,15 +55,24 @@ export async function signIn(page: Page) {
       token: string;
     };
     await page.goto(`${APP}/auth/launch/#t=${token}`);
+    await expect(page).not.toHaveURL(/\/auth\/launch/);
   }
+  await page.goto(`${APP}/accounts/`);
   await expect(page.getByText("Signed in", { exact: true })).toBeVisible();
   cookies ??= await page.context().cookies();
 }
 
 // Disconnects whatever a previous test left behind, through the UI's own API.
 export async function disconnectAll(page: Page) {
-  for (const name of ["Disconnect GitHub", "Disconnect Jira"]) {
+  for (const [name, connect] of [
+    ["Disconnect GitHub", "Connect GitHub"],
+    ["Disconnect Jira", "Connect Jira"],
+  ] as const) {
     const button = page.getByRole("button", { name });
+    // The panel loads after "Signed in" shows, so wait until it says which state it is in.
+    await expect(
+      button.or(page.getByRole("link", { name: connect })),
+    ).toBeVisible();
     if (await button.isVisible()) {
       await button.click();
       await expect(button).toBeHidden();

@@ -156,15 +156,15 @@ sequenceDiagram
 | Security middleware | [features/security.md](features/security.md) | Built |
 | Storage and secrets | [features/storage.md](features/storage.md) | Built |
 | GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
-| Poller and snapshot | `features/poller.md` | Not built |
-| Command Table | `features/command-table.md` | Not built |
-| Ticket linking | `features/ticket-linking.md` | Not built |
-| Stacked PRs | `features/stacked-prs.md` | Not built |
+| Poller and snapshot | [features/poller.md](features/poller.md) | Built |
+| Command Table | [features/command-table.md](features/command-table.md) | Built |
+| Ticket linking | [features/ticket-linking.md](features/ticket-linking.md) | Built |
+| Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Partial |
 | Merge method | `features/merge-method.md` | Not built |
 | Merge and transition | `features/merge-and-transition.md` | Not built |
 | Status sync rules and Multi-PR tickets | `features/status-sync-rules.md` | Not built |
 | Settings drawer | `features/settings.md` | Not built |
-| Theme | `features/theme.md` | Not built |
+| Theme | [features/theme.md](features/theme.md) | Built |
 | Installable app (PWA) | `features/installable-app.md` | Not built |
 
 Each doc is added, from the template in [features/README.md](features/README.md), in the PR that

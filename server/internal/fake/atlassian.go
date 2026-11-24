@@ -38,6 +38,7 @@ type atlassian struct {
 	mu     sync.Mutex
 	st     atlassianState
 	n      int
+	calls  jiraCalls
 	codes  safeMap[string]
 	access safeMap[bool]
 }
@@ -51,10 +52,14 @@ func (a *atlassian) routes() http.Handler {
 	mux.HandleFunc("GET /authorize", a.authorize)
 	mux.HandleFunc("POST /oauth/token", a.token)
 	mux.HandleFunc("GET /oauth/token/accessible-resources", a.resources)
+	a.jiraRoutes(mux, &a.calls)
 	mux.HandleFunc("GET /__admin/state", func(w http.ResponseWriter, _ *http.Request) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		writeJSON(w, http.StatusOK, a.st)
+		writeJSON(w, http.StatusOK, struct {
+			atlassianState
+			Jira map[string]int64 `json:"jira"`
+		}{a.st, a.calls.snapshot()})
 	})
 	mux.HandleFunc("POST /__admin/config", func(w http.ResponseWriter, r *http.Request) {
 		c := defaultAtlassianConfig()

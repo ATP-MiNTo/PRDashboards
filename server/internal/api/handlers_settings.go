@@ -52,6 +52,10 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 			return nil, problem(http.StatusUnprocessableEntity, codeUnknownSite, "the site is not reachable with the connected Atlassian account")
 		}
 	}
+	prev, err := h.cfg.Store.GetSettings(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if err := h.cfg.Store.PutSettings(ctx, next); err != nil {
 		return nil, err
 	}
@@ -59,5 +63,17 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 	if err != nil {
 		return nil, err
 	}
+	if sameSite(prev.JiraSiteID, saved.JiraSiteID) {
+		h.reschedule()
+	} else {
+		h.kick()
+	}
 	return gen.PutSettings200JSONResponse(toGenSettings(saved)), nil
+}
+
+func sameSite(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

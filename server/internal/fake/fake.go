@@ -45,6 +45,7 @@ var (
 type Servers struct {
 	Endpoints auth.Endpoints
 	GitHubAPI string
+	JiraAPI   string
 	Close     func()
 }
 
@@ -89,6 +90,7 @@ func Start(guard *netguard.Guard, log *slog.Logger) (*Servers, error) {
 			AtlassianResources: "http://" + AtlassianAddr + "/oauth/token/accessible-resources",
 		},
 		GitHubAPI: "http://" + GitHubAddr,
+		JiraAPI:   "http://" + AtlassianAddr,
 		Close:     closeAll,
 	}, nil
 }

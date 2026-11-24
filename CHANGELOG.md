@@ -34,6 +34,23 @@ entry for that version. There is no "Unreleased" section.
 - End-to-end tests: fake GitHub and Atlassian servers (e2e build tag, `--fake`) and Playwright
   specs for the sign-in flows, run with `pnpm e2e`.
 - CI jobs for Go, web, e2e, contract drift and docs, plus docs and version check scripts.
+- Poller and snapshot: a single-flight refresh on the GitHub and Jira intervals (doubled while the
+  rate limit is low, with backoff), one paginated GraphQL search with per-check CI, a merged search
+  only when PRs left the list, one transaction per refresh, a compressed stored snapshot, partial
+  results for blocked organizations, `GET /api/snapshot` (ETag), `POST /api/sync` and the
+  `GET /events` stream with `snapshot` and `sync-status` events.
+- Command Table at `/`: top bar with theme switch (Light, Dark, Auto) and sync status, organization
+  banner with an Authorize link, stat strip and filters, and the columns Repo/PR, Ticket, Last
+  commit, Review, CI, Method and Merge (read only). The CI column lists every check with its link.
+  The accounts panel moved to `/accounts/`.
+- Stacked PRs are detected in one pass and drawn as grouped rows with "Merge after #N".
+- Jira batching and ticket linking: keys from branch and title kept when the project exists,
+  `key in (...)` in chunks of 100, project keys once per refresh, manual links and hidden keys
+  (`PUT /api/prs/{id}/tickets`), a searchable picker of assigned tickets
+  (`GET /api/tickets/assigned`), cached transitions (`GET /api/tickets/{key}/transitions`) and a
+  per-row "Jira unreachable" state with a retry.
+- Fake GitHub search and fake Jira for the e2e build, and a Playwright spec for an SSO-blocked
+  organization.
 
 ## [0.0.1] - 2026-11-24
 

@@ -194,6 +194,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The latest dashboard snapshot
+         * @description The ETag is the snapshot version. A matching If-None-Match answers 304 without a body. Before the first refresh the version is 0 and the list is empty.
+         */
+        get: operations["getSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a refresh now
+         * @description Joins the running refresh when there is one. The answer does not wait for the refresh. The end is announced by the snapshot event on /events.
+         */
+        post: operations["syncNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tickets/assigned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jira tickets assigned to the user, for the ticket picker
+         * @description One JQL per Jira interval, served from a cache in between.
+         */
+        get: operations["getAssignedTickets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tickets/{key}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Transitions available for a ticket, with the fields they require
+         * @description Cached per ticket for 60 seconds.
+         */
+        get: operations["getTransitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prs/{id}/tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the manual ticket links and the hidden keys of a pull request
+         * @description Replaces both lists in one transaction, then rebuilds the snapshot from the data already fetched, with one Jira lookup for keys it has not seen. No GitHub call. The two lists must not share a key.
+         */
+        put: operations["putPrTickets"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -265,6 +365,173 @@ export interface components {
             github: components["schemas"]["GithubAccount"];
             jira: components["schemas"]["JiraAccount"];
         };
+        TicketKey: string;
+        TicketLinks: {
+            manual: components["schemas"]["TicketKey"][];
+            removed: components["schemas"]["TicketKey"][];
+        };
+        SyncStatus: {
+            running: boolean;
+            /** Format: date-time */
+            githubAt: string | null;
+            /** Format: date-time */
+            jiraAt: string | null;
+            /** Format: date-time */
+            nextGithubAt: string | null;
+            /** Format: date-time */
+            nextJiraAt: string | null;
+        };
+        /** @enum {string} */
+        SourceState: "pending" | "ok" | "rate_limited" | "error" | "unreachable" | "disconnected";
+        SourceStatus: {
+            state: components["schemas"]["SourceState"];
+            /** Format: date-time */
+            syncedAt: string | null;
+            error: string | null;
+            /** Format: date-time */
+            resetAt: string | null;
+        };
+        BlockedOrg: {
+            /** @description The organization login, or an empty string when GitHub did not name it. */
+            org: string;
+        };
+        Sources: {
+            github: components["schemas"]["SourceStatus"];
+            jira: components["schemas"]["SourceStatus"];
+            blockedOrgs: components["schemas"]["BlockedOrg"][];
+        };
+        Warning: {
+            code: string;
+            message: string;
+        };
+        Snapshot: {
+            /** Format: int64 */
+            version: number;
+            /** Format: date-time */
+            generatedAt: string;
+            sources: components["schemas"]["Sources"];
+            prs: components["schemas"]["SnapshotPr"][];
+            warnings: components["schemas"]["Warning"][];
+        };
+        SnapshotRepo: {
+            id: string;
+            nameWithOwner: string;
+            isNew: boolean;
+            squashAllowed: boolean;
+            mergeAllowed: boolean;
+            rebaseAllowed: boolean;
+        };
+        /** @enum {string} */
+        CheckState: "passing" | "failing" | "running" | "pending" | "skipped" | "neutral" | "cancelled";
+        /** @enum {string} */
+        CiState: "passing" | "failing" | "running" | "none";
+        Check: {
+            name: string;
+            app: string | null;
+            state: components["schemas"]["CheckState"];
+            url: string | null;
+            /** Format: date-time */
+            startedAt: string | null;
+            /** Format: date-time */
+            completedAt: string | null;
+        };
+        Ci: {
+            state: components["schemas"]["CiState"];
+            /** @description Number of checks GitHub reports. Larger than checks when the list was cut at 50. */
+            total: number;
+            checks: components["schemas"]["Check"][];
+        };
+        Review: {
+            id: string;
+            state: string;
+            /** Format: date-time */
+            submittedAt: string | null;
+            author: string | null;
+        };
+        StackInfo: {
+            /** @description Id of the PR at the base of the stack. */
+            id: string;
+            /** @description 1-based position in the stack. */
+            position: number;
+            size: number;
+            parentId: string | null;
+            parentNumber: number | null;
+        };
+        /** @enum {string} */
+        TicketSource: "branch" | "title" | "manual";
+        TicketSummary: {
+            key: string;
+            summary: string;
+            status: string;
+            /** @enum {string} */
+            statusCategory: "new" | "indeterminate" | "done";
+            project: string;
+            issueType: string;
+        };
+        SnapshotTicket: {
+            key: string;
+            source: components["schemas"]["TicketSource"];
+            /** @description False when Jira has no such ticket, or has not been asked yet. */
+            found: boolean;
+            summary: string | null;
+            status: string | null;
+            statusCategory: string | null;
+            project: string;
+            issueType: string | null;
+            /** @description Browse URL built from the Jira site and the key. Null without a site. */
+            url: string | null;
+        };
+        /** @enum {string} */
+        TicketLookup: "ok" | "unverified" | "unreachable";
+        SnapshotPr: {
+            id: string;
+            number: number;
+            title: string;
+            repo: components["schemas"]["SnapshotRepo"];
+            isDraft: boolean;
+            /** @enum {string} */
+            mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
+            mergeStateStatus: string;
+            /** @enum {string|null} */
+            reviewDecision: "APPROVED" | "CHANGES_REQUESTED" | "REVIEW_REQUIRED" | null;
+            headRef: string;
+            headSha: string;
+            baseRef: string;
+            /** Format: date-time */
+            committedAt: string | null;
+            ci: components["schemas"]["Ci"];
+            reviews: components["schemas"]["Review"][];
+            reviewRequests: string[];
+            stack: components["schemas"]["StackInfo"] | null;
+            tickets: components["schemas"]["SnapshotTicket"][];
+            removedKeys: string[];
+            ticketLookup: components["schemas"]["TicketLookup"];
+        };
+        AssignedTickets: {
+            tickets: components["schemas"]["TicketSummary"][];
+        };
+        TransitionField: {
+            id: string;
+            name: string;
+            required: boolean;
+            type: string;
+            allowedValues: components["schemas"]["NamedId"][];
+        };
+        NamedId: {
+            id: string;
+            name: string;
+        };
+        Transition: {
+            id: string;
+            name: string;
+            toStatus: string;
+            toCategory: string;
+            fields: components["schemas"]["TransitionField"][];
+        };
+        Transitions: {
+            key: string;
+            transitions: components["schemas"]["Transition"][];
+        };
         Problem: {
             type: string;
             title: string;
@@ -301,6 +568,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description No such pull request. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site). */
         Unprocessable: {
             headers: {
@@ -321,6 +597,8 @@ export interface components {
         };
     };
     parameters: {
+        TicketKey: components["schemas"]["TicketKey"];
+        PrId: string;
         Provider: components["schemas"]["Provider"];
     };
     requestBodies: never;
@@ -597,6 +875,129 @@ export interface operations {
             400: components["responses"]["BadRequest"];
             409: components["responses"]["Conflict"];
             502: components["responses"]["BadGateway"];
+        };
+    };
+    getSnapshot: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-None-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The snapshot. */
+            200: {
+                headers: {
+                    /** @description The snapshot version as a quoted string. */
+                    ETag: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Snapshot"];
+                };
+            };
+            /** @description The caller already has this version. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    syncNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The refresh is running. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncStatus"];
+                };
+            };
+        };
+    };
+    getAssignedTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Up to 100 open tickets, newest update first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssignedTickets"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getTransitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: components["parameters"]["TicketKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The transitions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transitions"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    putPrTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["PrId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TicketLinks"];
+            };
+        };
+        responses: {
+            /** @description Saved. A snapshot event follows. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
         };
     };
 }

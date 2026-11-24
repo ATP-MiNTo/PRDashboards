@@ -97,3 +97,38 @@ export const checkAccount = (provider: Provider) =>
   json<Accounts>('POST', `/api/accounts/${provider}/check`);
 export const completeOAuth = (body: OAuthComplete) => send('POST', '/api/oauth/complete', body);
 export const revokeAllSessions = () => send('POST', '/api/sessions/revoke-all');
+
+export type Snapshot = Schemas['Snapshot'];
+export type SnapshotPr = Schemas['SnapshotPr'];
+export type SnapshotTicket = Schemas['SnapshotTicket'];
+export type Check = Schemas['Check'];
+export type SyncStatus = Schemas['SyncStatus'];
+export type AssignedTickets = Schemas['AssignedTickets'];
+export type TicketSummary = Schemas['TicketSummary'];
+export type TicketLinks = Schemas['TicketLinks'];
+export type Transitions = Schemas['Transitions'];
+
+let snapshotEtag: string | undefined;
+let snapshotCache: Snapshot | undefined;
+
+/** Fetches the snapshot with If-None-Match, and returns the cached copy on 304. */
+export async function getSnapshot(): Promise<Snapshot> {
+  const headers: Record<string, string> = {};
+  if (snapshotEtag && snapshotCache) headers['If-None-Match'] = snapshotEtag;
+  const res = await fetch('/api/snapshot', { credentials: 'same-origin', headers });
+  if (res.status === 304 && snapshotCache) return snapshotCache;
+  if (!res.ok) {
+    const problem: unknown = await res.json().catch(() => undefined);
+    throw new ApiError(res.status, isProblem(problem) ? problem.code : 'unknown');
+  }
+  snapshotCache = (await res.json()) as Snapshot;
+  snapshotEtag = res.headers.get('ETag') ?? undefined;
+  return snapshotCache;
+}
+
+export const syncNow = () => json<SyncStatus>('POST', '/api/sync');
+export const getAssignedTickets = () => json<AssignedTickets>('GET', '/api/tickets/assigned');
+export const getTransitions = (key: string) =>
+  json<Transitions>('GET', `/api/tickets/${encodeURIComponent(key)}/transitions`);
+export const putPrTickets = (id: string, links: TicketLinks) =>
+  send('PUT', `/api/prs/${encodeURIComponent(id)}/tickets`, links);

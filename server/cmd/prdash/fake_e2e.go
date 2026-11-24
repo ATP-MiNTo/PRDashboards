@@ -37,6 +37,6 @@ func init() {
 				return nil, err
 			}
 		}
-		return &fakeEnv{Endpoints: servers.Endpoints, GitHubAPI: servers.GitHubAPI, Secrets: sec, Close: servers.Close}, nil
+		return &fakeEnv{Endpoints: servers.Endpoints, GitHubAPI: servers.GitHubAPI, JiraAPI: servers.JiraAPI, Secrets: sec, Close: servers.Close}, nil
 	}
 }

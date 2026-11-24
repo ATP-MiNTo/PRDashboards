@@ -15,8 +15,10 @@ Differences from the spec:
   Rules). The effect is the same: one write at a time.
 - Without a keychain and without a terminal the binary exits with a message instead of "starting
   locked", because a locked app can do nothing useful.
-- Only `settings`, `sessions`, `oauth_states` and `schema_migrations` have code on them. The other
-  tables are created now and used by later milestones.
+- `settings`, `sessions`, `oauth_states`, `schema_migrations` and, since the poller, `repos`,
+  `repo_branch_rules`, `prs`, `ticket_links` and `snapshot` have code on them
+  ([poller.md](poller.md), [ticket-linking.md](ticket-linking.md)). The other tables are created
+  now and used by later milestones.
 
 ## Data model
 
@@ -54,6 +56,7 @@ Server:
 - [server/internal/secrets/open.go](../../server/internal/secrets/open.go): `Open` (choose the backend), `Prompter`, `TerminalPrompter`, `ErrNoTerminal`.
 - [server/internal/store/store.go](../../server/internal/store/store.go): `Open`, `Write` (the one write transaction), `Close`.
 - [server/internal/store/migrate.go](../../server/internal/store/migrate.go): embedded numbered migrations, applied in order, each in a transaction.
+- [server/internal/store/refresh.go](../../server/internal/store/refresh.go): `SaveRefresh` (one transaction for repos, PRs, links, resolutions and the snapshot), snapshot load and save, user links.
 - [server/internal/store/settings.go](../../server/internal/store/settings.go): `Settings`, defaults, `GetSettings`, `PutSettings`.
 - [server/internal/store/sessions.go](../../server/internal/store/sessions.go): session rows and `oauth_states` (`InsertOAuthState`, `ConsumeOAuthState`).
 - [server/internal/auth/session.go](../../server/internal/auth/session.go): `Sessions` (write-through cache), `Load`, `RevokeAll`, `LoadOrCreateKey`.

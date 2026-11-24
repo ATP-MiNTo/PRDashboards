@@ -1,0 +1,10 @@
+{
+  "status": 400,
+  "headers": {},
+  "body": {
+    "errorMessages": [
+      "An issue with key 'NOPE-9' does not exist for field 'key'."
+    ],
+    "errors": {}
+  }
+}

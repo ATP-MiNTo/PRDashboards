@@ -52,6 +52,7 @@ func (h *handlers) PutGithubPat(ctx context.Context, req gen.PutGithubPatRequest
 	if err != nil {
 		return nil, githubProblem(err)
 	}
+	h.kick()
 	return gen.PutGithubPat200JSONResponse(githubAccount(tok, true)), nil
 }
 
@@ -157,6 +158,7 @@ func (h *handlers) DisconnectAccount(ctx context.Context, req gen.DisconnectAcco
 			}
 		}
 	}
+	h.kick()
 	return gen.DisconnectAccount204Response{}, nil
 }
 
