@@ -44,7 +44,7 @@ type Endpoints struct {
 
 // DefaultEndpoints are the real provider URLs.
 func DefaultEndpoints() Endpoints {
-	return Endpoints{
+	return Endpoints{ //nolint:gosec // public endpoint URL
 		GitHubAuthorize:    "https://github.com/login/oauth/authorize",
 		GitHubToken:        "https://github.com/login/oauth/access_token",
 		AtlassianAuthorize: "https://auth.atlassian.com/authorize",

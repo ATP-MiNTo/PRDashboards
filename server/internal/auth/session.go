@@ -188,7 +188,7 @@ func (s *Sessions) RevokeAll(ctx context.Context) error {
 
 // ExpiredCookie returns a cookie that makes the browser drop the session cookie.
 func ExpiredCookie() *http.Cookie {
-	return &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode}
+	return &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode} //nolint:gosec // loopback http, Secure would drop the cookie
 }
 
 // CheckCSRF compares a presented CSRF token with the session's in constant time.
@@ -198,7 +198,7 @@ func (s Session) CheckCSRF(token string) bool {
 
 // Cookie returns the cookie to send for the session.
 func (s Session) Cookie() *http.Cookie {
-	return &http.Cookie{
+	return &http.Cookie{ //nolint:gosec // loopback http, Secure would drop the cookie
 		Name:     CookieName,
 		Value:    s.Value,
 		Path:     "/",

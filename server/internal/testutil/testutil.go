@@ -47,7 +47,7 @@ func (r *Rand) Read(p []byte) (int, error) {
 		x ^= x << 13
 		x ^= x >> 7
 		x ^= x << 17
-		p[i] = byte(x)
+		p[i] = byte(x) //nolint:gosec // low byte of PRNG state
 	}
 	return len(p), nil
 }

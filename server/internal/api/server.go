@@ -59,7 +59,7 @@ type Config struct {
 
 // New builds the full handler.
 func New(cfg Config) (http.Handler, error) {
-	spec, err := gen.GetSwagger()
+	spec, err := gen.GetSpec()
 	if err != nil {
 		return nil, fmt.Errorf("load embedded spec: %w", err)
 	}

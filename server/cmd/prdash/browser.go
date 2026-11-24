@@ -9,11 +9,11 @@ import (
 func browserCommand(goos, url string) (*exec.Cmd, error) {
 	switch goos {
 	case "darwin":
-		return exec.Command("open", url), nil
+		return exec.Command("open", url), nil //nolint:gosec // fixed binary, validated URL
 	case "linux":
-		return exec.Command("xdg-open", url), nil
+		return exec.Command("xdg-open", url), nil //nolint:gosec // fixed binary, validated URL
 	case "windows":
-		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url), nil
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url), nil //nolint:gosec // fixed binary, validated URL
 	}
 	return nil, fmt.Errorf("opening a browser is not supported on %s", goos)
 }

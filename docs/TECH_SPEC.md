@@ -22,7 +22,7 @@ server. The browser and the backend are treated as if they were on different mac
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
-| Backend language | Go 1.24+ | Single static binary, `net/http` with Go 1.22+ routing patterns |
+| Backend language | Go 1.26+ (toolchain 1.27.4) | Single static binary, `net/http` with Go 1.22+ routing patterns |
 | HTTP router | `net/http` `ServeMux` | No framework. Middleware chain written in `internal/api/mw` |
 | API contract | OpenAPI 3.0.3 in `api/openapi.yaml` | 3.0 because `oapi-codegen` does not support 3.1. Go types and server interface via `oapi-codegen` (strict server, pinned as a `tool` in `go.mod`), TS types via `openapi-typescript`. Generated code is committed and `pnpm gen` regenerates it |
 | GitHub client | Hand-written GraphQL over `net/http` | Queries live in `.graphql` files, embedded. REST only for merge and branch delete |

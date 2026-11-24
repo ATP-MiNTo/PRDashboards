@@ -6,4 +6,4 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 )
 
-func apiSpec() (*openapi3.T, error) { return gen.GetSwagger() }
+func apiSpec() (*openapi3.T, error) { return gen.GetSpec() }

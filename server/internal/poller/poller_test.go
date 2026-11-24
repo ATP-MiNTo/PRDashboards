@@ -102,7 +102,7 @@ func TestSnapshotMatchesTheOpenAPISchema(t *testing.T) {
 		f.result.Blocked = []github.OrgBlocked{{Org: "acme-corp"}}
 	})
 	r.sync()
-	spec, err := gen.GetSwagger()
+	spec, err := gen.GetSpec()
 	if err != nil {
 		t.Fatal(err)
 	}

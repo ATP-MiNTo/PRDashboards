@@ -37,8 +37,8 @@ const (
 
 // Client credentials the fakes accept. Start returns them so the app can be pre-configured.
 var (
-	GitHubClient    = auth.ClientCredentials{ClientID: "fake-github-client", ClientSecret: "fake-github-secret"}
-	AtlassianClient = auth.ClientCredentials{ClientID: "fake-atlassian-client", ClientSecret: "fake-atlassian-secret"}
+	GitHubClient    = auth.ClientCredentials{ClientID: "fake-github-client", ClientSecret: "fake-github-secret"}       //nolint:gosec // fake credentials
+	AtlassianClient = auth.ClientCredentials{ClientID: "fake-atlassian-client", ClientSecret: "fake-atlassian-secret"} //nolint:gosec // fake credentials
 )
 
 // Servers is a running pair of fakes.
@@ -132,7 +132,7 @@ func authorizeRedirect(w http.ResponseWriter, r *http.Request, cfg authorizeConf
 	}
 	target := redirect + "?" + out.Encode()
 	setLast(target)
-	http.Redirect(w, r, target, http.StatusFound)
+	http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // fake provider redirect
 }
 
 type authorizeConfig struct {
