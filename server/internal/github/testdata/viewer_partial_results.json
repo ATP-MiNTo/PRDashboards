@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "headers": {
+    "X-OAuth-Scopes": "repo, read:org",
+    "X-GitHub-SSO": "partial-results; organizations=21955855,20582480"
+  },
+  "body": { "data": { "viewer": { "login": "octocat" } } }
+}

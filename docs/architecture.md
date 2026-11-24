@@ -118,7 +118,7 @@ sequenceDiagram
 
 ### Storage
 
-- One writer goroutine. Multi-row changes run in one transaction. No per-row loops against the
+- One writer (a single-connection pool). Multi-row changes run in one transaction. No per-row loops against the
   database.
 - Tokens and client secrets live only in the keychain or the encrypted fallback. Never in SQLite,
   logs or API responses.
@@ -154,8 +154,8 @@ sequenceDiagram
 | --- | --- | --- |
 | App shell, launch and session | [features/app-shell.md](features/app-shell.md) | Built |
 | Security middleware | [features/security.md](features/security.md) | Built |
-| Storage and secrets | `features/storage.md` | Not built |
-| GitHub and Jira auth | `features/auth.md` | Not built |
+| Storage and secrets | [features/storage.md](features/storage.md) | Built |
+| GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
 | Poller and snapshot | `features/poller.md` | Not built |
 | Command Table | `features/command-table.md` | Not built |
 | Ticket linking | `features/ticket-linking.md` | Not built |

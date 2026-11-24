@@ -60,11 +60,12 @@ server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   internal/logging/           redacting slog handler
   internal/testutil/          fake clock and random source for tests
   internal/netguard/          outbound host allowlist transport
+  internal/backoff/           shared retry and rate-limit backoff helper
   internal/fake/              fake GitHub and Jira servers (build tag e2e only)
   web.go                      go:embed of web/ (package server)
   web/                        go:embed target, filled by the web build (only .gitkeep is committed)
 web/                          Next.js app (static export)
-  src/app/                    routes: / (dashboard), /setup, /auth/done
+  src/app/                    routes: / (dashboard), /setup, /auth/done, /oauth/finish
   src/components/             CommandTable, MergePanel, SettingsDrawer, ...
   src/api/                    generated types + typed fetch client
   src/theme/                  tokens and Auto theme logic
@@ -106,20 +107,25 @@ The scripts do not run `git pull` or switch branches. Updating is a separate, ex
 
 ```text
 prdash [--port 4317] [--data-dir ~/.prdashboards] [--no-browser]
+prdash --fake ...        # e2e build only (`-tags e2e`): fake GitHub and Atlassian, secrets in memory
 ```
 
 - Listens on `127.0.0.1:<port>` only. The port is fixed (default 4317) because the Atlassian
   callback URL must match exactly. If the port is busy, the binary exits with a message. It never
   picks a random port and never binds `0.0.0.0` or `::`.
 - Single instance: an exclusive lock on `<data-dir>/prdash.lock`. A second start finds the running
-  instance, reads a fresh launch token from `<data-dir>/launch.token` (mode 0600) and opens the
-  browser, then exits.
+  instance, reads the port and a fresh launch token from `<data-dir>/launch.token` (mode 0600, JSON
+  `{"port":N,"token":"..."}`) and opens the browser on that port, then exits.
 - Data dir is created with mode 0700. `data.db` and every file in it are 0600. The binary refuses
-  to start if the data dir is group- or world-writable (POSIX).
+  to start if the data dir is group- or world-writable (POSIX), or if `session.key`, `secrets.enc`
+  or `data.db` is readable or writable by group or others. The message names the file and the
+  `chmod 600` to run.
 - Start order: create the data dir, check its mode, take the lock, then bind the port. A busy port
   exits with a message.
-- Until the keychain arrives (milestone 2), the cookie signing key is `<data-dir>/session.key`
-  (32 random bytes, mode 0600). Sessions are in memory only until SQLite arrives.
+- The cookie signing key is the secrets item `session.key`. A `<data-dir>/session.key` file from
+  milestone 1 is imported once and deleted. Sessions are persisted in SQLite (8.3).
+- The HTTP server has `ReadHeaderTimeout` 10 s and `ReadTimeout` 30 s. `WriteTimeout` stays unset
+  because a write deadline would cut off the SSE stream (`/events`) that arrives with the poller.
 - Logs go to stdout as JSON. With `--no-browser` the launch URL is printed to stderr and never
   logged. When the port is not 4317 the binary warns that OAuth callbacks need 4317.
 - Graceful shutdown on SIGINT and SIGTERM: stop the poller, finish in-flight writes, close the DB.
@@ -129,7 +135,7 @@ prdash [--port 4317] [--data-dir ~/.prdashboards] [--no-browser]
 - On start, after each use and every 60 s, the server writes a new random 256-bit launch token to
   `launch.token` (atomic write, mode 0600). The current and the previous token are accepted while
   unexpired, each once. The file is removed on shutdown.
-- The browser is opened at `http://127.0.0.1:4317/auth/launch#t=<token>`. The token is in the
+- The browser is opened at `http://127.0.0.1:<port>/auth/launch#t=<token>`. The token is in the
   fragment, so it never reaches logs, history sync or `Referer`. A small static page posts it to
   `POST /api/session` and the server answers with the session cookie (8.3).
 - From milestone 9, the UI ships a web app manifest and a service worker, so the browser's "Install app" adds a dock
@@ -147,6 +153,9 @@ to register:
 
 - GitHub: `http://127.0.0.1:4317/oauth/github/callback`
 - Atlassian: `http://127.0.0.1:4317/oauth/atlassian/callback`
+
+The API is `GET /api/setup` (which providers are configured, plus the callback URLs) and
+`PUT /api/setup/{github|atlassian}` (client id and secret). Neither ever returns the secret.
 
 ### 5.2 GitHub
 
@@ -173,9 +182,22 @@ to register:
 
 - `state` is 256 random bits, stored server-side with a 10-minute expiry, bound to the session, and
   deleted on first use.
-- Callbacks accept only `GET` with `code` and `state`, and only when the request carries the
-  session cookie that started the flow.
-- After the callback the browser is redirected to `/auth/done`, which carries no token or code.
+- The state is stored hashed, bound to the session that started the flow, and consumed with one
+  `DELETE ... RETURNING`, so a rejected attempt spends it too.
+- The callback cannot rely on the session cookie. The provider redirects the browser from another
+  site, and a `SameSite=Strict` cookie is not sent on a cross-site navigation, nor on the redirect
+  chain that follows it. So `GET /oauth/{provider}/callback` is a cookie-less route: exact paths,
+  `GET` only, it checks only the shape of `code`, `state` and `error` (length and charset) and
+  answers `303` to the static page `/oauth/finish/?provider=..&code=..&state=..`. That page is a
+  fresh same-origin navigation that carries the cookie. Its script first removes the query with
+  `history.replaceState`, then sends `POST /api/oauth/complete {provider, code, state}` through the
+  full middleware chain (session, CSRF, schema). The server checks the state against the session
+  that started the flow, exchanges the code and stores the token. The page then goes to
+  `/auth/done/?provider=..&result=ok|denied|invalid_state|error`, which carries no code or token.
+  The callback response has `Cache-Control: no-store`. `GET /oauth/{provider}/start` is protected
+  (session required) and redirects `302` to the provider.
+- GitHub uses PKCE S256 (the verifier stays on the server with the state). The Atlassian token
+  response is checked for `accessible-resources` sites on `https://*.atlassian.net` only.
 
 ## 6. Storage
 
@@ -186,15 +208,25 @@ Keychain service `prdashboards`. Items: `github.oauth.client`, `github.token`,
 `session.key` (HMAC key for cookies).
 
 Fallback when no keychain is available: `secrets.enc`, AES-256-GCM, with a key derived with
-Argon2id (64 MiB, 3 passes) from a passphrase asked on start. Without the passphrase, the app
-starts locked.
+Argon2id (time 3, memory 64 MiB, 4 threads, 32-byte key, 16-byte salt) from a passphrase. Every
+write uses a fresh 12-byte nonce, and the file header (magic, version, KDF parameters, salt,
+nonce) is authenticated as additional data. The file is rewritten atomically with mode 0600.
+
+The backend is chosen at start by probing the keychain (write, read, delete a probe item). When
+the probe fails, the binary asks for the passphrase on the terminal (twice when it creates
+`secrets.enc`, minimum 8 characters, 3 attempts to unlock). Without a terminal it exits with a
+message that says to run it from one. The "starts locked" mode of the first draft is not built: a
+locked app could do nothing, and exiting says so sooner.
 
 Tokens are never written to SQLite, logs, crash output or API responses.
 
 ### 6.2 SQLite schema
 
-WAL mode, `foreign_keys=ON`, `busy_timeout=5000`. One writer goroutine owns all writes. Every
-multi-row change runs in one transaction. No per-row loops against the database.
+WAL mode, `foreign_keys=ON`, `busy_timeout=5000`. There is one writer: a `*sql.DB` limited to a
+single connection (`MaxOpenConns(1)`, transactions begin `IMMEDIATE`), so writes are serialized by
+the pool and need no writer goroutine. Reads use a second, read-only pool (`query_only`), which WAL
+lets run beside the writer. Every multi-row change runs in one transaction. No per-row loops
+against the database. `data.db` is created with mode 0600 before it is opened.
 
 | Table | Key | Purpose |
 | --- | --- | --- |
@@ -209,6 +241,8 @@ multi-row change runs in one transaction. No per-row loops against the database.
 | `activity` | `id` | Log of every transition and merge: when, what, who triggered (rule id or manual), result, error |
 | `pending_retries` | `id` | Failed transitions waiting for a retry: ticket, transition id, fields, last error |
 | `snapshot` | `id = 1` | Last full snapshot as compressed JSON, so the UI shows data immediately on start |
+| `sessions` | `id_hash` | Hashed session ids with `created`, `last_issued`, `expires` (8.3) |
+| `oauth_states` | `state_hash` | Pending OAuth flows: provider, bound session, PKCE verifier, expiry (5.4) |
 
 Indexes: `prs(state, repo_id)`, `ticket_links(ticket_key)`, `activity(created_at DESC)`.
 
@@ -384,8 +418,9 @@ Out of scope: malware already running as the same OS user with keychain access.
   `SameSite=Strict`, `Path=/`, no `Secure` flag. The app is plain `http` on loopback, and a
   `Secure` cookie would not be sent back on `http://127.0.0.1`, so the flag would break sign-in.
   Lifetime 30 days, sliding (the cookie is sent again when the last issue is older than 24 h), so
-  the installed app keeps working. Sessions are stored hashed (SHA-256 of the id) in memory, and
-  in SQLite from milestone 2, and can be revoked from Settings ("Sign out all browsers").
+  the installed app keeps working. Sessions are stored hashed (SHA-256 of the id) in SQLite, with a
+  write-through in-memory cache that is loaded at start, and can all be revoked with
+  `POST /api/sessions/revoke-all` ("Sign out all browsers"): `204` and an expired cookie.
 - A CSRF token bound to the session is returned by `GET /api/session` and must be sent as
   `X-PRD-CSRF` on every non-GET request.
 
@@ -464,11 +499,15 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `POST /api/prs/{id}/merge` | Merge and transition (7.7) |
 | `POST /api/retries/{id}` | Retry a failed transition |
 | `GET/PUT /api/settings` | Global settings |
+| `POST /api/sessions/revoke-all` | End every session, including the caller's |
+| `GET /api/setup`, `PUT /api/setup/{github\|atlassian}` | OAuth client credentials (write only) |
+| `GET /api/accounts`, `DELETE /api/accounts/{provider}`, `POST /api/accounts/{provider}/check` | Connection state, disconnect, check now |
+| `POST /api/oauth/complete` | Finish an OAuth flow from the finish page (5.4) |
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
 | `GET /api/activity` | Activity log, paginated |
-| `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flows |
+| `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |
 | `PUT /api/github/pat` | Store a PAT |
 
 Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head_moved`,
@@ -514,7 +553,9 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
   On `403` or `429` with `Retry-After` or `x-ratelimit-reset`, wait that long. Secondary limits use
   exponential backoff with jitter (base 2 s, max 5 min).
 - Jira: on `429` or `503`, honour `Retry-After`, otherwise exponential backoff with jitter.
-- At most 4 parallel outbound requests per provider.
+- At most 4 parallel outbound requests per provider (`netguard`). The retry loop is the shared
+  package `internal/backoff`: honours `Retry-After` and the GitHub reset header, otherwise
+  exponential backoff with jitter, with an injectable clock and sleep for tests.
 - The search cap of 1,000 results shows a warning when reached.
 
 ### 10.5 Partial failures
@@ -570,6 +611,14 @@ Mobile layout, chained stack merge, multiple Jira sites, notifications.
 
 All Go tests run with `-race`. No test calls the real GitHub or Jira.
 
+The fakes listen on fixed loopback ports: GitHub `127.0.0.1:4411`, Atlassian `127.0.0.1:4412`
+(the app is on 4317). The browser is sent to the `localhost` spelling of their authorize URLs, so
+the redirect back to `127.0.0.1:4317` is cross-site like the real one. Each fake has
+`/__admin/state`, `/__admin/config` and `/__admin/reset` for the specs. `pnpm e2e` builds the web
+export and the `-tags e2e` binary, starts it with `--fake --port 4317 --data-dir .e2e-data` and
+runs `e2e/*.spec.ts` with one worker. The suite signs in once, because session creation is rate
+limited to 10 a minute.
+
 Playwright stays lean and covers only the parts that cross into systems we don't control. It runs
 against the real binary built with `-tags e2e --fake`, which starts in-process fake GitHub and Jira
 servers that serve fixtures and can be told to fail:
@@ -593,8 +642,8 @@ GitHub Actions on every pull request:
 3. OpenAPI drift check: regenerate Go and TS code and fail if the diff is not empty
 4. Docs check: required headings, links, feature index
 5. Version check: `VERSION` changed and `CHANGELOG.md` has a dated entry for it
-6. Playwright e2e against the `e2e` build, from milestone 3 (there is no outside boundary before
-   OAuth)
+6. Playwright e2e against the `e2e` build (`pnpm e2e`), plus `go vet` and `go test -race` with
+   `-tags e2e`
 
 ## 14. Versioning and changelog
 

@@ -38,6 +38,168 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+  /api/sessions/revoke-all:
+    post:
+      operationId: revokeAllSessions
+      summary: Sign out every browser, including this one
+      responses:
+        '204':
+          description: Every session is deleted. The response expires the prd_session cookie.
+          headers:
+            Set-Cookie:
+              description: The expired prd_session cookie.
+              required: true
+              schema:
+                type: string
+  /api/settings:
+    get:
+      operationId: getSettings
+      summary: Global settings
+      responses:
+        '200':
+          description: The current settings, with defaults for anything never saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+    put:
+      operationId: putSettings
+      summary: Replace the global settings
+      description: >
+        Stores every setting in one transaction. A non-null jiraSiteId must be one of the sites of
+        the connected Atlassian account, otherwise the problem code is unknown_site.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: The saved settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/setup:
+    get:
+      operationId: getSetup
+      summary: Which OAuth apps are configured, and the callback URLs to register
+      description: Never returns a client id or a secret.
+      responses:
+        '200':
+          description: Setup state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Setup'
+  /api/setup/{provider}:
+    put:
+      operationId: putSetupClient
+      summary: Store the OAuth app client credentials of a provider in the secrets store
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCredentials'
+      responses:
+        '204':
+          description: Stored.
+  /api/github/pat:
+    put:
+      operationId: putGithubPat
+      summary: Validate and store a GitHub personal access token
+      description: >
+        Checks the token with viewer { login } and the X-OAuth-Scopes header. Classic tokens need
+        repo and read:org (problem code insufficient_scopes otherwise). Fine-grained tokens are
+        accepted with a warning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatRequest'
+      responses:
+        '200':
+          description: The token is stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubAccount'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/accounts:
+    get:
+      operationId: getAccounts
+      summary: Connection state of GitHub and Jira
+      description: Reads stored state only. It never calls GitHub or Atlassian.
+      responses:
+        '200':
+          description: The accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accounts'
+  /api/accounts/{provider}:
+    delete:
+      operationId: disconnectAccount
+      summary: Remove the stored tokens of a provider
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '204':
+          description: Disconnected. Client credentials are kept.
+  /api/accounts/{provider}/check:
+    post:
+      operationId: checkAccount
+      summary: Check a connection with the provider now
+      description: >
+        A user action. GitHub: asks who the token belongs to. Atlassian: refreshes the access token
+        when needed and reloads the site list. A refresh that Atlassian rejects sets needsReconnect.
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '200':
+          description: The accounts after the check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accounts'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/oauth/complete:
+    post:
+      operationId: completeOAuth
+      summary: Finish an OAuth authorization with the code and state from the provider redirect
+      description: >
+        Called by the static /oauth/finish/ page. The state must be unspent, unexpired, issued for
+        this provider and this session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthComplete'
+      responses:
+        '204':
+          description: Tokens are stored.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
 components:
   securitySchemes:
     cookieAuth:
@@ -66,6 +228,144 @@ components:
           format: date-time
         version:
           type: string
+    Provider:
+      type: string
+      enum: [github, atlassian]
+    PollingSeconds:
+      type: integer
+      enum: [60, 120, 300, 900, 3600]
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, jiraSiteId]
+      properties:
+        polling:
+          type: object
+          additionalProperties: false
+          required: [githubSec, jiraSec]
+          properties:
+            githubSec:
+              $ref: '#/components/schemas/PollingSeconds'
+            jiraSec:
+              $ref: '#/components/schemas/PollingSeconds'
+        theme:
+          type: string
+          enum: [light, dark, auto]
+        defaultMethodForNewRepos:
+          type: string
+          enum: [squash, merge, rebase]
+        deleteBranchAfterMerge:
+          type: boolean
+        jiraSiteId:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+    ClientCredentials:
+      type: object
+      additionalProperties: false
+      required: [clientId, clientSecret]
+      properties:
+        clientId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        clientSecret:
+          type: string
+          minLength: 1
+          maxLength: 512
+    ProviderSetup:
+      type: object
+      additionalProperties: false
+      required: [configured, callbackUrl]
+      properties:
+        configured:
+          type: boolean
+        callbackUrl:
+          type: string
+    Setup:
+      type: object
+      additionalProperties: false
+      required: [github, atlassian]
+      properties:
+        github:
+          $ref: '#/components/schemas/ProviderSetup'
+        atlassian:
+          $ref: '#/components/schemas/ProviderSetup'
+    PatRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+    OAuthComplete:
+      type: object
+      additionalProperties: false
+      required: [provider, code, state]
+      properties:
+        provider:
+          $ref: '#/components/schemas/Provider'
+        code:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        state:
+          type: string
+          minLength: 1
+          maxLength: 256
+    GithubAccount:
+      type: object
+      additionalProperties: false
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+        login:
+          type: string
+        method:
+          type: string
+          enum: [oauth, pat]
+        warning:
+          type: string
+    JiraSite:
+      type: object
+      additionalProperties: false
+      required: [id, name, url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+    JiraAccount:
+      type: object
+      additionalProperties: false
+      required: [connected, sites, selectedSiteId, needsReconnect]
+      properties:
+        connected:
+          type: boolean
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/JiraSite'
+        selectedSiteId:
+          type: string
+          nullable: true
+        needsReconnect:
+          type: boolean
+    Accounts:
+      type: object
+      additionalProperties: false
+      required: [github, jira]
+      properties:
+        github:
+          $ref: '#/components/schemas/GithubAccount'
+        jira:
+          $ref: '#/components/schemas/JiraAccount'
     Problem:
       type: object
       additionalProperties: false
@@ -81,9 +381,40 @@ components:
           type: string
         detail:
           type: string
+  parameters:
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Provider'
   responses:
     InvalidLaunchToken:
       description: The launch token is unknown, expired or already used.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadRequest:
+      description: The request was understood but refused (for example invalid_oauth_state).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The current state does not allow it (for example not_connected or provider_not_configured).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadGateway:
+      description: GitHub or Atlassian failed or refused (oauth_exchange_failed, upstream_error, org_blocked).
       content:
         application/problem+json:
           schema:

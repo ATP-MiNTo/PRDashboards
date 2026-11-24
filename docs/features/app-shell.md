@@ -1,28 +1,31 @@
 # App shell, launch and session
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 3, 4 and 8.3. Related: [security.md](security.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 3, 4 and 8.3. Related: [security.md](security.md), [storage.md](storage.md), [auth.md](auth.md).
 
 ## Purpose
 
 Starts the single binary, serves the embedded UI and the API on `127.0.0.1`, and signs the browser
-in with a one-time launch URL. This is milestone 1 (skeleton): the UI is a placeholder page that
-shows "Signed in" and the server version. The dashboard, storage, OAuth and the poller come in later
+in with a one-time launch URL. The home page shows "Signed in", the server version and the
+Connected accounts panel ([auth.md](auth.md)). The dashboard and the poller come in later
 milestones.
 
-Differences from the spec in milestone 1:
+Differences from the spec:
 
 - No SSE route and no web app manifest or service worker. The PWA part of TECH_SPEC 4.3 is
   milestone 9.
-- The Next export has pages `/` and `/auth/launch/` only. `/setup` and `/auth/done` come with OAuth.
-- TanStack Query is not used yet. The placeholder page calls the typed client directly.
+- The Next export has pages `/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
+- TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
 
 ## Data model
 
 - Files in the data dir (default `~/.prdashboards`, mode 0700): `prdash.lock` (exclusive lock),
-  `launch.token` (newest launch token, mode 0600), `session.key` (cookie signing key, mode 0600).
+  `launch.token` (JSON `{"port":N,"token":"..."}`, newest launch token, mode 0600, atomic write),
+  `data.db` (SQLite) and, without a keychain, `secrets.enc` (both 0600, see
+  [storage.md](storage.md)). The cookie signing key is the secrets item `session.key`. A
+  `session.key` file from an earlier version is imported once and deleted.
 - API schemas (from [api/openapi.yaml](../../api/openapi.yaml)): `CreateSessionRequest`
   `{launchToken}`, `Session` `{csrfToken, expiresAt, version}`, `Problem`.
-- Flags: `--port` (default 4317), `--data-dir`, `--no-browser`.
+- Flags: `--port` (default 4317), `--data-dir`, `--no-browser`, and `--fake` in the e2e build only.
 - `VERSION` is stamped into the binary with `-ldflags "-X main.version=..."` and returned as
   `Session.version`.
 
@@ -31,8 +34,9 @@ Differences from the spec in milestone 1:
 Server:
 
 - [server/cmd/prdash/main.go](../../server/cmd/prdash/main.go): flags, signal handling, exit codes.
-- [server/cmd/prdash/run.go](../../server/cmd/prdash/run.go): `run`, the start order, listener, shutdown, and `openRunning` for a second start.
-- [server/cmd/prdash/datadir.go](../../server/cmd/prdash/datadir.go): `expandHome` and `prepareDataDir`.
+- [server/cmd/prdash/run.go](../../server/cmd/prdash/run.go): `run`, the start order and wiring, `newHTTPServer` (timeouts), shutdown, and `openRunning` for a second start.
+- [server/cmd/prdash/datadir.go](../../server/cmd/prdash/datadir.go): `expandHome`, `prepareDataDir` and `checkPrivateFiles`.
+- [server/cmd/prdash/fake_e2e.go](../../server/cmd/prdash/fake_e2e.go): `--fake` (e2e build tag only).
 - [server/cmd/prdash/browser.go](../../server/cmd/prdash/browser.go): `browserCommand` and `openBrowser` (no shell).
 - [server/web.go](../../server/web.go): `go:embed` of `server/web/`, filled by the web build. Only `.gitkeep` is committed.
 - [server/internal/api/static.go](../../server/internal/api/static.go): static UI server and the "UI not built" page.
@@ -41,7 +45,8 @@ Server:
 
 Web:
 
-- [web/src/app/page.tsx](../../web/src/app/page.tsx): `/` placeholder, calls `GET /api/session`.
+- [web/src/app/page.tsx](../../web/src/app/page.tsx): `/`, calls `GET /api/session` and shows the accounts panel.
+- Other pages: `/setup/`, `/auth/done/` and `/oauth/finish/` are described in [auth.md](auth.md).
 - [web/src/app/auth/launch/page.tsx](../../web/src/app/auth/launch/page.tsx): reads the fragment, posts the token, goes to `/`.
 - [web/src/lib/launch.ts](../../web/src/lib/launch.ts): `parseLaunchToken` and `runLaunch` (pure logic, no DOM).
 - [web/src/api/client.ts](../../web/src/api/client.ts): typed fetch client over the generated [schema.d.ts](../../web/src/api/schema.d.ts).
@@ -50,8 +55,9 @@ Web:
 Scripts and CI:
 
 - [scripts/start.sh](../../scripts/start.sh), [start.command](../../scripts/start.command), [start.cmd](../../scripts/start.cmd): check tools, rebuild when the source hash changed, run `bin/prdash`. Extra arguments go to the binary.
+- [scripts/e2e.mjs](../../scripts/e2e.mjs): `pnpm e2e`, builds the web export and the e2e binary, runs Playwright.
 - [scripts/check-docs.mjs](../../scripts/check-docs.mjs), [scripts/check-version.mjs](../../scripts/check-version.mjs), [scripts/check-coverage.sh](../../scripts/check-coverage.sh).
-- [.github/workflows/ci.yml](../../.github/workflows/ci.yml): jobs `go`, `web`, `contract`, `docs`.
+- [.github/workflows/ci.yml](../../.github/workflows/ci.yml): jobs `go`, `web`, `e2e`, `contract`, `docs`.
 
 ## Key flows
 
@@ -61,12 +67,19 @@ Scripts and CI:
    `pnpm -C web build` (which also writes `out/csp.json`), copy `web/out/*` into `server/web/`,
    `go build -trimpath`, store the hash. Then `exec bin/prdash "$@"`.
 2. `run`: expand the data dir, `prepareDataDir` (create 0700, refuse a group- or world-writable
-   dir on POSIX), take the lock with `flock`.
-3. Lock held by another instance: `openRunning` reads `launch.token` and opens
-   `http://127.0.0.1:<port>/auth/launch#t=<token>` (or prints it with `--no-browser`), exit 0.
-4. Lock acquired: bind `tcp4 127.0.0.1:<port>` (a busy port exits with a message), load or create
-   `session.key`, create the `Launcher` (writes `launch.token`), build the handler with `api.New`,
-   serve, and open the browser or print the URL to stderr. Rotation runs every 60 s.
+   dir on POSIX), take the lock with `flock`, then `checkPrivateFiles` (refuse a `session.key`,
+   `secrets.enc` or `data.db` that group or others can access, naming the `chmod 600` to run).
+3. Lock held by another instance: `openRunning` reads the port and token from `launch.token` and
+   opens `http://127.0.0.1:<port>/auth/launch#t=<token>` (or prints it with `--no-browser`), exit
+   0. The port comes from the file, so a second start without `--port` still finds an instance on
+   another port.
+4. Lock acquired: bind `tcp4 127.0.0.1:<port>` (a busy port exits with a message), open the
+   secrets store (keychain, else the passphrase prompt, else exit when there is no terminal), open
+   SQLite, load or create the session key, load sessions, create the `Launcher` (writes
+   `launch.token` with the port), build the `netguard` client, the GitHub client and `auth.OAuth`,
+   build the handler with `api.New`, serve, and open the browser or print the URL to stderr.
+   Rotation runs every 60 s. With `--fake` (e2e build) the fakes start first and secrets are in
+   memory.
 5. Browser: `/auth/launch/#t=...` loads the static page, which clears the fragment with
    `history.replaceState`, posts `{launchToken}` to `POST /api/session`, and on `204` calls
    `location.replace('/')`. `/` calls `GET /api/session` and shows "Signed in" and the version,
@@ -91,6 +104,10 @@ None.
   directories without an `index.html` are not listed, dotfiles and `csp.json` are not served, and an
   unknown path gets `404.html` from the export when present. With no web build embedded, every
   non-API path answers `503` with a plain page that says to run `scripts/start.sh`.
+- The HTTP server sets `ReadHeaderTimeout` 10 s and `ReadTimeout` 30 s. `WriteTimeout` stays unset
+  on purpose: a write deadline would cut off the long-lived SSE stream (`/events`) that arrives with
+  the poller. Handlers that must not hang rely on the request context and the outbound client
+  timeouts instead.
 - The web app has no inline script beyond what Next emits, no external fonts or CDNs, and no
   `dangerouslySetInnerHTML` (ESLint enforces it).
 - Generated code (`server/internal/api/gen`, `web/src/api/schema.d.ts`) is committed and never
@@ -99,7 +116,8 @@ None.
 
 ## Tests
 
-- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): flags, data dir modes, browser commands, start, shutdown cleanup, second instance with an injected opener, busy port, bind address.
+- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): flags, data dir modes, private file refusal, browser commands, start, shutdown cleanup, second instance reading the port from the launch file, busy port, bind address, server timeouts, restart with sessions kept, legacy key import, no-terminal exit, file backend.
+- [e2e/](../../e2e/playwright.config.ts): Playwright specs, see [auth.md](auth.md).
 - [server/internal/api/static_test.go](../../server/internal/api/static_test.go): static serving, redirect, 404 page, empty embed fallback.
 - [server/internal/api/api_test.go](../../server/internal/api/api_test.go): launch flow end to end.
 - [web/src/lib/launch.test.ts](../../web/src/lib/launch.test.ts), [web/src/app/page.test.tsx](../../web/src/app/page.test.tsx), [web/src/app/auth/launch/page.test.tsx](../../web/src/app/auth/launch/page.test.tsx), [web/src/api/client.test.ts](../../web/src/api/client.test.ts).

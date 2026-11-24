@@ -22,6 +22,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/revoke-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign out every browser, including this one */
+        post: operations["revokeAllSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Global settings */
+        get: operations["getSettings"];
+        /**
+         * Replace the global settings
+         * @description Stores every setting in one transaction. A non-null jiraSiteId must be one of the sites of the connected Atlassian account, otherwise the problem code is unknown_site.
+         */
+        put: operations["putSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Which OAuth apps are configured, and the callback URLs to register
+         * @description Never returns a client id or a secret.
+         */
+        get: operations["getSetup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/setup/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Store the OAuth app client credentials of a provider in the secrets store */
+        put: operations["putSetupClient"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/pat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Validate and store a GitHub personal access token
+         * @description Checks the token with viewer { login } and the X-OAuth-Scopes header. Classic tokens need repo and read:org (problem code insufficient_scopes otherwise). Fine-grained tokens are accepted with a warning.
+         */
+        put: operations["putGithubPat"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Connection state of GitHub and Jira
+         * @description Reads stored state only. It never calls GitHub or Atlassian.
+         */
+        get: operations["getAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove the stored tokens of a provider */
+        delete: operations["disconnectAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/accounts/{provider}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check a connection with the provider now
+         * @description A user action. GitHub: asks who the token belongs to. Atlassian: refreshes the access token when needed and reloads the site list. A refresh that Atlassian rejects sets needsReconnect.
+         */
+        post: operations["checkAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/oauth/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish an OAuth authorization with the code and state from the provider redirect
+         * @description Called by the static /oauth/finish/ page. The state must be unspent, unexpired, issued for this provider and this session.
+         */
+        post: operations["completeOAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -34,6 +206,64 @@ export interface components {
             /** Format: date-time */
             expiresAt: string;
             version: string;
+        };
+        /** @enum {string} */
+        Provider: "github" | "atlassian";
+        /** @enum {integer} */
+        PollingSeconds: 60 | 120 | 300 | 900 | 3600;
+        Settings: {
+            polling: {
+                githubSec: components["schemas"]["PollingSeconds"];
+                jiraSec: components["schemas"]["PollingSeconds"];
+            };
+            /** @enum {string} */
+            theme: "light" | "dark" | "auto";
+            /** @enum {string} */
+            defaultMethodForNewRepos: "squash" | "merge" | "rebase";
+            deleteBranchAfterMerge: boolean;
+            jiraSiteId: string | null;
+        };
+        ClientCredentials: {
+            clientId: string;
+            clientSecret: string;
+        };
+        ProviderSetup: {
+            configured: boolean;
+            callbackUrl: string;
+        };
+        Setup: {
+            github: components["schemas"]["ProviderSetup"];
+            atlassian: components["schemas"]["ProviderSetup"];
+        };
+        PatRequest: {
+            token: string;
+        };
+        OAuthComplete: {
+            provider: components["schemas"]["Provider"];
+            code: string;
+            state: string;
+        };
+        GithubAccount: {
+            connected: boolean;
+            login?: string;
+            /** @enum {string} */
+            method?: "oauth" | "pat";
+            warning?: string;
+        };
+        JiraSite: {
+            id: string;
+            name: string;
+            url: string;
+        };
+        JiraAccount: {
+            connected: boolean;
+            sites: components["schemas"]["JiraSite"][];
+            selectedSiteId: string | null;
+            needsReconnect: boolean;
+        };
+        Accounts: {
+            github: components["schemas"]["GithubAccount"];
+            jira: components["schemas"]["JiraAccount"];
         };
         Problem: {
             type: string;
@@ -53,8 +283,46 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The request was understood but refused (for example invalid_oauth_state). */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The current state does not allow it (for example not_connected or provider_not_configured). */
+        Conflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site). */
+        Unprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description GitHub or Atlassian failed or refused (oauth_exchange_failed, upstream_error, org_blocked). */
+        BadGateway: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        Provider: components["schemas"]["Provider"];
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -104,6 +372,231 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["InvalidLaunchToken"];
+        };
+    };
+    revokeAllSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every session is deleted. The response expires the prd_session cookie. */
+            204: {
+                headers: {
+                    /** @description The expired prd_session cookie. */
+                    "Set-Cookie": string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current settings, with defaults for anything never saved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
+    putSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Settings"];
+            };
+        };
+        responses: {
+            /** @description The saved settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    getSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Setup"];
+                };
+            };
+        };
+    };
+    putSetupClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientCredentials"];
+            };
+        };
+        responses: {
+            /** @description Stored. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    putGithubPat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatRequest"];
+            };
+        };
+        responses: {
+            /** @description The token is stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubAccount"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    getAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The accounts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accounts"];
+                };
+            };
+        };
+    };
+    disconnectAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Disconnected. Client credentials are kept. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    checkAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: components["parameters"]["Provider"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The accounts after the check. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accounts"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    completeOAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthComplete"];
+            };
+        };
+        responses: {
+            /** @description Tokens are stored. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["BadGateway"];
         };
     };
 }

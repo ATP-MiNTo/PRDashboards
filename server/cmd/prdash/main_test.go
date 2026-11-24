@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -18,7 +19,10 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/zalando/go-keyring"
 
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
@@ -82,6 +86,7 @@ func testEnv(out, errOut *syncBuffer, opened chan string) env {
 		clock:   clock.Now,
 		rand:    &testutil.Rand{},
 		version: "test",
+		prompt:  func(bool) ([]byte, error) { return nil, secrets.ErrNoTerminal },
 	}
 }
 
@@ -123,8 +128,10 @@ func (in *instance) stop(t *testing.T) error {
 	}
 }
 
+// newDataDir returns a fresh data dir and a fresh mock keychain, so tests never touch the real one.
 func newDataDir(t *testing.T) string {
 	t.Helper()
+	keyring.MockInit()
 	dir := filepath.Join(t.TempDir(), "data")
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -273,16 +280,19 @@ func TestRunServesAndCleansUp(t *testing.T) {
 	if !strings.Contains(in.out.String(), "OAuth callbacks need port 4317") {
 		t.Fatalf("no warning for non-default port: %s", in.out.String())
 	}
-	tokenBytes, err := os.ReadFile(filepath.Join(dir, "launch.token"))
+	lf, err := auth.ReadLaunchFile(filepath.Join(dir, "launch.token"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	token := string(tokenBytes)
+	token := lf.Token
+	if lf.Port != port {
+		t.Fatalf("launch file port %d, want %d", lf.Port, port)
+	}
 	if want := launchURL(port, token); <-in.opened != want {
 		t.Fatalf("browser opened on the wrong URL, want %s", want)
 	}
 	if runtime.GOOS != "windows" {
-		for _, name := range []string{"launch.token", "session.key", "prdash.lock"} {
+		for _, name := range []string{"launch.token", "data.db", "prdash.lock"} {
 			info, err := os.Stat(filepath.Join(dir, name))
 			if err != nil {
 				t.Fatal(err)
@@ -316,7 +326,7 @@ func TestRunServesAndCleansUp(t *testing.T) {
 	if resp.StatusCode != http.StatusNoContent || len(resp.Cookies()) != 1 {
 		t.Fatalf("launch exchange: %d, cookies %v", resp.StatusCode, resp.Cookies())
 	}
-	if rotated, _ := os.ReadFile(filepath.Join(dir, "launch.token")); string(rotated) == token {
+	if rotated, _ := auth.ReadLaunchFile(filepath.Join(dir, "launch.token")); rotated.Token == token {
 		t.Fatal("launch token file not rotated after use")
 	}
 
@@ -377,7 +387,7 @@ func TestSecondInstanceOpensRunningOne(t *testing.T) {
 		t.Fatal("launch URL written to the log")
 	}
 
-	token, err := os.ReadFile(filepath.Join(dir, "launch.token"))
+	lf, err := auth.ReadLaunchFile(filepath.Join(dir, "launch.token"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +399,7 @@ func TestSecondInstanceOpensRunningOne(t *testing.T) {
 	}
 	select {
 	case got := <-opened:
-		if want := launchURL(port, string(token)); got != want {
+		if want := launchURL(port, lf.Token); got != want {
 			t.Fatalf("opened %s, want %s", got, want)
 		}
 	default:
@@ -494,19 +504,223 @@ func TestRunBrowserFailureDoesNotStop(t *testing.T) {
 	}
 }
 
-func TestRunReusesSessionKey(t *testing.T) {
+func TestSecondInstanceUsesTheRunningPort(t *testing.T) {
 	dir := newDataDir(t)
-	first := start(t, dir, freePort(t), true)
-	key1, err := os.ReadFile(filepath.Join(dir, "session.key"))
-	if err != nil || len(key1) != 32 {
-		t.Fatalf("key: %v len %d", err, len(key1))
+	port := freePort(t)
+	start(t, dir, port, true)
+	lf, err := auth.ReadLaunchFile(filepath.Join(dir, "launch.token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	errOut := &syncBuffer{}
+	e := testEnv(&syncBuffer{}, errOut, make(chan string, 1))
+	// The second start has the default port, which is not the one the first instance bound.
+	if err := run(context.Background(), options{port: defaultPort, dataDir: dir, noBrowser: true}, e); err != nil {
+		t.Fatal(err)
+	}
+	if want := launchURL(port, lf.Token); !strings.Contains(errOut.String(), want) {
+		t.Fatalf("stderr %q does not hold %s", errOut.String(), want)
+	}
+}
+
+func TestSecondInstanceWithBrokenLaunchFile(t *testing.T) {
+	dir := newDataDir(t)
+	lock := flock.New(filepath.Join(dir, "prdash.lock"))
+	if ok, err := lock.TryLock(); err != nil || !ok {
+		t.Fatal(err)
+	}
+	defer lock.Unlock()
+	if err := os.WriteFile(filepath.Join(dir, "launch.token"), []byte("bare-token-from-old-version"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := run(context.Background(), options{port: freePort(t), dataDir: dir}, testEnv(&syncBuffer{}, &syncBuffer{}, nil))
+	if err == nil || !strings.Contains(err.Error(), "launch file") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestHTTPServerTimeouts(t *testing.T) {
+	srv := newHTTPServer(http.NotFoundHandler(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if srv.ReadTimeout != 30*time.Second || srv.ReadHeaderTimeout != 10*time.Second {
+		t.Fatalf("read timeouts %v %v", srv.ReadTimeout, srv.ReadHeaderTimeout)
+	}
+	if srv.WriteTimeout != 0 {
+		t.Fatal("WriteTimeout must stay unset for SSE")
+	}
+}
+
+func TestRunRefusesLooseSecretFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX modes only")
+	}
+	for _, name := range []string{"session.key", "secrets.enc", "data.db"} {
+		for _, mode := range []os.FileMode{0o640, 0o604, 0o644, 0o660, 0o666} {
+			dir := newDataDir(t)
+			path := filepath.Join(dir, name)
+			if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, mode); err != nil {
+				t.Fatal(err)
+			}
+			err := run(context.Background(), options{port: freePort(t), dataDir: dir}, testEnv(&syncBuffer{}, &syncBuffer{}, nil))
+			want := "chmod 600 " + path
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("%s mode %04o: err %v, want mention of %q", name, mode, err, want)
+			}
+		}
+	}
+}
+
+func TestCheckPrivateFilesAcceptsPrivateAndMissing(t *testing.T) {
+	dir := newDataDir(t)
+	if err := checkPrivateFiles(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range privateFiles {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := checkPrivateFiles(dir); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func httpDo(t *testing.T, method, url string, body string, cookie string, csrf string) *http.Response {
+	t.Helper()
+	var rd io.Reader
+	if body != "" {
+		rd = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, rd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if method != http.MethodGet {
+		req.Header.Set("Origin", strings.TrimSuffix(url, req.URL.Path))
+	}
+	if cookie != "" {
+		req.Header.Set("Cookie", "prd_session="+cookie)
+	}
+	if csrf != "" {
+		req.Header.Set("X-PRD-CSRF", csrf)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { resp.Body.Close() })
+	return resp
+}
+
+func signIn(t *testing.T, dir string, port int) string {
+	t.Helper()
+	lf, err := auth.ReadLaunchFile(filepath.Join(dir, "launch.token"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := fmt.Sprintf("http://127.0.0.1:%d", port)
+	resp := httpDo(t, http.MethodPost, base+"/api/session", `{"launchToken":"`+lf.Token+`"}`, "", "")
+	if resp.StatusCode != http.StatusNoContent || len(resp.Cookies()) != 1 {
+		t.Fatalf("launch exchange: %d", resp.StatusCode)
+	}
+	return resp.Cookies()[0].Value
+}
+
+func TestSessionsAndKeySurviveRestart(t *testing.T) {
+	dir := newDataDir(t)
+	port := freePort(t)
+	first := start(t, dir, port, true)
+	cookie := signIn(t, dir, port)
+	base := fmt.Sprintf("http://127.0.0.1:%d/api/session", port)
+	if resp := httpDo(t, http.MethodGet, base, "", cookie, ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("before restart: %d", resp.StatusCode)
 	}
 	if err := first.stop(t); err != nil {
 		t.Fatal(err)
 	}
-	start(t, dir, freePort(t), true)
-	key2, _ := os.ReadFile(filepath.Join(dir, "session.key"))
-	if !bytes.Equal(key1, key2) {
-		t.Fatal("session key regenerated on restart")
+	if _, err := os.Stat(filepath.Join(dir, "session.key")); !os.IsNotExist(err) {
+		t.Fatalf("a key file was written next to the keychain item: %v", err)
+	}
+	start(t, dir, port, true)
+	if resp := httpDo(t, http.MethodGet, base, "", cookie, ""); resp.StatusCode != http.StatusOK {
+		t.Fatalf("session lost across restart: %d", resp.StatusCode)
+	}
+}
+
+func TestLegacySessionKeyIsImportedOnce(t *testing.T) {
+	dir := newDataDir(t)
+	legacy := []byte("0123456789abcdef0123456789abcdef")
+	if err := os.WriteFile(filepath.Join(dir, "session.key"), legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	in := start(t, dir, freePort(t), true)
+	if _, err := os.Stat(filepath.Join(dir, "session.key")); !os.IsNotExist(err) {
+		t.Fatalf("legacy file kept: %v", err)
+	}
+	stored, err := secrets.Keychain{}.Get(secrets.SessionKey)
+	if err != nil || !bytes.Equal(stored, legacy) {
+		t.Fatalf("legacy key not in the keychain: %v", err)
+	}
+	if err := in.stop(t); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNoKeychainAndNoTerminalExitsWithAMessage(t *testing.T) {
+	dir := newDataDir(t)
+	keyring.MockInitWithError(errors.New("no secret service"))
+	t.Cleanup(keyring.MockInit)
+	err := run(context.Background(), options{port: freePort(t), dataDir: dir}, testEnv(&syncBuffer{}, &syncBuffer{}, nil))
+	if err == nil || !strings.Contains(err.Error(), "stdin is not a terminal") {
+		t.Fatalf("err %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "launch.token")); !os.IsNotExist(statErr) {
+		t.Fatal("the server started without secrets")
+	}
+}
+
+func TestFileBackendWithPassphrase(t *testing.T) {
+	dir := newDataDir(t)
+	keyring.MockInitWithError(errors.New("no secret service"))
+	t.Cleanup(keyring.MockInit)
+	port := freePort(t)
+
+	asked := make(chan bool, 4)
+	opts := options{port: port, dataDir: dir, noBrowser: true}
+	out, errOut := &syncBuffer{}, &syncBuffer{}
+	e := testEnv(out, errOut, nil)
+	e.prompt = func(confirm bool) ([]byte, error) { asked <- confirm; return []byte("correct horse battery"), nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, opts, e) }()
+	waitFor(t, "server to listen", func() bool { return strings.Contains(out.String(), `"msg":"listening"`) })
+	if !<-asked {
+		t.Fatal("the first creation must ask for the passphrase twice")
+	}
+	info, err := os.Stat(filepath.Join(dir, "secrets.enc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("secrets.enc mode %v", info.Mode().Perm())
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "secrets.enc"))
+	if bytes.Contains(raw, []byte("session.key")) {
+		t.Fatal("item names visible in the encrypted file")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+
+	e2 := testEnv(&syncBuffer{}, &syncBuffer{}, nil)
+	e2.prompt = func(confirm bool) ([]byte, error) { asked <- confirm; return []byte("wrong passphrase!!"), nil }
+	if err := run(context.Background(), opts, e2); !errors.Is(err, secrets.ErrWrongPassphrase) {
+		t.Fatalf("wrong passphrase: %v", err)
 	}
 }

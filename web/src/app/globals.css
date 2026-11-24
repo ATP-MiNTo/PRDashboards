@@ -4,6 +4,11 @@
   --muted: #5b6575;
   --card: #ffffff;
   --line: #dfe3ea;
+  --accent: #2f5fd0;
+  --accent-fg: #ffffff;
+  --ok: #1d7a3d;
+  --warn: #8a5a00;
+  --danger: #b3261e;
   color-scheme: light dark;
 }
 
@@ -14,6 +19,11 @@
     --muted: #9aa5b6;
     --card: #1b212b;
     --line: #2b3340;
+    --accent: #6c93ff;
+    --accent-fg: #0b1020;
+    --ok: #5fcf85;
+    --warn: #e5b04d;
+    --danger: #ff8a80;
   }
 }
 

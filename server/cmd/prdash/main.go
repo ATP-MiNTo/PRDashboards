@@ -12,6 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
 )
 
 var version = "dev"
@@ -38,6 +40,7 @@ func main() {
 		clock:   time.Now,
 		rand:    rand.Reader,
 		version: version,
+		prompt:  secrets.TerminalPrompter(os.Stdin, os.Stderr),
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "prdash:", err)
@@ -49,7 +52,12 @@ type options struct {
 	port      int
 	dataDir   string
 	noBrowser bool
+	// fake starts in-process fake providers. The flag exists only in the e2e build.
+	fake bool
 }
+
+// extraFlags registers build-specific flags. The e2e build adds --fake.
+var extraFlags func(fs *flag.FlagSet, o *options)
 
 func parseFlags(args []string, out io.Writer) (options, error) {
 	var o options
@@ -58,6 +66,9 @@ func parseFlags(args []string, out io.Writer) (options, error) {
 	fs.IntVar(&o.port, "port", defaultPort, "loopback port to listen on")
 	fs.StringVar(&o.dataDir, "data-dir", defaultDataDir, "directory for the lock, token and data files")
 	fs.BoolVar(&o.noBrowser, "no-browser", false, "print the launch URL to stderr instead of opening the browser")
+	if extraFlags != nil {
+		extraFlags(fs, &o)
+	}
 	if err := fs.Parse(args); err != nil {
 		return o, err
 	}

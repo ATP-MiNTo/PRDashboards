@@ -221,3 +221,19 @@ func TestValidateRestoresBody(t *testing.T) {
 		t.Fatalf("handler saw %q", got)
 	}
 }
+
+func TestProtectedSurface(t *testing.T) {
+	cases := map[string]bool{
+		"/api": true, "/api/": true, "/api/settings": true, "/events": true,
+		"/oauth/github/start": true, "/oauth/atlassian/start": true, "/oauth/x/start": true,
+		"/oauth/github/callback": false, "/oauth/finish/": false, "/oauth//start": false,
+		"/oauth/github/start/": false, "/oauth/github/start/x": false, "/oauth/start": false,
+		"/": false, "/setup/": false, "/auth/done/": false, "/apix": false,
+	}
+	for path, want := range cases {
+		r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:4317"+path, nil)
+		if got := mw.Protected(r); got != want {
+			t.Errorf("%s: %v, want %v", path, got, want)
+		}
+	}
+}

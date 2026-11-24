@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -18,7 +17,11 @@ import (
 	webui "github.com/ATP-MiNTo/PRDashboards/server"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/logging"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/netguard"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
 const oauthPort = 4317
@@ -29,7 +32,22 @@ type env struct {
 	clock          func() time.Time
 	rand           io.Reader
 	version        string
+	// prompt reads the passphrase of the encrypted secrets file when there is no keychain.
+	prompt secrets.Prompter
 }
+
+// fakeEnv is what the e2e build supplies for --fake: fake provider endpoints and a secrets store
+// that needs no keychain or passphrase.
+type fakeEnv struct {
+	Endpoints auth.Endpoints
+	GitHubAPI string
+	Secrets   secrets.Store
+	Close     func()
+}
+
+// startFakes is set only by the e2e build. It starts the fake servers, allows their loopback
+// addresses in the guard and stores their client credentials.
+var startFakes func(ctx context.Context, guard *netguard.Guard, log *slog.Logger) (*fakeEnv, error)
 
 func launchURL(port int, token string) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/auth/launch#t=%s", port, token)
@@ -53,6 +71,9 @@ func run(ctx context.Context, o options, e env) error {
 		return openRunning(dir, o, e)
 	}
 	defer func() { _ = lock.Unlock() }()
+	if err := checkPrivateFiles(dir); err != nil {
+		return err
+	}
 
 	ln, err := net.Listen("tcp4", fmt.Sprintf("127.0.0.1:%d", o.port))
 	if err != nil {
@@ -68,35 +89,78 @@ func run(ctx context.Context, o options, e env) error {
 		log.Warn("OAuth callbacks need port 4317; sign-in will not work on this port", "port", o.port)
 	}
 
-	key, err := auth.LoadOrCreateKey(filepath.Join(dir, "session.key"), e.rand)
+	guard := netguard.New()
+	endpoints := auth.DefaultEndpoints()
+	githubAPI := github.DefaultAPIBase
+	var sec secrets.Store
+	if o.fake {
+		if startFakes == nil {
+			return errors.New("--fake is not available in this build")
+		}
+		fake, err := startFakes(ctx, guard, log)
+		if err != nil {
+			return fmt.Errorf("start fakes: %w", err)
+		}
+		defer fake.Close()
+		sec, endpoints, githubAPI = fake.Secrets, fake.Endpoints, fake.GitHubAPI
+	} else {
+		var backend string
+		if sec, backend, err = secrets.Open(dir, e.rand, e.prompt, log); err != nil {
+			return fmt.Errorf("secrets: %w", err)
+		}
+		log.Info("secrets backend", "backend", backend)
+	}
+
+	db, err := store.Open(filepath.Join(dir, "data.db"), e.clock)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Error("close database", "err", err)
+		}
+	}()
+
+	key, err := auth.LoadOrCreateKey(sec, filepath.Join(dir, "session.key"), e.rand, log)
 	if err != nil {
 		return fmt.Errorf("session key: %w", err)
 	}
-	launcher, err := auth.NewLauncher(filepath.Join(dir, "launch.token"), e.clock, e.rand, log)
+	sessions := auth.NewSessions(key, e.clock, e.rand, db, log)
+	if err := sessions.Load(ctx); err != nil {
+		return err
+	}
+	launcher, err := auth.NewLauncher(filepath.Join(dir, "launch.token"), o.port, e.clock, e.rand, log)
 	if err != nil {
 		return fmt.Errorf("launch token: %w", err)
 	}
 	defer func() { _ = launcher.Close() }()
 
+	httpClient := guard.Client()
+	ghClient := &github.Client{HTTP: httpClient, APIBase: githubAPI}
 	handler, err := api.New(api.Config{
 		Port:     o.port,
 		Version:  e.version,
-		Sessions: auth.NewSessions(key, e.clock, e.rand),
+		Sessions: sessions,
 		Launcher: launcher,
-		Web:      webui.WebFS(),
-		Log:      log,
-		Clock:    e.clock,
+		Store:    db,
+		OAuth: auth.NewOAuth(auth.Config{
+			Secrets:   sec,
+			States:    db,
+			HTTP:      httpClient,
+			GitHub:    ghClient,
+			Endpoints: endpoints,
+			Clock:     e.clock,
+			Rand:      e.rand,
+			Port:      o.port,
+		}),
+		Web:   webui.WebFS(),
+		Log:   log,
+		Clock: e.clock,
 	})
 	if err != nil {
 		return err
 	}
-	srv := &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: 10 * time.Second,
-		IdleTimeout:       2 * time.Minute,
-		MaxHeaderBytes:    16 << 10,
-		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
-	}
+	srv := newHTTPServer(handler, log)
 
 	rotateCtx, stopRotate := context.WithCancel(ctx)
 	rotated := make(chan struct{})
@@ -134,13 +198,28 @@ func run(ctx context.Context, o options, e env) error {
 	return nil
 }
 
-// openRunning handles a second start: it opens the browser on the running instance.
-func openRunning(dir string, o options, e env) error {
-	token, err := os.ReadFile(filepath.Join(dir, "launch.token")) //nolint:gosec // path is built from the data dir
-	if err != nil {
-		return fmt.Errorf("prdash is already running but its launch token is unreadable: %w", err)
+func newHTTPServer(h http.Handler, log *slog.Logger) *http.Server {
+	return &http.Server{
+		Handler:           h,
+		ReadHeaderTimeout: 10 * time.Second,
+		// Bodies are capped at 64 KiB, so 30 s is generous and stops slow-body clients from holding
+		// a connection. WriteTimeout stays unset on purpose: the SSE stream (/events) is a
+		// long-lived response and a write deadline would cut it.
+		ReadTimeout:    30 * time.Second,
+		IdleTimeout:    2 * time.Minute,
+		MaxHeaderBytes: 16 << 10,
+		ErrorLog:       slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
-	url := launchURL(o.port, string(token))
+}
+
+// openRunning handles a second start: it opens the browser on the running instance, using the
+// port that instance wrote to the launch file.
+func openRunning(dir string, o options, e env) error {
+	lf, err := auth.ReadLaunchFile(filepath.Join(dir, "launch.token"))
+	if err != nil {
+		return fmt.Errorf("prdash is already running but its launch file is unreadable: %w", err)
+	}
+	url := launchURL(lf.Port, lf.Token)
 	if o.noBrowser {
 		fmt.Fprintln(e.stderr, "Open", url)
 		return nil

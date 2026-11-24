@@ -1,10 +1,8 @@
 package auth_test
 
 import (
+	"context"
 	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -13,15 +11,17 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
+var ctx = context.Background()
+
 func newSessions(t *testing.T) (*auth.Sessions, *testutil.Clock) {
 	t.Helper()
 	clock := testutil.NewClock()
-	return auth.NewSessions([]byte("0123456789abcdef0123456789abcdef"), clock.Now, &testutil.Rand{}), clock
+	return auth.NewSessions([]byte("0123456789abcdef0123456789abcdef"), clock.Now, &testutil.Rand{}, nil, nil), clock
 }
 
 func TestSessionRoundTrip(t *testing.T) {
 	s, _ := newSessions(t)
-	created, err := s.Create()
+	created, err := s.Create(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestSessionRoundTrip(t *testing.T) {
 
 func TestSessionCookieAttributes(t *testing.T) {
 	s, _ := newSessions(t)
-	created, _ := s.Create()
+	created, _ := s.Create(ctx)
 	c := created.Cookie()
 	if c.Name != "prd_session" || c.Path != "/" || !c.HttpOnly || c.Secure ||
 		c.SameSite != http.SameSiteStrictMode || c.MaxAge != 30*24*3600 {
@@ -58,9 +58,9 @@ func TestSessionCookieAttributes(t *testing.T) {
 
 func TestSessionRejectsForgeries(t *testing.T) {
 	s, _ := newSessions(t)
-	other := auth.NewSessions([]byte("ffffffffffffffffffffffffffffffff"), testutil.NewClock().Now, &testutil.Rand{})
-	foreign, _ := other.Create()
-	created, _ := s.Create()
+	other := auth.NewSessions([]byte("ffffffffffffffffffffffffffffffff"), testutil.NewClock().Now, &testutil.Rand{}, nil, nil)
+	foreign, _ := other.Create(ctx)
+	created, _ := s.Create(ctx)
 	id, sig, _ := strings.Cut(created.Value, ".")
 	cases := map[string]string{
 		"empty":        "",
@@ -82,7 +82,7 @@ func TestSessionRejectsForgeries(t *testing.T) {
 
 func TestSessionExpiry(t *testing.T) {
 	s, clock := newSessions(t)
-	created, _ := s.Create()
+	created, _ := s.Create(ctx)
 	clock.Advance(auth.SessionTTL - time.Second)
 	if _, ok := s.Authenticate(created.Value); !ok {
 		t.Fatal("rejected before expiry")
@@ -95,7 +95,7 @@ func TestSessionExpiry(t *testing.T) {
 
 func TestSessionSlidingReissue(t *testing.T) {
 	s, clock := newSessions(t)
-	created, _ := s.Create()
+	created, _ := s.Create(ctx)
 	clock.Advance(auth.ReissueAfter - time.Minute)
 	got, _ := s.Authenticate(created.Value)
 	if got.Reissue {
@@ -124,9 +124,9 @@ func TestSessionSlidingReissue(t *testing.T) {
 
 func TestSessionPurgesExpired(t *testing.T) {
 	s, clock := newSessions(t)
-	old, _ := s.Create()
+	old, _ := s.Create(ctx)
 	clock.Advance(auth.SessionTTL + time.Hour)
-	if _, err := s.Create(); err != nil {
+	if _, err := s.Create(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := s.Authenticate(old.Value); ok {
@@ -136,46 +136,12 @@ func TestSessionPurgesExpired(t *testing.T) {
 
 func TestSessionsAreDistinct(t *testing.T) {
 	s, _ := newSessions(t)
-	a, _ := s.Create()
-	b, _ := s.Create()
+	a, _ := s.Create(ctx)
+	b, _ := s.Create(ctx)
 	if a.Value == b.Value || a.CSRF == b.CSRF || a.Key == b.Key {
 		t.Fatal("sessions share values")
 	}
 	if a.CheckCSRF(b.CSRF) {
 		t.Fatal("CSRF token valid across sessions")
-	}
-}
-
-func TestLoadOrCreateKey(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.key")
-	key, err := auth.LoadOrCreateKey(path, &testutil.Rand{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(key) != 32 {
-		t.Fatalf("key length %d", len(key))
-	}
-	if runtime.GOOS != "windows" {
-		info, _ := os.Stat(path)
-		if info.Mode().Perm() != 0o600 {
-			t.Fatalf("mode %v", info.Mode().Perm())
-		}
-	}
-	again, err := auth.LoadOrCreateKey(path, &testutil.Rand{})
-	if err != nil || string(again) != string(key) {
-		t.Fatalf("key not stable: %v", err)
-	}
-}
-
-func TestLoadOrCreateKeyBadFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.key")
-	if err := os.WriteFile(path, []byte("short"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := auth.LoadOrCreateKey(path, &testutil.Rand{}); err == nil {
-		t.Fatal("expected error for wrong key size")
-	}
-	if _, err := auth.LoadOrCreateKey(t.TempDir(), &testutil.Rand{}); err == nil {
-		t.Fatal("expected error when the key path is a directory")
 	}
 }

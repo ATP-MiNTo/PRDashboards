@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -26,10 +30,36 @@ type launchToken struct {
 	expires time.Time
 }
 
-// Launcher issues one-time launch tokens and keeps the newest one in a 0600 file so a second
-// start of the binary can open the browser on the running instance.
+// LaunchFile is the content of launch.token: the port of the running instance and its newest
+// token, so a second start opens the browser on the right port.
+type LaunchFile struct {
+	Port  int    `json:"port"`
+	Token string `json:"token"`
+}
+
+var launchTokenShape = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// ReadLaunchFile reads and validates the launch file at path.
+func ReadLaunchFile(path string) (LaunchFile, error) {
+	raw, err := os.ReadFile(path) //nolint:gosec // path is built from the data dir
+	if err != nil {
+		return LaunchFile{}, err
+	}
+	var f LaunchFile
+	if err := json.Unmarshal(raw, &f); err != nil {
+		return LaunchFile{}, fmt.Errorf("launch file is not valid: %w", err)
+	}
+	if f.Port < 1 || f.Port > 65535 || !launchTokenShape.MatchString(f.Token) {
+		return LaunchFile{}, errors.New("launch file has an invalid port or token")
+	}
+	return f, nil
+}
+
+// Launcher issues one-time launch tokens and keeps the newest one, with the listening port, in a
+// 0600 file so a second start of the binary can open the browser on the running instance.
 type Launcher struct {
 	path  string
+	port  int
 	clock func() time.Time
 	rand  io.Reader
 	log   *slog.Logger
@@ -40,8 +70,8 @@ type Launcher struct {
 }
 
 // NewLauncher creates a launcher and writes the first token to path.
-func NewLauncher(path string, clock func() time.Time, rnd io.Reader, log *slog.Logger) (*Launcher, error) {
-	l := &Launcher{path: path, clock: clock, rand: rnd, log: log, every: LaunchRotateEvery}
+func NewLauncher(path string, port int, clock func() time.Time, rnd io.Reader, log *slog.Logger) (*Launcher, error) {
+	l := &Launcher{path: path, port: port, clock: clock, rand: rnd, log: log, every: LaunchRotateEvery}
 	if err := l.Rotate(); err != nil {
 		return nil, err
 	}
@@ -75,7 +105,11 @@ func (l *Launcher) rotateLocked() error {
 	if len(l.live) > maxLive {
 		l.live = l.live[len(l.live)-maxLive:]
 	}
-	return WriteFileAtomic(l.path, []byte(t.value))
+	content, err := json.Marshal(LaunchFile{Port: l.port, Token: t.value})
+	if err != nil {
+		return err
+	}
+	return WriteFileAtomic(l.path, content)
 }
 
 func (l *Launcher) prune(now time.Time) {

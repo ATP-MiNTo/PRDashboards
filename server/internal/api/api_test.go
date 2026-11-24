@@ -14,9 +14,14 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/getkin/kin-openapi/openapi3"
+
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/mw"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
@@ -31,15 +36,21 @@ type rig struct {
 	clock    *testutil.Clock
 	launcher *auth.Launcher
 	logs     *bytes.Buffer
+	store    *store.Store
+	secrets  *secrets.Memory
+	oauth    *auth.OAuth
+	prov     *fakeProviders
+	sessions *auth.Sessions
 }
 
 func webFS() fs.FS {
 	return fstest.MapFS{
-		"index.html":             {Data: []byte("<html>home</html>")},
-		"auth/launch/index.html": {Data: []byte("<html>launch</html>")},
-		"404.html":               {Data: []byte("<html>missing</html>")},
-		"csp.json":               {Data: []byte(`{"scriptHashes":["'sha256-abc='"]}`)},
-		"_next/static/a.js":      {Data: []byte("x")},
+		"index.html":              {Data: []byte("<html>home</html>")},
+		"auth/launch/index.html":  {Data: []byte("<html>launch</html>")},
+		"oauth/finish/index.html": {Data: []byte("<html>finish</html>")},
+		"404.html":                {Data: []byte("<html>missing</html>")},
+		"csp.json":                {Data: []byte(`{"scriptHashes":["'sha256-abc='"]}`)},
+		"_next/static/a.js":       {Data: []byte("x")},
 	}
 }
 
@@ -49,15 +60,36 @@ func newRig(t *testing.T, web fs.FS) *rig {
 	rnd := &testutil.Rand{}
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewJSONHandler(logs, nil))
-	launcher, err := auth.NewLauncher(filepath.Join(t.TempDir(), "launch.token"), clock.Now, rnd, log)
+	dir := t.TempDir()
+	launcher, err := auth.NewLauncher(filepath.Join(dir, "launch.token"), 4317, clock.Now, rnd, log)
 	if err != nil {
 		t.Fatal(err)
 	}
+	db, err := store.Open(filepath.Join(dir, "data.db"), clock.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	sec := secrets.NewMemory()
+	prov := newFakeProviders(t)
+	oauth := auth.NewOAuth(auth.Config{
+		Secrets:   sec,
+		States:    db,
+		HTTP:      prov.srv.Client(),
+		GitHub:    &github.Client{HTTP: prov.srv.Client(), APIBase: prov.srv.URL},
+		Endpoints: prov.endpoints(),
+		Clock:     clock.Now,
+		Rand:      rnd,
+		Port:      4317,
+	})
+	sessions := auth.NewSessions([]byte("0123456789abcdef0123456789abcdef"), clock.Now, rnd, db, log)
 	h, err := api.New(api.Config{
 		Port:     4317,
 		Version:  "9.9.9",
-		Sessions: auth.NewSessions([]byte("0123456789abcdef0123456789abcdef"), clock.Now, rnd),
+		Sessions: sessions,
 		Launcher: launcher,
+		Store:    db,
+		OAuth:    oauth,
 		Web:      web,
 		Log:      log,
 		Clock:    clock.Now,
@@ -65,7 +97,7 @@ func newRig(t *testing.T, web fs.FS) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &rig{t: t, h: h, clock: clock, launcher: launcher, logs: logs}
+	return &rig{t: t, h: h, clock: clock, launcher: launcher, logs: logs, store: db, secrets: sec, oauth: oauth, prov: prov, sessions: sessions}
 }
 
 type reqOpt func(*http.Request)
@@ -160,7 +192,7 @@ func TestHostAllowlist(t *testing.T) {
 func TestHostAllowlistFollowsPort(t *testing.T) {
 	g := newRig(t, webFS())
 	h, err := api.New(api.Config{
-		Port: 5000, Version: "v", Sessions: auth.NewSessions(make([]byte, 32), g.clock.Now, &testutil.Rand{}),
+		Port: 5000, Version: "v", Sessions: auth.NewSessions(make([]byte, 32), g.clock.Now, &testutil.Rand{}, nil, nil),
 		Launcher: g.launcher, Web: webFS(), Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), Clock: g.clock.Now,
 	})
 	if err != nil {
@@ -506,16 +538,25 @@ func TestSpecRequestSchemasRejectUnknownFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	var walk func(where string, s *openapi3.Schema)
+	walk = func(where string, s *openapi3.Schema) {
+		if s.Type != nil && s.Type.Is("object") && (s.AdditionalProperties.Has == nil || *s.AdditionalProperties.Has) {
+			t.Errorf("%s: object schema must set additionalProperties: false", where)
+		}
+		for name, p := range s.Properties {
+			walk(where+"."+name, p.Value)
+		}
+		if s.Items != nil {
+			walk(where+"[]", s.Items.Value)
+		}
+	}
 	for path, item := range spec.Paths.Map() {
 		for method, op := range item.Operations() {
 			if op.RequestBody == nil {
 				continue
 			}
 			for ct, media := range op.RequestBody.Value.Content {
-				s := media.Schema.Value
-				if s.Type != nil && s.Type.Is("object") && (s.AdditionalProperties.Has == nil || *s.AdditionalProperties.Has) {
-					t.Errorf("%s %s (%s): request schema must set additionalProperties: false", method, path, ct)
-				}
+				walk(method+" "+path+" ("+ct+")", media.Schema.Value)
 			}
 		}
 	}

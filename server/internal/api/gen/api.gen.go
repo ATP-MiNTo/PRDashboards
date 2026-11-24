@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
 
@@ -26,10 +27,168 @@ const (
 	CookieAuthScopes = "cookieAuth.Scopes"
 )
 
+// Defines values for GithubAccountMethod.
+const (
+	Oauth GithubAccountMethod = "oauth"
+	Pat   GithubAccountMethod = "pat"
+)
+
+// Valid indicates whether the value is a known member of the GithubAccountMethod enum.
+func (e GithubAccountMethod) Valid() bool {
+	switch e {
+	case Oauth:
+		return true
+	case Pat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PollingSeconds.
+const (
+	N120  PollingSeconds = 120
+	N300  PollingSeconds = 300
+	N3600 PollingSeconds = 3600
+	N60   PollingSeconds = 60
+	N900  PollingSeconds = 900
+)
+
+// Valid indicates whether the value is a known member of the PollingSeconds enum.
+func (e PollingSeconds) Valid() bool {
+	switch e {
+	case N120:
+		return true
+	case N300:
+		return true
+	case N3600:
+		return true
+	case N60:
+		return true
+	case N900:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Provider.
+const (
+	Atlassian Provider = "atlassian"
+	Github    Provider = "github"
+)
+
+// Valid indicates whether the value is a known member of the Provider enum.
+func (e Provider) Valid() bool {
+	switch e {
+	case Atlassian:
+		return true
+	case Github:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsDefaultMethodForNewRepos.
+const (
+	Merge  SettingsDefaultMethodForNewRepos = "merge"
+	Rebase SettingsDefaultMethodForNewRepos = "rebase"
+	Squash SettingsDefaultMethodForNewRepos = "squash"
+)
+
+// Valid indicates whether the value is a known member of the SettingsDefaultMethodForNewRepos enum.
+func (e SettingsDefaultMethodForNewRepos) Valid() bool {
+	switch e {
+	case Merge:
+		return true
+	case Rebase:
+		return true
+	case Squash:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsTheme.
+const (
+	Auto  SettingsTheme = "auto"
+	Dark  SettingsTheme = "dark"
+	Light SettingsTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the SettingsTheme enum.
+func (e SettingsTheme) Valid() bool {
+	switch e {
+	case Auto:
+		return true
+	case Dark:
+		return true
+	case Light:
+		return true
+	default:
+		return false
+	}
+}
+
+// Accounts defines model for Accounts.
+type Accounts struct {
+	Github GithubAccount `json:"github"`
+	Jira   JiraAccount   `json:"jira"`
+}
+
+// ClientCredentials defines model for ClientCredentials.
+type ClientCredentials struct {
+	ClientId     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+}
+
 // CreateSessionRequest defines model for CreateSessionRequest.
 type CreateSessionRequest struct {
 	LaunchToken string `json:"launchToken"`
 }
+
+// GithubAccount defines model for GithubAccount.
+type GithubAccount struct {
+	Connected bool                 `json:"connected"`
+	Login     *string              `json:"login,omitempty"`
+	Method    *GithubAccountMethod `json:"method,omitempty"`
+	Warning   *string              `json:"warning,omitempty"`
+}
+
+// GithubAccountMethod defines model for GithubAccount.Method.
+type GithubAccountMethod string
+
+// JiraAccount defines model for JiraAccount.
+type JiraAccount struct {
+	Connected      bool       `json:"connected"`
+	NeedsReconnect bool       `json:"needsReconnect"`
+	SelectedSiteId *string    `json:"selectedSiteId"`
+	Sites          []JiraSite `json:"sites"`
+}
+
+// JiraSite defines model for JiraSite.
+type JiraSite struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+	Url  string `json:"url"`
+}
+
+// OAuthComplete defines model for OAuthComplete.
+type OAuthComplete struct {
+	Code     string   `json:"code"`
+	Provider Provider `json:"provider"`
+	State    string   `json:"state"`
+}
+
+// PatRequest defines model for PatRequest.
+type PatRequest struct {
+	Token string `json:"token"`
+}
+
+// PollingSeconds defines model for PollingSeconds.
+type PollingSeconds int
 
 // Problem defines model for Problem.
 type Problem struct {
@@ -40,6 +199,15 @@ type Problem struct {
 	Type   string  `json:"type"`
 }
 
+// Provider defines model for Provider.
+type Provider string
+
+// ProviderSetup defines model for ProviderSetup.
+type ProviderSetup struct {
+	CallbackUrl string `json:"callbackUrl"`
+	Configured  bool   `json:"configured"`
+}
+
 // Session defines model for Session.
 type Session struct {
 	CsrfToken string    `json:"csrfToken"`
@@ -47,20 +215,98 @@ type Session struct {
 	Version   string    `json:"version"`
 }
 
+// Settings defines model for Settings.
+type Settings struct {
+	DefaultMethodForNewRepos SettingsDefaultMethodForNewRepos `json:"defaultMethodForNewRepos"`
+	DeleteBranchAfterMerge   bool                             `json:"deleteBranchAfterMerge"`
+	JiraSiteId               *string                          `json:"jiraSiteId"`
+	Polling                  struct {
+		GithubSec PollingSeconds `json:"githubSec"`
+		JiraSec   PollingSeconds `json:"jiraSec"`
+	} `json:"polling"`
+	Theme SettingsTheme `json:"theme"`
+}
+
+// SettingsDefaultMethodForNewRepos defines model for Settings.DefaultMethodForNewRepos.
+type SettingsDefaultMethodForNewRepos string
+
+// SettingsTheme defines model for Settings.Theme.
+type SettingsTheme string
+
+// Setup defines model for Setup.
+type Setup struct {
+	Atlassian ProviderSetup `json:"atlassian"`
+	Github    ProviderSetup `json:"github"`
+}
+
+// BadGateway defines model for BadGateway.
+type BadGateway = Problem
+
+// BadRequest defines model for BadRequest.
+type BadRequest = Problem
+
+// Conflict defines model for Conflict.
+type Conflict = Problem
+
 // InvalidLaunchToken defines model for InvalidLaunchToken.
 type InvalidLaunchToken = Problem
+
+// Unprocessable defines model for Unprocessable.
+type Unprocessable = Problem
+
+// PutGithubPatJSONRequestBody defines body for PutGithubPat for application/json ContentType.
+type PutGithubPatJSONRequestBody = PatRequest
+
+// CompleteOAuthJSONRequestBody defines body for CompleteOAuth for application/json ContentType.
+type CompleteOAuthJSONRequestBody = OAuthComplete
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody = CreateSessionRequest
 
+// PutSettingsJSONRequestBody defines body for PutSettings for application/json ContentType.
+type PutSettingsJSONRequestBody = Settings
+
+// PutSetupClientJSONRequestBody defines body for PutSetupClient for application/json ContentType.
+type PutSetupClientJSONRequestBody = ClientCredentials
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Connection state of GitHub and Jira
+	// (GET /api/accounts)
+	GetAccounts(w http.ResponseWriter, r *http.Request)
+	// Remove the stored tokens of a provider
+	// (DELETE /api/accounts/{provider})
+	DisconnectAccount(w http.ResponseWriter, r *http.Request, provider Provider)
+	// Check a connection with the provider now
+	// (POST /api/accounts/{provider}/check)
+	CheckAccount(w http.ResponseWriter, r *http.Request, provider Provider)
+	// Validate and store a GitHub personal access token
+	// (PUT /api/github/pat)
+	PutGithubPat(w http.ResponseWriter, r *http.Request)
+	// Finish an OAuth authorization with the code and state from the provider redirect
+	// (POST /api/oauth/complete)
+	CompleteOAuth(w http.ResponseWriter, r *http.Request)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(w http.ResponseWriter, r *http.Request)
 	// Exchange a one-time launch token for a session cookie
 	// (POST /api/session)
 	CreateSession(w http.ResponseWriter, r *http.Request)
+	// Sign out every browser, including this one
+	// (POST /api/sessions/revoke-all)
+	RevokeAllSessions(w http.ResponseWriter, r *http.Request)
+	// Global settings
+	// (GET /api/settings)
+	GetSettings(w http.ResponseWriter, r *http.Request)
+	// Replace the global settings
+	// (PUT /api/settings)
+	PutSettings(w http.ResponseWriter, r *http.Request)
+	// Which OAuth apps are configured, and the callback URLs to register
+	// (GET /api/setup)
+	GetSetup(w http.ResponseWriter, r *http.Request)
+	// Store the OAuth app client credentials of a provider in the secrets store
+	// (PUT /api/setup/{provider})
+	PutSetupClient(w http.ResponseWriter, r *http.Request, provider Provider)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -71,6 +317,128 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// GetAccounts operation middleware
+func (siw *ServerInterfaceWrapper) GetAccounts(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAccounts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisconnectAccount operation middleware
+func (siw *ServerInterfaceWrapper) DisconnectAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "provider" -------------
+	var provider Provider
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisconnectAccount(w, r, provider)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CheckAccount operation middleware
+func (siw *ServerInterfaceWrapper) CheckAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "provider" -------------
+	var provider Provider
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckAccount(w, r, provider)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutGithubPat operation middleware
+func (siw *ServerInterfaceWrapper) PutGithubPat(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutGithubPat(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CompleteOAuth operation middleware
+func (siw *ServerInterfaceWrapper) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CompleteOAuth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetSession operation middleware
 func (siw *ServerInterfaceWrapper) GetSession(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +465,117 @@ func (siw *ServerInterfaceWrapper) CreateSession(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateSession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeAllSessions operation middleware
+func (siw *ServerInterfaceWrapper) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeAllSessions(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetSettings(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutSettings operation middleware
+func (siw *ServerInterfaceWrapper) PutSettings(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSetup operation middleware
+func (siw *ServerInterfaceWrapper) GetSetup(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSetup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutSetupClient operation middleware
+func (siw *ServerInterfaceWrapper) PutSetupClient(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "provider" -------------
+	var provider Provider
+
+	err = runtime.BindStyledParameterWithOptions("simple", "provider", r.PathValue("provider"), &provider, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "provider", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutSetupClient(w, r, provider)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -226,13 +705,201 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc("GET "+options.BaseURL+"/api/accounts", wrapper.GetAccounts)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/accounts/{provider}", wrapper.DisconnectAccount)
+	m.HandleFunc("POST "+options.BaseURL+"/api/accounts/{provider}/check", wrapper.CheckAccount)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/github/pat", wrapper.PutGithubPat)
+	m.HandleFunc("POST "+options.BaseURL+"/api/oauth/complete", wrapper.CompleteOAuth)
 	m.HandleFunc("GET "+options.BaseURL+"/api/session", wrapper.GetSession)
 	m.HandleFunc("POST "+options.BaseURL+"/api/session", wrapper.CreateSession)
+	m.HandleFunc("POST "+options.BaseURL+"/api/sessions/revoke-all", wrapper.RevokeAllSessions)
+	m.HandleFunc("GET "+options.BaseURL+"/api/settings", wrapper.GetSettings)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/settings", wrapper.PutSettings)
+	m.HandleFunc("GET "+options.BaseURL+"/api/setup", wrapper.GetSetup)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/setup/{provider}", wrapper.PutSetupClient)
 
 	return m
 }
 
+type BadGatewayApplicationProblemPlusJSONResponse Problem
+
+type BadRequestApplicationProblemPlusJSONResponse Problem
+
+type ConflictApplicationProblemPlusJSONResponse Problem
+
 type InvalidLaunchTokenApplicationProblemPlusJSONResponse Problem
+
+type UnprocessableApplicationProblemPlusJSONResponse Problem
+
+type GetAccountsRequestObject struct {
+}
+
+type GetAccountsResponseObject interface {
+	VisitGetAccountsResponse(w http.ResponseWriter) error
+}
+
+type GetAccounts200JSONResponse Accounts
+
+func (response GetAccounts200JSONResponse) VisitGetAccountsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DisconnectAccountRequestObject struct {
+	Provider Provider `json:"provider"`
+}
+
+type DisconnectAccountResponseObject interface {
+	VisitDisconnectAccountResponse(w http.ResponseWriter) error
+}
+
+type DisconnectAccount204Response struct {
+}
+
+func (response DisconnectAccount204Response) VisitDisconnectAccountResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CheckAccountRequestObject struct {
+	Provider Provider `json:"provider"`
+}
+
+type CheckAccountResponseObject interface {
+	VisitCheckAccountResponse(w http.ResponseWriter) error
+}
+
+type CheckAccount200JSONResponse Accounts
+
+func (response CheckAccount200JSONResponse) VisitCheckAccountResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CheckAccount409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CheckAccount409ApplicationProblemPlusJSONResponse) VisitCheckAccountResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CheckAccount422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response CheckAccount422ApplicationProblemPlusJSONResponse) VisitCheckAccountResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CheckAccount502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response CheckAccount502ApplicationProblemPlusJSONResponse) VisitCheckAccountResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutGithubPatRequestObject struct {
+	Body *PutGithubPatJSONRequestBody
+}
+
+type PutGithubPatResponseObject interface {
+	VisitPutGithubPatResponse(w http.ResponseWriter) error
+}
+
+type PutGithubPat200JSONResponse GithubAccount
+
+func (response PutGithubPat200JSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutGithubPat422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response PutGithubPat422ApplicationProblemPlusJSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutGithubPat502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response PutGithubPat502ApplicationProblemPlusJSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CompleteOAuthRequestObject struct {
+	Body *CompleteOAuthJSONRequestBody
+}
+
+type CompleteOAuthResponseObject interface {
+	VisitCompleteOAuthResponse(w http.ResponseWriter) error
+}
+
+type CompleteOAuth204Response struct {
+}
+
+func (response CompleteOAuth204Response) VisitCompleteOAuthResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CompleteOAuth400ApplicationProblemPlusJSONResponse struct {
+	BadRequestApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteOAuth400ApplicationProblemPlusJSONResponse) VisitCompleteOAuthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CompleteOAuth409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteOAuth409ApplicationProblemPlusJSONResponse) VisitCompleteOAuthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CompleteOAuth502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response CompleteOAuth502ApplicationProblemPlusJSONResponse) VisitCompleteOAuthResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
 
 type GetSessionRequestObject struct {
 }
@@ -283,14 +950,142 @@ func (response CreateSession401ApplicationProblemPlusJSONResponse) VisitCreateSe
 	return json.NewEncoder(w).Encode(response)
 }
 
+type RevokeAllSessionsRequestObject struct {
+}
+
+type RevokeAllSessionsResponseObject interface {
+	VisitRevokeAllSessionsResponse(w http.ResponseWriter) error
+}
+
+type RevokeAllSessions204ResponseHeaders struct {
+	SetCookie string
+}
+
+type RevokeAllSessions204Response struct {
+	Headers RevokeAllSessions204ResponseHeaders
+}
+
+func (response RevokeAllSessions204Response) VisitRevokeAllSessionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Set-Cookie", fmt.Sprint(response.Headers.SetCookie))
+	w.WriteHeader(204)
+	return nil
+}
+
+type GetSettingsRequestObject struct {
+}
+
+type GetSettingsResponseObject interface {
+	VisitGetSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetSettings200JSONResponse Settings
+
+func (response GetSettings200JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutSettingsRequestObject struct {
+	Body *PutSettingsJSONRequestBody
+}
+
+type PutSettingsResponseObject interface {
+	VisitPutSettingsResponse(w http.ResponseWriter) error
+}
+
+type PutSettings200JSONResponse Settings
+
+func (response PutSettings200JSONResponse) VisitPutSettingsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutSettings422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response PutSettings422ApplicationProblemPlusJSONResponse) VisitPutSettingsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSetupRequestObject struct {
+}
+
+type GetSetupResponseObject interface {
+	VisitGetSetupResponse(w http.ResponseWriter) error
+}
+
+type GetSetup200JSONResponse Setup
+
+func (response GetSetup200JSONResponse) VisitGetSetupResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutSetupClientRequestObject struct {
+	Provider Provider `json:"provider"`
+	Body     *PutSetupClientJSONRequestBody
+}
+
+type PutSetupClientResponseObject interface {
+	VisitPutSetupClientResponse(w http.ResponseWriter) error
+}
+
+type PutSetupClient204Response struct {
+}
+
+func (response PutSetupClient204Response) VisitPutSetupClientResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Connection state of GitHub and Jira
+	// (GET /api/accounts)
+	GetAccounts(ctx context.Context, request GetAccountsRequestObject) (GetAccountsResponseObject, error)
+	// Remove the stored tokens of a provider
+	// (DELETE /api/accounts/{provider})
+	DisconnectAccount(ctx context.Context, request DisconnectAccountRequestObject) (DisconnectAccountResponseObject, error)
+	// Check a connection with the provider now
+	// (POST /api/accounts/{provider}/check)
+	CheckAccount(ctx context.Context, request CheckAccountRequestObject) (CheckAccountResponseObject, error)
+	// Validate and store a GitHub personal access token
+	// (PUT /api/github/pat)
+	PutGithubPat(ctx context.Context, request PutGithubPatRequestObject) (PutGithubPatResponseObject, error)
+	// Finish an OAuth authorization with the code and state from the provider redirect
+	// (POST /api/oauth/complete)
+	CompleteOAuth(ctx context.Context, request CompleteOAuthRequestObject) (CompleteOAuthResponseObject, error)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(ctx context.Context, request GetSessionRequestObject) (GetSessionResponseObject, error)
 	// Exchange a one-time launch token for a session cookie
 	// (POST /api/session)
 	CreateSession(ctx context.Context, request CreateSessionRequestObject) (CreateSessionResponseObject, error)
+	// Sign out every browser, including this one
+	// (POST /api/sessions/revoke-all)
+	RevokeAllSessions(ctx context.Context, request RevokeAllSessionsRequestObject) (RevokeAllSessionsResponseObject, error)
+	// Global settings
+	// (GET /api/settings)
+	GetSettings(ctx context.Context, request GetSettingsRequestObject) (GetSettingsResponseObject, error)
+	// Replace the global settings
+	// (PUT /api/settings)
+	PutSettings(ctx context.Context, request PutSettingsRequestObject) (PutSettingsResponseObject, error)
+	// Which OAuth apps are configured, and the callback URLs to register
+	// (GET /api/setup)
+	GetSetup(ctx context.Context, request GetSetupRequestObject) (GetSetupResponseObject, error)
+	// Store the OAuth app client credentials of a provider in the secrets store
+	// (PUT /api/setup/{provider})
+	PutSetupClient(ctx context.Context, request PutSetupClientRequestObject) (PutSetupClientResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -320,6 +1115,144 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// GetAccounts operation middleware
+func (sh *strictHandler) GetAccounts(w http.ResponseWriter, r *http.Request) {
+	var request GetAccountsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAccounts(ctx, request.(GetAccountsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAccounts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetAccountsResponseObject); ok {
+		if err := validResponse.VisitGetAccountsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DisconnectAccount operation middleware
+func (sh *strictHandler) DisconnectAccount(w http.ResponseWriter, r *http.Request, provider Provider) {
+	var request DisconnectAccountRequestObject
+
+	request.Provider = provider
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DisconnectAccount(ctx, request.(DisconnectAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DisconnectAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DisconnectAccountResponseObject); ok {
+		if err := validResponse.VisitDisconnectAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CheckAccount operation middleware
+func (sh *strictHandler) CheckAccount(w http.ResponseWriter, r *http.Request, provider Provider) {
+	var request CheckAccountRequestObject
+
+	request.Provider = provider
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CheckAccount(ctx, request.(CheckAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CheckAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CheckAccountResponseObject); ok {
+		if err := validResponse.VisitCheckAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutGithubPat operation middleware
+func (sh *strictHandler) PutGithubPat(w http.ResponseWriter, r *http.Request) {
+	var request PutGithubPatRequestObject
+
+	var body PutGithubPatJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutGithubPat(ctx, request.(PutGithubPatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutGithubPat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutGithubPatResponseObject); ok {
+		if err := validResponse.VisitPutGithubPatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CompleteOAuth operation middleware
+func (sh *strictHandler) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
+	var request CompleteOAuthRequestObject
+
+	var body CompleteOAuthJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CompleteOAuth(ctx, request.(CompleteOAuthRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CompleteOAuth")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CompleteOAuthResponseObject); ok {
+		if err := validResponse.VisitCompleteOAuthResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetSession operation middleware
@@ -377,22 +1310,188 @@ func (sh *strictHandler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// RevokeAllSessions operation middleware
+func (sh *strictHandler) RevokeAllSessions(w http.ResponseWriter, r *http.Request) {
+	var request RevokeAllSessionsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeAllSessions(ctx, request.(RevokeAllSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeAllSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeAllSessionsResponseObject); ok {
+		if err := validResponse.VisitRevokeAllSessionsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSettings operation middleware
+func (sh *strictHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSettings(ctx, request.(GetSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSettingsResponseObject); ok {
+		if err := validResponse.VisitGetSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutSettings operation middleware
+func (sh *strictHandler) PutSettings(w http.ResponseWriter, r *http.Request) {
+	var request PutSettingsRequestObject
+
+	var body PutSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutSettings(ctx, request.(PutSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutSettingsResponseObject); ok {
+		if err := validResponse.VisitPutSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSetup operation middleware
+func (sh *strictHandler) GetSetup(w http.ResponseWriter, r *http.Request) {
+	var request GetSetupRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSetup(ctx, request.(GetSetupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSetup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSetupResponseObject); ok {
+		if err := validResponse.VisitGetSetupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutSetupClient operation middleware
+func (sh *strictHandler) PutSetupClient(w http.ResponseWriter, r *http.Request, provider Provider) {
+	var request PutSetupClientRequestObject
+
+	request.Provider = provider
+
+	var body PutSetupClientJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutSetupClient(ctx, request.(PutSetupClientRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutSetupClient")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutSetupClientResponseObject); ok {
+		if err := validResponse.VisitPutSetupClientResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"AP//pYavoxcoAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

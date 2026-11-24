@@ -48,10 +48,22 @@ func WriteProblem(w http.ResponseWriter, status int, code, detail string) {
 	})
 }
 
-// Protected reports whether the request targets the authenticated surface.
+// Protected reports whether the request targets the authenticated surface: /api/*, /events and
+// /oauth/<provider>/start. The OAuth callback and the static pages are not part of it. The
+// callback is a cross-site navigation that carries no SameSite=Strict cookie, so it cannot be
+// authenticated and does nothing but redirect (see docs/features/auth.md).
 func Protected(r *http.Request) bool {
 	p := r.URL.Path
-	return p == "/api" || strings.HasPrefix(p, "/api/") || p == "/events"
+	return p == "/api" || strings.HasPrefix(p, "/api/") || p == "/events" || isOAuthStart(p)
+}
+
+func isOAuthStart(p string) bool {
+	rest, ok := strings.CutPrefix(p, "/oauth/")
+	if !ok {
+		return false
+	}
+	provider, tail, ok := strings.Cut(rest, "/")
+	return ok && tail == "start" && provider != ""
 }
 
 func isWrite(r *http.Request) bool {

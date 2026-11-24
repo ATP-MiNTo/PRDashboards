@@ -51,6 +51,32 @@ jobs:
       - run: pnpm -C web test
       - run: pnpm -C web build
 
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+      - name: Vet and test the e2e build
+        working-directory: server
+        run: |
+          go vet -tags e2e ./...
+          go test -race -tags e2e ./...
+
   contract:
     runs-on: ubuntu-latest
     timeout-minutes: 10

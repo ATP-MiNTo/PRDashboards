@@ -20,7 +20,7 @@ func newLauncher(t *testing.T) (*auth.Launcher, *testutil.Clock, string) {
 	t.Helper()
 	clock := testutil.NewClock()
 	path := filepath.Join(t.TempDir(), "launch.token")
-	l, err := auth.NewLauncher(path, clock.Now, &testutil.Rand{}, discard)
+	l, err := auth.NewLauncher(path, 4317, clock.Now, &testutil.Rand{}, discard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,12 +29,12 @@ func newLauncher(t *testing.T) (*auth.Launcher, *testutil.Clock, string) {
 
 func TestLauncherWritesTokenFile(t *testing.T) {
 	l, _, path := newLauncher(t)
-	got, err := os.ReadFile(path)
+	got, err := auth.ReadLaunchFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != l.Current() {
-		t.Fatalf("file %q, current %q", got, l.Current())
+	if got.Token != l.Current() || got.Port != 4317 {
+		t.Fatalf("file %+v, current %q", got, l.Current())
 	}
 	if len(l.Current()) != 43 {
 		t.Fatalf("token length %d, want 43 (32 bytes base64url)", len(l.Current()))
@@ -102,7 +102,7 @@ func TestLauncherPreviousTokenAccepted(t *testing.T) {
 	if first == second {
 		t.Fatal("rotate kept the same token")
 	}
-	if got, _ := os.ReadFile(path); string(got) != second {
+	if got, _ := auth.ReadLaunchFile(path); got.Token != second {
 		t.Fatal("file does not hold the newest token")
 	}
 	if !l.Consume(first) {
@@ -170,8 +170,46 @@ func TestLauncherClose(t *testing.T) {
 }
 
 func TestNewLauncherUnwritable(t *testing.T) {
-	_, err := auth.NewLauncher(filepath.Join(t.TempDir(), "missing", "launch.token"), testutil.NewClock().Now, &testutil.Rand{}, discard)
+	_, err := auth.NewLauncher(filepath.Join(t.TempDir(), "missing", "launch.token"), 4317, testutil.NewClock().Now, &testutil.Rand{}, discard)
 	if err == nil {
 		t.Fatal("expected error for missing directory")
+	}
+}
+
+func TestLaunchFileIsJSONWithPort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "launch.token")
+	l, err := auth.NewLauncher(path, 5000, testutil.NewClock().Now, &testutil.Rand{}, discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	want := `{"port":5000,"token":"` + l.Current() + `"}`
+	if string(raw) != want {
+		t.Fatalf("file %s, want %s", raw, want)
+	}
+}
+
+func TestReadLaunchFileRejectsBadContent(t *testing.T) {
+	dir := t.TempDir()
+	cases := map[string]string{
+		"not json":      "abc",
+		"bare token":    "A1b2C3",
+		"zero port":     `{"port":0,"token":"abc"}`,
+		"huge port":     `{"port":70000,"token":"abc"}`,
+		"empty token":   `{"port":4317,"token":""}`,
+		"token charset": `{"port":4317,"token":"a b"}`,
+		"unknown shape": `[]`,
+	}
+	for name, content := range cases {
+		path := filepath.Join(dir, "launch.token")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := auth.ReadLaunchFile(path); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	if _, err := auth.ReadLaunchFile(filepath.Join(dir, "missing")); err == nil {
+		t.Error("missing file accepted")
 	}
 }

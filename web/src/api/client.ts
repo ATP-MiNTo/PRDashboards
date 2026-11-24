@@ -1,8 +1,16 @@
 import type { components, operations } from './schema';
 
-export type Session = components['schemas']['Session'];
-export type Problem = components['schemas']['Problem'];
-type CreateSessionBody = components['schemas']['CreateSessionRequest'];
+type Schemas = components['schemas'];
+export type Session = Schemas['Session'];
+export type Problem = Schemas['Problem'];
+export type Settings = Schemas['Settings'];
+export type Setup = Schemas['Setup'];
+export type Accounts = Schemas['Accounts'];
+export type GithubAccount = Schemas['GithubAccount'];
+export type JiraAccount = Schemas['JiraAccount'];
+export type Provider = Schemas['Provider'];
+export type ClientCredentials = Schemas['ClientCredentials'];
+export type OAuthComplete = Schemas['OAuthComplete'];
 
 export const CSRF_HEADER = 'X-PRD-CSRF';
 
@@ -27,21 +35,38 @@ function isProblem(value: unknown): value is Problem {
   );
 }
 
+type Method = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
 let csrfToken: string | undefined;
 
-async function request(method: 'GET' | 'POST', path: string, body?: unknown): Promise<Response> {
+interface RequestOptions {
+  body?: unknown;
+  /** Skip fetching a CSRF token first. Only session creation has no session to ask. */
+  withoutCsrf?: boolean;
+}
+
+async function request(method: Method, path: string, opts: RequestOptions = {}): Promise<Response> {
+  if (method !== 'GET' && !csrfToken && !opts.withoutCsrf) await getSession();
   const headers: Record<string, string> = {};
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
   if (method !== 'GET' && csrfToken) headers[CSRF_HEADER] = csrfToken;
   const res = await fetch(path, {
     method,
     headers,
     credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   if (res.ok) return res;
   const problem: unknown = await res.json().catch(() => undefined);
   throw new ApiError(res.status, isProblem(problem) ? problem.code : 'unknown');
+}
+
+async function json<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  return (await request(method, path, { body })).json() as Promise<T>;
+}
+
+async function send(method: Method, path: string, body?: unknown): Promise<void> {
+  await request(method, path, { body });
 }
 
 type GetSessionResponse = operations['getSession']['responses'][200]['content']['application/json'];
@@ -54,6 +79,21 @@ export async function getSession(): Promise<Session> {
 }
 
 export async function createSession(launchToken: string): Promise<void> {
-  const body: CreateSessionBody = { launchToken };
-  await request('POST', '/api/session', body);
+  const body: Schemas['CreateSessionRequest'] = { launchToken };
+  await request('POST', '/api/session', { body, withoutCsrf: true });
 }
+
+export const getSettings = () => json<Settings>('GET', '/api/settings');
+export const putSettings = (settings: Settings) => json<Settings>('PUT', '/api/settings', settings);
+export const getSetup = () => json<Setup>('GET', '/api/setup');
+export const putSetupClient = (provider: Provider, credentials: ClientCredentials) =>
+  send('PUT', `/api/setup/${provider}`, credentials);
+export const putGithubPat = (token: string) =>
+  json<GithubAccount>('PUT', '/api/github/pat', { token });
+export const getAccounts = () => json<Accounts>('GET', '/api/accounts');
+export const disconnectAccount = (provider: Provider) =>
+  send('DELETE', `/api/accounts/${provider}`);
+export const checkAccount = (provider: Provider) =>
+  json<Accounts>('POST', `/api/accounts/${provider}/check`);
+export const completeOAuth = (body: OAuthComplete) => send('POST', '/api/oauth/complete', body);
+export const revokeAllSessions = () => send('POST', '/api/sessions/revoke-all');

@@ -13,6 +13,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/mw"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
 // Config holds what the handler needs.
@@ -21,6 +22,8 @@ type Config struct {
 	Version  string
 	Sessions *auth.Sessions
 	Launcher *auth.Launcher
+	Store    *store.Store
+	OAuth    *auth.OAuth
 	// Web is the exported UI. It may be empty when the UI has not been built.
 	Web   fs.FS
 	Log   *slog.Logger
@@ -44,12 +47,19 @@ func New(cfg Config) (http.Handler, error) {
 			mw.WriteProblem(w, http.StatusBadRequest, mw.CodeInvalidBody, "")
 		},
 		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			var p *problemError
+			if errors.As(err, &p) {
+				mw.WriteProblem(w, p.status, p.code, p.detail)
+				return
+			}
 			cfg.Log.ErrorContext(r.Context(), "handler failed", "err", err)
 			mw.WriteProblem(w, http.StatusInternalServerError, mw.CodeInternal, "")
 		},
 	})
 	mux := http.NewServeMux()
 	gen.HandlerFromMux(strict, mux)
+	mux.HandleFunc("GET /oauth/{provider}/start", h.oauthStart)
+	mux.HandleFunc("GET /oauth/{provider}/callback", h.oauthCallback)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, _ *http.Request) {
 		mw.WriteProblem(w, http.StatusNotFound, mw.CodeNotFound, "")
 	})
@@ -78,7 +88,7 @@ type handlers struct {
 
 var _ gen.StrictServerInterface = (*handlers)(nil)
 
-func (h *handlers) CreateSession(_ context.Context, req gen.CreateSessionRequestObject) (gen.CreateSessionResponseObject, error) {
+func (h *handlers) CreateSession(ctx context.Context, req gen.CreateSessionRequestObject) (gen.CreateSessionResponseObject, error) {
 	if req.Body == nil || !h.cfg.Launcher.Consume(req.Body.LaunchToken) {
 		return gen.CreateSession401ApplicationProblemPlusJSONResponse{
 			InvalidLaunchTokenApplicationProblemPlusJSONResponse: gen.InvalidLaunchTokenApplicationProblemPlusJSONResponse{
@@ -89,7 +99,7 @@ func (h *handlers) CreateSession(_ context.Context, req gen.CreateSessionRequest
 			},
 		}, nil
 	}
-	s, err := h.cfg.Sessions.Create()
+	s, err := h.cfg.Sessions.Create(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}

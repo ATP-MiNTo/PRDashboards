@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "data": { "viewer": null },
+    "errors": [
+      {
+        "type": "FORBIDDEN",
+        "message": "The `acme-corp` organization forbids access via a personal access token (classic). Please use or request a fine-grained personal access token."
+      }
+    ]
+  }
+}

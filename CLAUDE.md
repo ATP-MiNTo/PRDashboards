@@ -35,9 +35,12 @@ pnpm -C web typecheck           # also: lint, format:check, test, build (build w
 pnpm docs-check                 # feature docs, links, index
 pnpm version-check              # VERSION and CHANGELOG; add `--base origin/main` to compare
 pnpm test:scripts               # tests of the check scripts
+pnpm e2e                        # build the e2e binary (fake GitHub and Atlassian) and run Playwright
 ```
 
-`pnpm e2e` (Playwright against the `e2e` build) arrives with the OAuth flows in milestone 3.
+`pnpm e2e` builds the web export and `bin/prdash-e2e` (`-tags e2e`), starts it with `--fake` and runs
+the Playwright specs in `e2e/` with Chromium from `PW_CHROMIUM_PATH` (else
+`/opt/pw-browsers/chromium`; CI installs its own).
 
 ## Security
 
