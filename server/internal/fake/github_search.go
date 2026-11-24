@@ -4,6 +4,7 @@ package fake
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -108,7 +109,28 @@ func fixturePRs(now time.Time) []fixturePR {
 	}
 }
 
-func (p fixturePR) node(now time.Time) map[string]any {
+func (p fixturePR) id() string {
+	return fmt.Sprintf("PR_%s_%d", strings.ReplaceAll(p.repo, "/", "_"), p.number)
+}
+
+func (p fixturePR) headSHA(moved bool) string {
+	n := p.number * 7919
+	if moved {
+		n++
+	}
+	return fmt.Sprintf("%040x", n)
+}
+
+func findFixture(repo string, number int) (fixturePR, bool) {
+	for _, p := range fixturePRs(time.Now()) {
+		if p.repo == repo && p.number == number {
+			return p, true
+		}
+	}
+	return fixturePR{}, false
+}
+
+func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any {
 	total := p.totalChecks
 	if total == 0 {
 		total = len(p.checks)
@@ -134,10 +156,10 @@ func (p fixturePR) node(now time.Time) map[string]any {
 	}
 	return map[string]any{
 		"__typename": "PullRequest",
-		"id":         fmt.Sprintf("PR_%s_%d", strings.ReplaceAll(p.repo, "/", "_"), p.number),
-		"number":     p.number, "title": p.title, "url": fmt.Sprintf("https://github.com/%s/pull/%d", p.repo, p.number),
+		"id":         p.id(), "state": state, "isCrossRepository": false,
+		"number": p.number, "title": p.title, "url": fmt.Sprintf("https://github.com/%s/pull/%d", p.repo, p.number),
 		"isDraft": p.draft, "mergeable": p.mergeable, "mergeStateStatus": p.mergeState, "reviewDecision": decision,
-		"headRefName": p.head, "headRefOid": fmt.Sprintf("%040x", p.number*7919), "baseRefName": p.base,
+		"headRefName": p.head, "headRefOid": p.headSHA(moved), "baseRefName": p.base,
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",
@@ -154,7 +176,7 @@ func (p fixturePR) node(now time.Time) map[string]any {
 // searchBody answers the open and merged pull request searches. With the sso option the pull
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
-func searchBody(query string, sso bool, now time.Time) (header map[string]string, body map[string]any) {
+func searchBody(query string, sso, moved bool, merged []string, now time.Time) (header map[string]string, body map[string]any) {
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4900, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 	}
@@ -164,7 +186,9 @@ func searchBody(query string, sso bool, now time.Time) (header map[string]string
 			if sso && p.org == "acme-corp" {
 				continue
 			}
-			nodes = append(nodes, p.node(now))
+			if !slices.Contains(merged, p.id()) {
+				nodes = append(nodes, p.node(now, moved, "OPEN"))
+			}
 		}
 	}
 	data["search"] = map[string]any{
@@ -181,4 +205,22 @@ func searchBody(query string, sso bool, now time.Time) (header map[string]string
 		}}
 	}
 	return header, body
+}
+
+// nodeBody answers the single pull request lookup by node id.
+func nodeBody(id string, moved bool, merged []string, now time.Time) map[string]any {
+	data := map[string]any{
+		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4899, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
+		"node":      nil,
+	}
+	for _, p := range fixturePRs(now) {
+		if p.id() == id {
+			state := "OPEN"
+			if slices.Contains(merged, id) {
+				state = "MERGED"
+			}
+			data["node"] = p.node(now, moved, state)
+		}
+	}
+	return map[string]any{"data": data}
 }

@@ -300,6 +300,174 @@ paths:
           $ref: '#/components/responses/NotFound'
         '422':
           $ref: '#/components/responses/Unprocessable'
+  /api/repos:
+    get:
+      operationId: listRepos
+      summary: Every repository the dashboard has seen, with its merge settings
+      description: Reads stored state only. Open pull request counts come from the stored pull requests.
+      responses:
+        '200':
+          description: The repositories, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repos'
+  /api/repos/{id}:
+    get:
+      operationId: getRepo
+      summary: Merge settings of one repository
+      parameters:
+        - $ref: '#/components/parameters/RepoId'
+      responses:
+        '200':
+          description: The repository.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepoSettings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: putRepo
+      summary: Set the default method and replace the branch rules of a repository
+      description: >
+        Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data
+        already fetched. No GitHub or Jira call. clearNew marks the repository as seen.
+      parameters:
+        - $ref: '#/components/parameters/RepoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepoUpdate'
+      responses:
+        '200':
+          description: The saved repository.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepoSettings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/prs/{id}/merge:
+    post:
+      operationId: mergePr
+      summary: Merge a pull request and move its tickets
+      description: >
+        Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and
+        checked before anything is written. A refusal is a 409 with the fresh state of the pull
+        request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or
+        transition_unavailable. A repeated Idempotency-Key returns the first result. Once GitHub has
+        merged, failed steps are reported in the result and the merge is never rolled back.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeRequest'
+      responses:
+        '200':
+          description: The pull request is merged. Steps tell what happened to the rest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The state does not allow the merge.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/MergeProblem'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/retries:
+    get:
+      operationId: listRetries
+      summary: Failed transitions waiting for a retry
+      responses:
+        '200':
+          description: The pending retries, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Retries'
+  /api/retries/{id}:
+    post:
+      operationId: retryTransition
+      summary: Try a failed transition again
+      description: >
+        The transition must still be available for the ticket. A transition that fails again keeps
+        its retry and is reported in the step.
+      parameters:
+        - $ref: '#/components/parameters/RetryId'
+      responses:
+        '200':
+          description: The outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+    delete:
+      operationId: dismissRetry
+      summary: Forget a failed transition
+      parameters:
+        - $ref: '#/components/parameters/RetryId'
+      responses:
+        '204':
+          description: Dismissed.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/activity:
+    get:
+      operationId: getActivity
+      summary: The activity log, newest first
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Return entries with an id below this one.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: One page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
 components:
   securitySchemes:
     cookieAuth:
@@ -752,6 +920,7 @@ components:
         - tickets
         - removedKeys
         - ticketLookup
+        - mergeMethod
       properties:
         id:
           type: string
@@ -806,6 +975,8 @@ components:
             type: string
         ticketLookup:
           $ref: '#/components/schemas/TicketLookup'
+        mergeMethod:
+          $ref: '#/components/schemas/MethodResolution'
     AssignedTickets:
       type: object
       additionalProperties: false
@@ -869,6 +1040,278 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Transition'
+    MergeMethodName:
+      type: string
+      enum: [squash, merge, rebase]
+    MethodResolution:
+      type: object
+      additionalProperties: false
+      required: [method, default, source, allowed, warning]
+      properties:
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        default:
+          allOf:
+            - $ref: '#/components/schemas/MergeMethodName'
+          description: The configured method, before the fallback for a method the repository disallows.
+        source:
+          type: string
+          description: 'One of "rule: <pattern>", "repo default" or "new repo default".'
+        allowed:
+          type: array
+          items:
+            $ref: '#/components/schemas/MergeMethodName'
+        warning:
+          type: string
+          nullable: true
+    BranchRule:
+      type: object
+      additionalProperties: false
+      required: [pattern, method]
+      properties:
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]+$'
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+    RepoSettings:
+      type: object
+      additionalProperties: false
+      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules]
+      properties:
+        id:
+          type: string
+        nameWithOwner:
+          type: string
+        isNew:
+          type: boolean
+        openPrs:
+          type: integer
+        defaultMethod:
+          $ref: '#/components/schemas/MergeMethodName'
+        branchRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/BranchRule'
+    Repos:
+      type: object
+      additionalProperties: false
+      required: [repos]
+      properties:
+        repos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepoSettings'
+    RepoUpdate:
+      type: object
+      additionalProperties: false
+      required: [defaultMethod, branchRules, clearNew]
+      properties:
+        defaultMethod:
+          $ref: '#/components/schemas/MergeMethodName'
+        branchRules:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/BranchRule'
+        clearNew:
+          type: boolean
+    MergeTicket:
+      type: object
+      additionalProperties: false
+      required: [key, transitionId, fields]
+      properties:
+        key:
+          $ref: '#/components/schemas/TicketKey'
+        transitionId:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 64
+          description: The transition to make, or null to leave the ticket where it is.
+        fields:
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+            maxLength: 2000
+    MergeRequest:
+      type: object
+      additionalProperties: false
+      required: [method, expectedHeadSha, deleteBranch, tickets]
+      properties:
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        expectedHeadSha:
+          type: string
+          minLength: 1
+          maxLength: 64
+        deleteBranch:
+          type: boolean
+        tickets:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/MergeTicket'
+    MergeStep:
+      type: object
+      additionalProperties: false
+      required: [kind, ticket, state, message, toStatus, retryId]
+      properties:
+        kind:
+          type: string
+          enum: [merge, delete_branch, transition]
+        ticket:
+          type: string
+          nullable: true
+        state:
+          type: string
+          enum: [ok, failed, skipped]
+        message:
+          type: string
+          nullable: true
+        toStatus:
+          type: string
+          nullable: true
+        retryId:
+          type: integer
+          format: int64
+          nullable: true
+    MergeResult:
+      type: object
+      additionalProperties: false
+      required: [prId, method, sha, steps]
+      properties:
+        prId:
+          type: string
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        sha:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/MergeStep'
+    FreshPr:
+      type: object
+      additionalProperties: false
+      required: [state, headSha, baseRef, isDraft, mergeable, mergeStateStatus, reviewDecision]
+      properties:
+        state:
+          type: string
+        headSha:
+          type: string
+        baseRef:
+          type: string
+        isDraft:
+          type: boolean
+        mergeable:
+          type: string
+        mergeStateStatus:
+          type: string
+        reviewDecision:
+          type: string
+          nullable: true
+    MergeProblem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, pr]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        pr:
+          allOf:
+            - $ref: '#/components/schemas/FreshPr'
+          nullable: true
+    Retry:
+      type: object
+      additionalProperties: false
+      required: [id, prId, ticketKey, transitionId, toStatus, lastError, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        prId:
+          type: string
+          nullable: true
+        ticketKey:
+          type: string
+        transitionId:
+          type: string
+        toStatus:
+          type: string
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Retries:
+      type: object
+      additionalProperties: false
+      required: [retries]
+      properties:
+        retries:
+          type: array
+          items:
+            $ref: '#/components/schemas/Retry'
+    RetryResult:
+      type: object
+      additionalProperties: false
+      required: [step]
+      properties:
+        step:
+          $ref: '#/components/schemas/MergeStep'
+    ActivityItem:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, kind, ticketKey, prId, triggeredBy, result, summary, error]
+      properties:
+        id:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        kind:
+          type: string
+        ticketKey:
+          type: string
+          nullable: true
+        prId:
+          type: string
+          nullable: true
+        triggeredBy:
+          type: string
+        result:
+          type: string
+        summary:
+          type: string
+        error:
+          type: string
+          nullable: true
+    ActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityItem'
+        nextCursor:
+          type: integer
+          format: int64
+          nullable: true
     Problem:
       type: object
       additionalProperties: false
@@ -898,6 +1341,21 @@ components:
       schema:
         type: string
         pattern: '^[A-Za-z0-9_=-]{1,128}$'
+    RepoId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_=-]{1,128}$'
+    RetryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
     Provider:
       name: provider
       in: path
@@ -929,8 +1387,14 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: GitHub's rate limit is used up (rate_limited).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     Unprocessable:
-      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site).
+      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused).
       content:
         application/problem+json:
           schema:

@@ -102,6 +102,69 @@ func (e GithubAccountMethod) Valid() bool {
 	}
 }
 
+// Defines values for MergeMethodName.
+const (
+	MergeMethodNameMerge  MergeMethodName = "merge"
+	MergeMethodNameRebase MergeMethodName = "rebase"
+	MergeMethodNameSquash MergeMethodName = "squash"
+)
+
+// Valid indicates whether the value is a known member of the MergeMethodName enum.
+func (e MergeMethodName) Valid() bool {
+	switch e {
+	case MergeMethodNameMerge:
+		return true
+	case MergeMethodNameRebase:
+		return true
+	case MergeMethodNameSquash:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MergeStepKind.
+const (
+	MergeStepKindDeleteBranch MergeStepKind = "delete_branch"
+	MergeStepKindMerge        MergeStepKind = "merge"
+	MergeStepKindTransition   MergeStepKind = "transition"
+)
+
+// Valid indicates whether the value is a known member of the MergeStepKind enum.
+func (e MergeStepKind) Valid() bool {
+	switch e {
+	case MergeStepKindDeleteBranch:
+		return true
+	case MergeStepKindMerge:
+		return true
+	case MergeStepKindTransition:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MergeStepState.
+const (
+	MergeStepStateFailed  MergeStepState = "failed"
+	MergeStepStateOk      MergeStepState = "ok"
+	MergeStepStateSkipped MergeStepState = "skipped"
+)
+
+// Valid indicates whether the value is a known member of the MergeStepState enum.
+func (e MergeStepState) Valid() bool {
+	switch e {
+	case MergeStepStateFailed:
+		return true
+	case MergeStepStateOk:
+		return true
+	case MergeStepStateSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PollingSeconds.
 const (
 	N120  PollingSeconds = 120
@@ -266,19 +329,19 @@ func (e SourceState) Valid() bool {
 
 // Defines values for TicketLookup.
 const (
-	TicketLookupOk          TicketLookup = "ok"
-	TicketLookupUnreachable TicketLookup = "unreachable"
-	TicketLookupUnverified  TicketLookup = "unverified"
+	Ok          TicketLookup = "ok"
+	Unreachable TicketLookup = "unreachable"
+	Unverified  TicketLookup = "unverified"
 )
 
 // Valid indicates whether the value is a known member of the TicketLookup enum.
 func (e TicketLookup) Valid() bool {
 	switch e {
-	case TicketLookupOk:
+	case Ok:
 		return true
-	case TicketLookupUnreachable:
+	case Unreachable:
 		return true
-	case TicketLookupUnverified:
+	case Unverified:
 		return true
 	default:
 		return false
@@ -333,6 +396,25 @@ type Accounts struct {
 	Jira   JiraAccount   `json:"jira"`
 }
 
+// ActivityItem defines model for ActivityItem.
+type ActivityItem struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	Error       *string   `json:"error"`
+	Id          int64     `json:"id"`
+	Kind        string    `json:"kind"`
+	PrId        *string   `json:"prId"`
+	Result      string    `json:"result"`
+	Summary     string    `json:"summary"`
+	TicketKey   *string   `json:"ticketKey"`
+	TriggeredBy string    `json:"triggeredBy"`
+}
+
+// ActivityPage defines model for ActivityPage.
+type ActivityPage struct {
+	Items      []ActivityItem `json:"items"`
+	NextCursor *int64         `json:"nextCursor"`
+}
+
 // AssignedTickets defines model for AssignedTickets.
 type AssignedTickets struct {
 	Tickets []TicketSummary `json:"tickets"`
@@ -342,6 +424,12 @@ type AssignedTickets struct {
 type BlockedOrg struct {
 	// Org The organization login, or an empty string when GitHub did not name it.
 	Org string `json:"org"`
+}
+
+// BranchRule defines model for BranchRule.
+type BranchRule struct {
+	Method  MergeMethodName `json:"method"`
+	Pattern string          `json:"pattern"`
 }
 
 // Check defines model for Check.
@@ -380,6 +468,17 @@ type CreateSessionRequest struct {
 	LaunchToken string `json:"launchToken"`
 }
 
+// FreshPr defines model for FreshPr.
+type FreshPr struct {
+	BaseRef          string  `json:"baseRef"`
+	HeadSha          string  `json:"headSha"`
+	IsDraft          bool    `json:"isDraft"`
+	MergeStateStatus string  `json:"mergeStateStatus"`
+	Mergeable        string  `json:"mergeable"`
+	ReviewDecision   *string `json:"reviewDecision"`
+	State            string  `json:"state"`
+}
+
 // GithubAccount defines model for GithubAccount.
 type GithubAccount struct {
 	Connected bool                 `json:"connected"`
@@ -404,6 +503,73 @@ type JiraSite struct {
 	Id   string `json:"id"`
 	Name string `json:"name"`
 	Url  string `json:"url"`
+}
+
+// MergeMethodName defines model for MergeMethodName.
+type MergeMethodName string
+
+// MergeProblem defines model for MergeProblem.
+type MergeProblem struct {
+	Code   string   `json:"code"`
+	Detail *string  `json:"detail,omitempty"`
+	Pr     *FreshPr `json:"pr"`
+	Status int      `json:"status"`
+	Title  string   `json:"title"`
+	Type   string   `json:"type"`
+}
+
+// MergeRequest defines model for MergeRequest.
+type MergeRequest struct {
+	DeleteBranch    bool            `json:"deleteBranch"`
+	ExpectedHeadSha string          `json:"expectedHeadSha"`
+	Method          MergeMethodName `json:"method"`
+	Tickets         []MergeTicket   `json:"tickets"`
+}
+
+// MergeResult defines model for MergeResult.
+type MergeResult struct {
+	Method MergeMethodName `json:"method"`
+	PrId   string          `json:"prId"`
+	Sha    string          `json:"sha"`
+	Steps  []MergeStep     `json:"steps"`
+}
+
+// MergeStep defines model for MergeStep.
+type MergeStep struct {
+	Kind     MergeStepKind  `json:"kind"`
+	Message  *string        `json:"message"`
+	RetryId  *int64         `json:"retryId"`
+	State    MergeStepState `json:"state"`
+	Ticket   *string        `json:"ticket"`
+	ToStatus *string        `json:"toStatus"`
+}
+
+// MergeStepKind defines model for MergeStep.Kind.
+type MergeStepKind string
+
+// MergeStepState defines model for MergeStep.State.
+type MergeStepState string
+
+// MergeTicket defines model for MergeTicket.
+type MergeTicket struct {
+	Fields map[string]string `json:"fields"`
+	Key    TicketKey         `json:"key"`
+
+	// TransitionId The transition to make, or null to leave the ticket where it is.
+	TransitionId *string `json:"transitionId"`
+}
+
+// MethodResolution defines model for MethodResolution.
+type MethodResolution struct {
+	Allowed []MergeMethodName `json:"allowed"`
+
+	// Default The configured method, before the fallback for a method the repository disallows.
+	Default MergeMethodName `json:"default"`
+	Method  MergeMethodName `json:"method"`
+
+	// Source One of "rule: <pattern>", "repo default" or "new repo default".
+	Source  string  `json:"source"`
+	Warning *string `json:"warning"`
 }
 
 // NamedId defines model for NamedId.
@@ -443,6 +609,49 @@ type Provider string
 type ProviderSetup struct {
 	CallbackUrl string `json:"callbackUrl"`
 	Configured  bool   `json:"configured"`
+}
+
+// RepoSettings defines model for RepoSettings.
+type RepoSettings struct {
+	BranchRules   []BranchRule    `json:"branchRules"`
+	DefaultMethod MergeMethodName `json:"defaultMethod"`
+	Id            string          `json:"id"`
+	IsNew         bool            `json:"isNew"`
+	NameWithOwner string          `json:"nameWithOwner"`
+	OpenPrs       int             `json:"openPrs"`
+}
+
+// RepoUpdate defines model for RepoUpdate.
+type RepoUpdate struct {
+	BranchRules   []BranchRule    `json:"branchRules"`
+	ClearNew      bool            `json:"clearNew"`
+	DefaultMethod MergeMethodName `json:"defaultMethod"`
+}
+
+// Repos defines model for Repos.
+type Repos struct {
+	Repos []RepoSettings `json:"repos"`
+}
+
+// Retries defines model for Retries.
+type Retries struct {
+	Retries []Retry `json:"retries"`
+}
+
+// Retry defines model for Retry.
+type Retry struct {
+	CreatedAt    time.Time `json:"createdAt"`
+	Id           int64     `json:"id"`
+	LastError    string    `json:"lastError"`
+	PrId         *string   `json:"prId"`
+	TicketKey    string    `json:"ticketKey"`
+	ToStatus     string    `json:"toStatus"`
+	TransitionId string    `json:"transitionId"`
+}
+
+// RetryResult defines model for RetryResult.
+type RetryResult struct {
+	Step MergeStep `json:"step"`
 }
 
 // Review defines model for Review.
@@ -502,6 +711,7 @@ type SnapshotPr struct {
 	HeadSha          string                    `json:"headSha"`
 	Id               string                    `json:"id"`
 	IsDraft          bool                      `json:"isDraft"`
+	MergeMethod      MethodResolution          `json:"mergeMethod"`
 	MergeStateStatus string                    `json:"mergeStateStatus"`
 	Mergeable        SnapshotPrMergeable       `json:"mergeable"`
 	Number           int                       `json:"number"`
@@ -648,6 +858,12 @@ type Warning struct {
 // PrId defines model for PrId.
 type PrId = string
 
+// RepoId defines model for RepoId.
+type RepoId = string
+
+// RetryId defines model for RetryId.
+type RetryId = int64
+
 // BadGateway defines model for BadGateway.
 type BadGateway = Problem
 
@@ -663,8 +879,23 @@ type InvalidLaunchToken = Problem
 // NotFound defines model for NotFound.
 type NotFound = Problem
 
+// TooManyRequests defines model for TooManyRequests.
+type TooManyRequests = Problem
+
 // Unprocessable defines model for Unprocessable.
 type Unprocessable = Problem
+
+// GetActivityParams defines parameters for GetActivity.
+type GetActivityParams struct {
+	// Cursor Return entries with an id below this one.
+	Cursor *int64 `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *int   `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// MergePrParams defines parameters for MergePr.
+type MergePrParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
 
 // GetSnapshotParams defines parameters for GetSnapshot.
 type GetSnapshotParams struct {
@@ -677,8 +908,14 @@ type PutGithubPatJSONRequestBody = PatRequest
 // CompleteOAuthJSONRequestBody defines body for CompleteOAuth for application/json ContentType.
 type CompleteOAuthJSONRequestBody = OAuthComplete
 
+// MergePrJSONRequestBody defines body for MergePr for application/json ContentType.
+type MergePrJSONRequestBody = MergeRequest
+
 // PutPrTicketsJSONRequestBody defines body for PutPrTickets for application/json ContentType.
 type PutPrTicketsJSONRequestBody = TicketLinks
+
+// PutRepoJSONRequestBody defines body for PutRepo for application/json ContentType.
+type PutRepoJSONRequestBody = RepoUpdate
 
 // CreateSessionJSONRequestBody defines body for CreateSession for application/json ContentType.
 type CreateSessionJSONRequestBody = CreateSessionRequest
@@ -700,15 +937,39 @@ type ServerInterface interface {
 	// Check a connection with the provider now
 	// (POST /api/accounts/{provider}/check)
 	CheckAccount(w http.ResponseWriter, r *http.Request, provider Provider)
+	// The activity log, newest first
+	// (GET /api/activity)
+	GetActivity(w http.ResponseWriter, r *http.Request, params GetActivityParams)
 	// Validate and store a GitHub personal access token
 	// (PUT /api/github/pat)
 	PutGithubPat(w http.ResponseWriter, r *http.Request)
 	// Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(w http.ResponseWriter, r *http.Request)
+	// Merge a pull request and move its tickets
+	// (POST /api/prs/{id}/merge)
+	MergePr(w http.ResponseWriter, r *http.Request, id PrId, params MergePrParams)
 	// Set the manual ticket links and the hidden keys of a pull request
 	// (PUT /api/prs/{id}/tickets)
 	PutPrTickets(w http.ResponseWriter, r *http.Request, id PrId)
+	// Every repository the dashboard has seen, with its merge settings
+	// (GET /api/repos)
+	ListRepos(w http.ResponseWriter, r *http.Request)
+	// Merge settings of one repository
+	// (GET /api/repos/{id})
+	GetRepo(w http.ResponseWriter, r *http.Request, id RepoId)
+	// Set the default method and replace the branch rules of a repository
+	// (PUT /api/repos/{id})
+	PutRepo(w http.ResponseWriter, r *http.Request, id RepoId)
+	// Failed transitions waiting for a retry
+	// (GET /api/retries)
+	ListRetries(w http.ResponseWriter, r *http.Request)
+	// Forget a failed transition
+	// (DELETE /api/retries/{id})
+	DismissRetry(w http.ResponseWriter, r *http.Request, id RetryId)
+	// Try a failed transition again
+	// (POST /api/retries/{id})
+	RetryTransition(w http.ResponseWriter, r *http.Request, id RetryId)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(w http.ResponseWriter, r *http.Request)
@@ -835,6 +1096,47 @@ func (siw *ServerInterfaceWrapper) CheckAccount(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// GetActivity operation middleware
+func (siw *ServerInterfaceWrapper) GetActivity(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetActivityParams
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetActivity(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PutGithubPat operation middleware
 func (siw *ServerInterfaceWrapper) PutGithubPat(w http.ResponseWriter, r *http.Request) {
 
@@ -875,6 +1177,65 @@ func (siw *ServerInterfaceWrapper) CompleteOAuth(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// MergePr operation middleware
+func (siw *ServerInterfaceWrapper) MergePr(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id PrId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params MergePrParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MergePr(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PutPrTickets operation middleware
 func (siw *ServerInterfaceWrapper) PutPrTickets(w http.ResponseWriter, r *http.Request) {
 
@@ -897,6 +1258,170 @@ func (siw *ServerInterfaceWrapper) PutPrTickets(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutPrTickets(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRepos operation middleware
+func (siw *ServerInterfaceWrapper) ListRepos(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRepos(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRepo operation middleware
+func (siw *ServerInterfaceWrapper) GetRepo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id RepoId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRepo(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PutRepo operation middleware
+func (siw *ServerInterfaceWrapper) PutRepo(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id RepoId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PutRepo(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRetries operation middleware
+func (siw *ServerInterfaceWrapper) ListRetries(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRetries(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DismissRetry operation middleware
+func (siw *ServerInterfaceWrapper) DismissRetry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id RetryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DismissRetry(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryTransition operation middleware
+func (siw *ServerInterfaceWrapper) RetryTransition(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id RetryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, CookieAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryTransition(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1291,9 +1816,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/api/accounts", wrapper.GetAccounts)
 	m.HandleFunc("DELETE "+options.BaseURL+"/api/accounts/{provider}", wrapper.DisconnectAccount)
 	m.HandleFunc("POST "+options.BaseURL+"/api/accounts/{provider}/check", wrapper.CheckAccount)
+	m.HandleFunc("GET "+options.BaseURL+"/api/activity", wrapper.GetActivity)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/github/pat", wrapper.PutGithubPat)
 	m.HandleFunc("POST "+options.BaseURL+"/api/oauth/complete", wrapper.CompleteOAuth)
+	m.HandleFunc("POST "+options.BaseURL+"/api/prs/{id}/merge", wrapper.MergePr)
 	m.HandleFunc("PUT "+options.BaseURL+"/api/prs/{id}/tickets", wrapper.PutPrTickets)
+	m.HandleFunc("GET "+options.BaseURL+"/api/repos", wrapper.ListRepos)
+	m.HandleFunc("GET "+options.BaseURL+"/api/repos/{id}", wrapper.GetRepo)
+	m.HandleFunc("PUT "+options.BaseURL+"/api/repos/{id}", wrapper.PutRepo)
+	m.HandleFunc("GET "+options.BaseURL+"/api/retries", wrapper.ListRetries)
+	m.HandleFunc("DELETE "+options.BaseURL+"/api/retries/{id}", wrapper.DismissRetry)
+	m.HandleFunc("POST "+options.BaseURL+"/api/retries/{id}", wrapper.RetryTransition)
 	m.HandleFunc("GET "+options.BaseURL+"/api/session", wrapper.GetSession)
 	m.HandleFunc("POST "+options.BaseURL+"/api/session", wrapper.CreateSession)
 	m.HandleFunc("POST "+options.BaseURL+"/api/sessions/revoke-all", wrapper.RevokeAllSessions)
@@ -1318,6 +1851,8 @@ type ConflictApplicationProblemPlusJSONResponse Problem
 type InvalidLaunchTokenApplicationProblemPlusJSONResponse Problem
 
 type NotFoundApplicationProblemPlusJSONResponse Problem
+
+type TooManyRequestsApplicationProblemPlusJSONResponse Problem
 
 type UnprocessableApplicationProblemPlusJSONResponse Problem
 
@@ -1399,6 +1934,23 @@ type CheckAccount502ApplicationProblemPlusJSONResponse struct {
 func (response CheckAccount502ApplicationProblemPlusJSONResponse) VisitCheckAccountResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetActivityRequestObject struct {
+	Params GetActivityParams
+}
+
+type GetActivityResponseObject interface {
+	VisitGetActivityResponse(w http.ResponseWriter) error
+}
+
+type GetActivity200JSONResponse ActivityPage
+
+func (response GetActivity200JSONResponse) VisitGetActivityResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1491,6 +2043,78 @@ func (response CompleteOAuth502ApplicationProblemPlusJSONResponse) VisitComplete
 	return json.NewEncoder(w).Encode(response)
 }
 
+type MergePrRequestObject struct {
+	Id     PrId `json:"id"`
+	Params MergePrParams
+	Body   *MergePrJSONRequestBody
+}
+
+type MergePrResponseObject interface {
+	VisitMergePrResponse(w http.ResponseWriter) error
+}
+
+type MergePr200JSONResponse MergeResult
+
+func (response MergePr200JSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MergePr404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response MergePr404ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MergePr409ApplicationProblemPlusJSONResponse MergeProblem
+
+func (response MergePr409ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MergePr422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response MergePr422ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MergePr429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response MergePr429ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MergePr502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response MergePr502ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type PutPrTicketsRequestObject struct {
 	Id   PrId `json:"id"`
 	Body *PutPrTicketsJSONRequestBody
@@ -1526,6 +2150,183 @@ type PutPrTickets422ApplicationProblemPlusJSONResponse struct {
 func (response PutPrTickets422ApplicationProblemPlusJSONResponse) VisitPutPrTicketsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListReposRequestObject struct {
+}
+
+type ListReposResponseObject interface {
+	VisitListReposResponse(w http.ResponseWriter) error
+}
+
+type ListRepos200JSONResponse Repos
+
+func (response ListRepos200JSONResponse) VisitListReposResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetRepoRequestObject struct {
+	Id RepoId `json:"id"`
+}
+
+type GetRepoResponseObject interface {
+	VisitGetRepoResponse(w http.ResponseWriter) error
+}
+
+type GetRepo200JSONResponse RepoSettings
+
+func (response GetRepo200JSONResponse) VisitGetRepoResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetRepo404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response GetRepo404ApplicationProblemPlusJSONResponse) VisitGetRepoResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutRepoRequestObject struct {
+	Id   RepoId `json:"id"`
+	Body *PutRepoJSONRequestBody
+}
+
+type PutRepoResponseObject interface {
+	VisitPutRepoResponse(w http.ResponseWriter) error
+}
+
+type PutRepo200JSONResponse RepoSettings
+
+func (response PutRepo200JSONResponse) VisitPutRepoResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PutRepo404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response PutRepo404ApplicationProblemPlusJSONResponse) VisitPutRepoResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListRetriesRequestObject struct {
+}
+
+type ListRetriesResponseObject interface {
+	VisitListRetriesResponse(w http.ResponseWriter) error
+}
+
+type ListRetries200JSONResponse Retries
+
+func (response ListRetries200JSONResponse) VisitListRetriesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type DismissRetryRequestObject struct {
+	Id RetryId `json:"id"`
+}
+
+type DismissRetryResponseObject interface {
+	VisitDismissRetryResponse(w http.ResponseWriter) error
+}
+
+type DismissRetry204Response struct {
+}
+
+func (response DismissRetry204Response) VisitDismissRetryResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DismissRetry404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DismissRetry404ApplicationProblemPlusJSONResponse) VisitDismissRetryResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RetryTransitionRequestObject struct {
+	Id RetryId `json:"id"`
+}
+
+type RetryTransitionResponseObject interface {
+	VisitRetryTransitionResponse(w http.ResponseWriter) error
+}
+
+type RetryTransition200JSONResponse RetryResult
+
+func (response RetryTransition200JSONResponse) VisitRetryTransitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RetryTransition404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RetryTransition404ApplicationProblemPlusJSONResponse) VisitRetryTransitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RetryTransition409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RetryTransition409ApplicationProblemPlusJSONResponse) VisitRetryTransitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RetryTransition422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response RetryTransition422ApplicationProblemPlusJSONResponse) VisitRetryTransitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RetryTransition502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response RetryTransition502ApplicationProblemPlusJSONResponse) VisitRetryTransitionResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -1814,15 +2615,39 @@ type StrictServerInterface interface {
 	// Check a connection with the provider now
 	// (POST /api/accounts/{provider}/check)
 	CheckAccount(ctx context.Context, request CheckAccountRequestObject) (CheckAccountResponseObject, error)
+	// The activity log, newest first
+	// (GET /api/activity)
+	GetActivity(ctx context.Context, request GetActivityRequestObject) (GetActivityResponseObject, error)
 	// Validate and store a GitHub personal access token
 	// (PUT /api/github/pat)
 	PutGithubPat(ctx context.Context, request PutGithubPatRequestObject) (PutGithubPatResponseObject, error)
 	// Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(ctx context.Context, request CompleteOAuthRequestObject) (CompleteOAuthResponseObject, error)
+	// Merge a pull request and move its tickets
+	// (POST /api/prs/{id}/merge)
+	MergePr(ctx context.Context, request MergePrRequestObject) (MergePrResponseObject, error)
 	// Set the manual ticket links and the hidden keys of a pull request
 	// (PUT /api/prs/{id}/tickets)
 	PutPrTickets(ctx context.Context, request PutPrTicketsRequestObject) (PutPrTicketsResponseObject, error)
+	// Every repository the dashboard has seen, with its merge settings
+	// (GET /api/repos)
+	ListRepos(ctx context.Context, request ListReposRequestObject) (ListReposResponseObject, error)
+	// Merge settings of one repository
+	// (GET /api/repos/{id})
+	GetRepo(ctx context.Context, request GetRepoRequestObject) (GetRepoResponseObject, error)
+	// Set the default method and replace the branch rules of a repository
+	// (PUT /api/repos/{id})
+	PutRepo(ctx context.Context, request PutRepoRequestObject) (PutRepoResponseObject, error)
+	// Failed transitions waiting for a retry
+	// (GET /api/retries)
+	ListRetries(ctx context.Context, request ListRetriesRequestObject) (ListRetriesResponseObject, error)
+	// Forget a failed transition
+	// (DELETE /api/retries/{id})
+	DismissRetry(ctx context.Context, request DismissRetryRequestObject) (DismissRetryResponseObject, error)
+	// Try a failed transition again
+	// (POST /api/retries/{id})
+	RetryTransition(ctx context.Context, request RetryTransitionRequestObject) (RetryTransitionResponseObject, error)
 	// Session info and CSRF token
 	// (GET /api/session)
 	GetSession(ctx context.Context, request GetSessionRequestObject) (GetSessionResponseObject, error)
@@ -1963,6 +2788,32 @@ func (sh *strictHandler) CheckAccount(w http.ResponseWriter, r *http.Request, pr
 	}
 }
 
+// GetActivity operation middleware
+func (sh *strictHandler) GetActivity(w http.ResponseWriter, r *http.Request, params GetActivityParams) {
+	var request GetActivityRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetActivity(ctx, request.(GetActivityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetActivity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetActivityResponseObject); ok {
+		if err := validResponse.VisitGetActivityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // PutGithubPat operation middleware
 func (sh *strictHandler) PutGithubPat(w http.ResponseWriter, r *http.Request) {
 	var request PutGithubPatRequestObject
@@ -2025,6 +2876,40 @@ func (sh *strictHandler) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// MergePr operation middleware
+func (sh *strictHandler) MergePr(w http.ResponseWriter, r *http.Request, id PrId, params MergePrParams) {
+	var request MergePrRequestObject
+
+	request.Id = id
+	request.Params = params
+
+	var body MergePrJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MergePr(ctx, request.(MergePrRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MergePr")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MergePrResponseObject); ok {
+		if err := validResponse.VisitMergePrResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // PutPrTickets operation middleware
 func (sh *strictHandler) PutPrTickets(w http.ResponseWriter, r *http.Request, id PrId) {
 	var request PutPrTicketsRequestObject
@@ -2051,6 +2936,165 @@ func (sh *strictHandler) PutPrTickets(w http.ResponseWriter, r *http.Request, id
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutPrTicketsResponseObject); ok {
 		if err := validResponse.VisitPutPrTicketsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRepos operation middleware
+func (sh *strictHandler) ListRepos(w http.ResponseWriter, r *http.Request) {
+	var request ListReposRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRepos(ctx, request.(ListReposRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRepos")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListReposResponseObject); ok {
+		if err := validResponse.VisitListReposResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRepo operation middleware
+func (sh *strictHandler) GetRepo(w http.ResponseWriter, r *http.Request, id RepoId) {
+	var request GetRepoRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRepo(ctx, request.(GetRepoRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRepo")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRepoResponseObject); ok {
+		if err := validResponse.VisitGetRepoResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PutRepo operation middleware
+func (sh *strictHandler) PutRepo(w http.ResponseWriter, r *http.Request, id RepoId) {
+	var request PutRepoRequestObject
+
+	request.Id = id
+
+	var body PutRepoJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PutRepo(ctx, request.(PutRepoRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutRepo")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PutRepoResponseObject); ok {
+		if err := validResponse.VisitPutRepoResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRetries operation middleware
+func (sh *strictHandler) ListRetries(w http.ResponseWriter, r *http.Request) {
+	var request ListRetriesRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRetries(ctx, request.(ListRetriesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRetries")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRetriesResponseObject); ok {
+		if err := validResponse.VisitListRetriesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DismissRetry operation middleware
+func (sh *strictHandler) DismissRetry(w http.ResponseWriter, r *http.Request, id RetryId) {
+	var request DismissRetryRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DismissRetry(ctx, request.(DismissRetryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DismissRetry")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DismissRetryResponseObject); ok {
+		if err := validResponse.VisitDismissRetryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RetryTransition operation middleware
+func (sh *strictHandler) RetryTransition(w http.ResponseWriter, r *http.Request, id RetryId) {
+	var request RetryTransitionRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RetryTransition(ctx, request.(RetryTransitionRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RetryTransition")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RetryTransitionResponseObject); ok {
+		if err := validResponse.VisitRetryTransitionResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -2352,85 +3396,113 @@ func (sh *strictHandler) GetTransitions(w http.ResponseWriter, r *http.Request, 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"55v1zfr/AgAA//88AdvYxlMAAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -51,6 +51,20 @@ entry for that version. There is no "Unreleased" section.
   per-row "Jira unreachable" state with a retry.
 - Fake GitHub search and fake Jira for the e2e build, and a Playwright spec for an SSO-blocked
   organization.
+- Merge method: a pure resolver (branch rules in order, repo default, fallback when the repo
+  disallows a method), `mergeMethod` on every row, repo settings (`GET /api/repos`,
+  `GET/PUT /api/repos/{id}`) and the Method column with a shared keyboard-accessible dropdown.
+- Stacked PRs are enforced on the server: a child cannot be merged while its base is open.
+- Merge and transition: `POST /api/prs/{id}/merge` with fresh checks, an idempotency key (24 hour
+  table), merge, branch delete and up to four parallel Jira transitions in one recorded
+  transaction, retries (`GET /api/retries`, `POST` and `DELETE /api/retries/{id}`) and the activity
+  log (`GET /api/activity`). The merge panel lists every linked ticket with required fields and
+  confirmation.
+- Settings drawer with accounts, repositories and their branch rules, delete-branch default,
+  polling intervals, theme and the activity log. Status sync rules and Multi-PR tickets are
+  placeholders until a later release.
+- Fake GitHub and Jira support for merge flows, and Playwright specs for merge with a transition,
+  a failed move that is retried and a head that moved.
 
 ## [0.0.1] - 2026-11-24
 

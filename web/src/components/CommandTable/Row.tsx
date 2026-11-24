@@ -1,9 +1,12 @@
-import { memo } from 'react';
-import type { SnapshotPr } from '@/api/client';
+import { memo, useState } from 'react';
+import type { MergeMethodName, SnapshotPr } from '@/api/client';
 import { useSnapshotPr } from '@/api/queries';
+import { effectiveMethod } from '@/lib/merge';
 import { blockOf, githubPrUrl, isStale } from '@/lib/snapshot';
 import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
+import { MergePanel } from './MergePanel';
+import { MethodCell } from './MethodCell';
 import { Pill, type Tone } from './Pill';
 import { RelativeTime } from './RelativeTime';
 import { TicketCell } from './TicketCell';
@@ -48,68 +51,79 @@ function Commit({ pr }: { pr: SnapshotPr }) {
 
 function RowView({ id }: { id: string }) {
   const pr = useSnapshotPr(id);
+  const [chosen, setChosen] = useState<MergeMethodName | null>(null);
+  const [panel, setPanel] = useState(false);
   if (!pr) return null;
+  const method = effectiveMethod(pr.mergeMethod, chosen);
   const url = githubPrUrl(pr.repo.nameWithOwner, pr.number);
   const block = blockOf(pr);
   const child = pr.stack !== null && pr.stack.parentId !== null;
   return (
-    <tr className={child ? `${styles.row} ${styles.child}` : styles.row} data-pr={pr.id}>
-      <td className={styles.prCell}>
-        <div className={styles.repo}>
-          {pr.repo.nameWithOwner}
-          {pr.repo.isNew && <Pill tone="info">New repo</Pill>}
-        </div>
-        <div className={styles.prTitle}>
-          {url ? (
-            <a href={url} target="_blank" rel="noopener noreferrer">
-              {pr.title}
-            </a>
-          ) : (
-            pr.title
-          )}{' '}
-          <span className={styles.muted}>#{pr.number}</span>
-          {pr.isDraft && (
-            <>
-              {' '}
-              <Pill tone="mute">Draft</Pill>
-            </>
-          )}
-        </div>
-        <div className={styles.branches}>
-          {pr.headRef} → {pr.baseRef}
-        </div>
-      </td>
-      <td>
-        <TicketCell pr={pr} />
-      </td>
-      <td>
-        <Commit pr={pr} />
-      </td>
-      <td>
-        <ReviewCell pr={pr} />
-      </td>
-      <td>
-        <CiCell pr={pr} />
-      </td>
-      <td>
-        <span className={styles.muted} title="Merge methods are configured in a later release">
-          Default
-        </span>
-      </td>
-      <td>
-        <button
-          type="button"
-          className={styles.mergeButton}
-          disabled
-          title="Merging arrives in a later release"
-        >
-          Merge
-        </button>
-        <div className={block.reason ? styles.reason : styles.ready}>
-          {block.reason ?? 'Ready to merge'}
-        </div>
-      </td>
-    </tr>
+    <>
+      <tr className={child ? `${styles.row} ${styles.child}` : styles.row} data-pr={pr.id}>
+        <td className={styles.prCell}>
+          <div className={styles.repo}>
+            {pr.repo.nameWithOwner}
+            {pr.repo.isNew && <Pill tone="info">New repo</Pill>}
+          </div>
+          <div className={styles.prTitle}>
+            {url ? (
+              <a href={url} target="_blank" rel="noopener noreferrer">
+                {pr.title}
+              </a>
+            ) : (
+              pr.title
+            )}{' '}
+            <span className={styles.muted}>#{pr.number}</span>
+            {pr.isDraft && (
+              <>
+                {' '}
+                <Pill tone="mute">Draft</Pill>
+              </>
+            )}
+          </div>
+          <div className={styles.branches}>
+            {pr.headRef} → {pr.baseRef}
+          </div>
+        </td>
+        <td>
+          <TicketCell pr={pr} />
+        </td>
+        <td>
+          <Commit pr={pr} />
+        </td>
+        <td>
+          <ReviewCell pr={pr} />
+        </td>
+        <td>
+          <CiCell pr={pr} />
+        </td>
+        <td>
+          <MethodCell resolution={pr.mergeMethod} value={method} onChange={setChosen} />
+        </td>
+        <td>
+          <button
+            type="button"
+            className={styles.mergeButton}
+            disabled={block.reason !== null}
+            aria-expanded={panel}
+            onClick={() => setPanel((open) => !open)}
+          >
+            Merge
+          </button>
+          <div className={block.reason ? styles.reason : styles.ready}>
+            {block.reason ?? 'Ready to merge'}
+          </div>
+        </td>
+      </tr>
+      {panel && (
+        <tr className={styles.panelRow} data-panel={pr.id}>
+          <td colSpan={7}>
+            <MergePanel pr={pr} method={method} onClose={() => setPanel(false)} />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 

@@ -24,6 +24,8 @@ const DefaultAPIBase = "https://api.github.com"
 const (
 	maxBody   = 1 << 20
 	userAgent = "prdash"
+	// apiVersion is sent with every request, so GitHub keeps the response shapes this client parses.
+	apiVersion = "2022-11-28"
 )
 
 // ErrBadCredentials means GitHub rejected the token (401).

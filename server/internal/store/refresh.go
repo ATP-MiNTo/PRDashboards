@@ -53,8 +53,14 @@ type Refresh struct {
 	Snapshot      []byte
 }
 
-// seedRules are the branch rules a repo gets when it is first seen (TECH_SPEC 7.6).
-const seedRules = `SELECT 0 AS position, 'main' AS pattern UNION ALL SELECT 1, 'production'`
+// BranchRule sends the pull requests that target a matching base branch to a merge method.
+type BranchRule struct {
+	Pattern string `json:"pattern"`
+	Method  string `json:"method"`
+}
+
+// SeedRules are the branch rules a repo gets when it is first seen (TECH_SPEC 7.6).
+var SeedRules = []BranchRule{{Pattern: "main", Method: "merge"}, {Pattern: "production", Method: "merge"}}
 
 func marshal(v any) string {
 	b, err := json.Marshal(v)
@@ -96,8 +102,9 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 			  ON CONFLICT (id) DO UPDATE SET name_with_owner = excluded.name_with_owner`,
 				[]any{now, r.DefaultMethod, marshal(r.Repos)}},
 			{`INSERT INTO repo_branch_rules (repo_id, position, pattern, method)
-			  SELECT j.value, s.position, s.pattern, 'merge' FROM json_each(?) j CROSS JOIN (` + seedRules + `) s`,
-				[]any{marshal(fresh)}},
+			  SELECT j.value, s.key, json_extract(s.value, '$.pattern'), json_extract(s.value, '$.method')
+			  FROM json_each(?) j CROSS JOIN json_each(?) s`,
+				[]any{marshal(fresh), marshal(SeedRules)}},
 			{`INSERT INTO prs (id, repo_id, number, title, head_branch, base_branch, head_sha, state, merged_at, last_seen_at)
 			  SELECT json_extract(value, '$.id'), json_extract(value, '$.repo'), json_extract(value, '$.number'),
 			         json_extract(value, '$.title'), json_extract(value, '$.head'), json_extract(value, '$.base'),
@@ -271,23 +278,4 @@ func (s *Store) SetUserLinks(ctx context.Context, prID string, manual []string, 
 			prID, marshal(rows))
 		return err
 	})
-}
-
-// RepoStates maps the id of every stored repo to its is_new flag.
-func (s *Store) RepoStates(ctx context.Context) (map[string]bool, error) {
-	rows, err := s.r.QueryContext(ctx, `SELECT id, is_new FROM repos`)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]bool{}
-	for rows.Next() {
-		var id string
-		var isNew bool
-		if err := rows.Scan(&id, &isNew); err != nil {
-			return nil, err
-		}
-		out[id] = isNew
-	}
-	return out, rows.Err()
 }

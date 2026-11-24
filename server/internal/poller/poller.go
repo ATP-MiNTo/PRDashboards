@@ -17,6 +17,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
@@ -27,7 +28,7 @@ type Store interface {
 	SaveRefresh(ctx context.Context, r store.Refresh) error
 	SaveSnapshot(ctx context.Context, version int64, data []byte, now time.Time) error
 	OpenPRs(ctx context.Context) (map[string]time.Time, error)
-	RepoStates(ctx context.Context) (map[string]bool, error)
+	Repos(ctx context.Context) ([]store.RepoConfig, error)
 	UserLinks(ctx context.Context) (map[string]store.UserLinks, error)
 }
 
@@ -110,6 +111,9 @@ type Poller struct {
 
 	mu      sync.Mutex
 	base    context.Context
+	cancel  context.CancelFunc
+	closed  bool
+	flights sync.WaitGroup
 	fl      *flight
 	version int64
 	gh      ghData
@@ -137,7 +141,8 @@ func New(cfg Config) *Poller {
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
-	p := &Poller{cfg: cfg, base: context.Background(), wake: make(chan struct{}, 1)}
+	base, cancel := context.WithCancel(context.Background())
+	p := &Poller{cfg: cfg, base: base, cancel: cancel, wake: make(chan struct{}, 1)}
 	p.ghSrc = gen.SourceStatus{State: "pending"}
 	p.jira = jiraData{state: "pending", projects: linking.Projects{}}
 	p.cur.Store(emptySnapshot(cfg.Clock(), p.ghSrc, p.jiraStatus()))
@@ -161,6 +166,30 @@ func (p *Poller) PR(id string) (gen.SnapshotPr, bool) {
 		}
 	}
 	return gen.SnapshotPr{}, false
+}
+
+// Linked describes a pull request of the current snapshot for a merge.
+func (p *Poller) Linked(id string) (merge.Linked, bool) {
+	pr, ok := p.PR(id)
+	if !ok {
+		return merge.Linked{}, false
+	}
+	keys := make([]string, len(pr.Tickets))
+	for i, t := range pr.Tickets {
+		keys[i] = t.Key
+	}
+	return merge.Linked{RepoID: pr.Repo.Id, NameWithOwner: pr.Repo.NameWithOwner, Number: pr.Number, Tickets: keys}, true
+}
+
+// Refs lists the branches of the open pull requests of one repository in the current snapshot.
+func (p *Poller) Refs(repoID string) []merge.Ref {
+	var out []merge.Ref
+	for _, pr := range p.cur.Load().Snapshot.Prs {
+		if pr.Repo.Id == repoID {
+			out = append(out, merge.Ref{ID: pr.Id, Number: pr.Number, Head: pr.HeadRef, Base: pr.BaseRef})
+		}
+	}
+	return out
 }
 
 // Load restores the snapshot saved by the last run, so the UI has data before the first refresh.
@@ -266,6 +295,12 @@ func (p *Poller) wait(ctx context.Context, f *flight) error {
 
 func (p *Poller) start(req request) *flight {
 	p.mu.Lock()
+	if p.closed {
+		p.mu.Unlock()
+		f := &flight{done: make(chan struct{}), err: context.Canceled}
+		close(f.done)
+		return f
+	}
 	if p.fl != nil {
 		f := p.fl
 		p.mu.Unlock()
@@ -274,9 +309,11 @@ func (p *Poller) start(req request) *flight {
 	f := &flight{done: make(chan struct{})}
 	p.fl = f
 	ctx := p.base
+	p.flights.Add(1)
 	p.mu.Unlock()
 	p.publishStatus()
 	go func() {
+		defer p.flights.Done()
 		f.err = p.refresh(ctx, req)
 		if f.err != nil {
 			p.cfg.Log.ErrorContext(ctx, "refresh failed", "err", f.err)
@@ -309,8 +346,21 @@ func Interval(base time.Duration, rl github.RateLimit, now time.Time) time.Durat
 // settings elapses. The settings are read again before every wait.
 func (p *Poller) Run(ctx context.Context) {
 	p.mu.Lock()
-	p.base = ctx
+	if p.closed {
+		p.base, p.cancel = context.WithCancel(context.Background())
+		p.closed = false
+	}
+	cancel := p.cancel
 	p.mu.Unlock()
+	stop := context.AfterFunc(ctx, cancel)
+	defer func() {
+		stop()
+		cancel()
+		p.mu.Lock()
+		p.closed = true
+		p.mu.Unlock()
+		p.flights.Wait()
+	}()
 	for {
 		st, err := p.cfg.Store.GetSettings(ctx)
 		if err != nil {

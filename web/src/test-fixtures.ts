@@ -45,6 +45,13 @@ export function pr(id: string, number: number, over: Partial<SnapshotPr> = {}): 
     tickets: [],
     removedKeys: [],
     ticketLookup: 'ok',
+    mergeMethod: {
+      method: 'squash',
+      default: 'squash',
+      source: 'repo default',
+      allowed: ['squash', 'merge', 'rebase'],
+      warning: null,
+    },
     ...over,
   };
 }

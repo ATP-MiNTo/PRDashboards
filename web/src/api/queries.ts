@@ -1,7 +1,21 @@
 import { useCallback } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   checkAccount,
+  dismissRetry,
+  getActivity,
+  getRepos,
+  getRetries,
+  getTransitions,
+  mergePr,
+  putRepo,
+  retryTransition,
   disconnectAccount,
   getAccounts,
   getAssignedTickets,
@@ -16,6 +30,9 @@ import {
   putSetupClient,
   revokeAllSessions,
   type ClientCredentials,
+  type MergeRequest,
+  type MergeResult,
+  type RepoUpdate,
   type Provider,
   type Snapshot,
   type SnapshotPr,
@@ -32,6 +49,11 @@ export const keys = {
   snapshot: ['snapshot'],
   assigned: ['assigned'],
   syncStatus: ['syncStatus'],
+  repos: ['repos'],
+  retries: ['retries'],
+  activity: ['activity'],
+  transitions: ['transitions'],
+  merges: ['merges'],
 } as const;
 
 export const useSyncStatus = () =>
@@ -89,5 +111,120 @@ export function useSaveTickets() {
   return useMutation({
     mutationFn: ({ id, links }: { id: string; links: TicketLinks }) => putPrTickets(id, links),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.snapshot }),
+  });
+}
+
+export const useRepos = (enabled = true) =>
+  useQuery({ queryKey: keys.repos, queryFn: getRepos, enabled });
+
+export function useSaveRepo() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.repos }),
+        client.invalidateQueries({ queryKey: keys.snapshot }),
+      ]),
+  });
+}
+
+/** The transitions of the tickets that are being moved. Other tickets cost no outside call. */
+export const useTicketTransitions = (ticketKeys: { key: string; enabled: boolean }[]) =>
+  useQueries({
+    queries: ticketKeys.map(({ key, enabled }) => ({
+      queryKey: [...keys.transitions, key],
+      queryFn: () => getTransitions(key),
+      enabled,
+      staleTime: 30_000,
+    })),
+  });
+
+export const useRetries = () => useQuery({ queryKey: keys.retries, queryFn: getRetries });
+
+export const useActivity = (enabled: boolean) =>
+  useInfiniteQuery({
+    queryKey: keys.activity,
+    queryFn: ({ pageParam }) => getActivity(pageParam),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
+  });
+
+/** The outcome of a merge made in this tab, kept for the steps list and the recent merges strip. */
+export interface RecentMerge {
+  prId: string;
+  label: string;
+  result: MergeResult;
+}
+
+export const useRecentMerges = <T = RecentMerge[]>(select?: (m: RecentMerge[]) => T) =>
+  useQuery({
+    queryKey: keys.merges,
+    queryFn: ({ client }) => client.getQueryData<RecentMerge[]>(keys.merges) ?? [],
+    staleTime: Infinity,
+    gcTime: Infinity,
+    select,
+  });
+
+const MAX_RECENT = 10;
+
+/** Merges a pull request. The key identifies one panel opening, so a repeated click replays. */
+export function useMerge() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      key,
+      body,
+    }: {
+      id: string;
+      key: string;
+      body: MergeRequest;
+      label: string;
+    }) => mergePr(id, key, body),
+    onSuccess: (result, { id, label }) =>
+      client.setQueryData<RecentMerge[]>(keys.merges, (old = []) =>
+        [{ prId: id, label, result }, ...old.filter((m) => m.prId !== id)].slice(0, MAX_RECENT),
+      ),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.snapshot }),
+        client.invalidateQueries({ queryKey: keys.retries }),
+        client.invalidateQueries({ queryKey: keys.activity }),
+        client.invalidateQueries({ queryKey: keys.transitions, refetchType: 'none' }),
+      ]),
+  });
+}
+
+export function useRetryTransition() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: retryTransition,
+    onSuccess: ({ step }, id) =>
+      client.setQueryData<RecentMerge[]>(keys.merges, (old = []) =>
+        old.map((m) => ({
+          ...m,
+          result: {
+            ...m.result,
+            steps: m.result.steps.map((s) => (s.retryId === id ? step : s)),
+          },
+        })),
+      ),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.snapshot }),
+        client.invalidateQueries({ queryKey: keys.retries }),
+        client.invalidateQueries({ queryKey: keys.activity }),
+        client.invalidateQueries({ queryKey: keys.transitions, refetchType: 'none' }),
+      ]),
+  });
+}
+
+export function useDismissRetry() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: dismissRetry,
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.retries }),
   });
 }

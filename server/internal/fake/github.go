@@ -4,8 +4,11 @@ package fake
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +20,13 @@ type githubConfig struct {
 	authorizeConfig
 	// SSO makes the GraphQL endpoint answer like an organization that has not authorized the token.
 	SSO bool `json:"sso"`
+	// MergeMode steers the REST merge: "" merges, "not_mergeable" answers 405 and "conflict" answers 409.
+	MergeMode string `json:"mergeMode"`
+	// HeadMoved changes the head commit of every pull request, in the search and in node lookups,
+	// as if someone had pushed since the page loaded.
+	HeadMoved bool `json:"headMoved"`
+	// DeleteFails makes the branch delete answer 500.
+	DeleteFails bool `json:"deleteFails"`
 }
 
 type githubState struct {
@@ -27,6 +37,16 @@ type githubState struct {
 	LastCodeVerifier  string       `json:"lastCodeVerifier"`
 	LastRedirectURI   string       `json:"lastRedirectUri"`
 	BadExchangeErrors int          `json:"badExchangeErrors"`
+	NodeQueries       int          `json:"nodeQueries"`
+	Searches          int          `json:"searches"`
+	Merges            int          `json:"merges"`
+	BranchDeletes     int          `json:"branchDeletes"`
+	// Merged lists the node ids merged so far; they leave the open search.
+	Merged []string `json:"merged"`
+	// LastMerge is the last accepted or refused merge request body.
+	LastMerge map[string]string `json:"lastMerge"`
+	// Deleted lists the branches deleted, as "owner/repo:branch".
+	Deleted []string `json:"deleted"`
 }
 
 type github struct {
@@ -49,6 +69,8 @@ func (g *github) routes() http.Handler {
 	mux.HandleFunc("GET /login/oauth/authorize", g.authorize)
 	mux.HandleFunc("POST /login/oauth/access_token", g.accessToken)
 	mux.HandleFunc("POST /graphql", g.graphql)
+	mux.HandleFunc("PUT /repos/{owner}/{repo}/pulls/{number}/merge", g.merge)
+	mux.HandleFunc("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch...}", g.deleteBranch)
 	mux.HandleFunc("GET /__admin/state", func(w http.ResponseWriter, _ *http.Request) {
 		g.mu.Lock()
 		defer g.mu.Unlock()
@@ -127,7 +149,8 @@ func (g *github) accessToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"access_token": token, "token_type": "bearer", "scope": "repo,read:org"})
 }
 
-func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
+// authed answers 401 for an unknown token and otherwise returns the scopes of the token.
+func (g *github) authed(w http.ResponseWriter, r *http.Request) (scopes string, ok bool) {
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	scopes, isPAT := githubPATs[token]
 	switch {
@@ -136,22 +159,41 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		scopes = "repo, read:org"
 	default:
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
+		return "", false
+	}
+	return scopes, true
+}
+
+func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
+	scopes, ok := g.authed(w, r)
+	if !ok {
 		return
 	}
 	g.mu.Lock()
-	sso := g.st.Config.SSO
+	cfg, merged := g.st.Config, slices.Clone(g.st.Merged)
 	g.mu.Unlock()
+	sso := cfg.SSO
 	var req struct {
 		Query     string         `json:"query"`
 		Variables map[string]any `json:"variables"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req)
 	if q, ok := req.Variables["q"].(string); ok {
-		header, body := searchBody(q, sso, time.Now())
+		g.mu.Lock()
+		g.st.Searches++
+		g.mu.Unlock()
+		header, body := searchBody(q, sso, cfg.HeadMoved, merged, time.Now())
 		for k, v := range header {
 			w.Header().Set(k, v)
 		}
 		writeJSON(w, http.StatusOK, body)
+		return
+	}
+	if id, ok := req.Variables["id"].(string); ok {
+		g.mu.Lock()
+		g.st.NodeQueries++
+		g.mu.Unlock()
+		writeJSON(w, http.StatusOK, nodeBody(id, cfg.HeadMoved, merged, time.Now()))
 		return
 	}
 	if sso {
@@ -169,4 +211,51 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-OAuth-Scopes", scopes)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]string{"login": "octocat"}}})
+}
+
+func (g *github) merge(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	var body map[string]string
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Problems parsing JSON"})
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	number, _ := strconv.Atoi(r.PathValue("number"))
+	p, ok := findFixture(repo, number)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	cfg := g.st.Config
+	g.st.Merges++
+	g.st.LastMerge = map[string]string{"repo": repo, "number": r.PathValue("number"), "method": body["merge_method"], "sha": body["sha"]}
+	switch {
+	case cfg.MergeMode == "not_mergeable":
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"message": "Pull Request is not mergeable"})
+	case cfg.MergeMode == "conflict" || body["sha"] != p.headSHA(cfg.HeadMoved):
+		writeJSON(w, http.StatusConflict, map[string]string{"message": "Head branch was modified. Review and try the merge again."})
+	default:
+		g.st.Merged = append(g.st.Merged, p.id())
+		writeJSON(w, http.StatusOK, map[string]any{"sha": fmt.Sprintf("%040x", p.number*104729), "merged": true, "message": "Pull Request successfully merged"})
+	}
+}
+
+func (g *github) deleteBranch(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.st.BranchDeletes++
+	if g.st.Config.DeleteFails {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"message": "Server Error"})
+		return
+	}
+	g.st.Deleted = append(g.st.Deleted, r.PathValue("owner")+"/"+r.PathValue("repo")+":"+r.PathValue("branch"))
+	w.WriteHeader(http.StatusNoContent)
 }

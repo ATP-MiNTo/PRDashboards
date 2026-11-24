@@ -24,11 +24,13 @@ export function TopBar({
   status,
   theme,
   onTheme,
+  onSettings,
 }: {
   snapshot: Snapshot | undefined;
   status: SyncStatus | null | undefined;
   theme: ThemeSetting | undefined;
   onTheme: (t: ThemeSetting) => void;
+  onSettings: () => void;
 }) {
   const sync = useSyncNow();
   const running = status?.running === true || sync.isPending;
@@ -68,8 +70,8 @@ export function TopBar({
           <button
             type="button"
             className={styles.tbButton}
-            disabled
-            title="Settings arrive in a later release"
+            aria-haspopup="dialog"
+            onClick={onSettings}
           >
             Settings
           </button>

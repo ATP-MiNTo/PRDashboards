@@ -1,12 +1,13 @@
 # Stacked PRs
 
-Status: Partial. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.2. Related: [command-table.md](command-table.md), [poller.md](poller.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.2. Related: [command-table.md](command-table.md), [poller.md](poller.md).
 
 ## Purpose
 
 Detects pull requests that are stacked on each other and shows them as grouped rows with a
-connector line, so the order of merging is clear. Partial: the "Merge after #N" text is shown, but
-the server does not yet refuse a merge of a child, because merging arrives in milestone 6.
+connector line, so the order of merging is clear. The "Merge after #N" text is shown in the browser
+and the server refuses to merge a child while its base pull request is open
+([merge-and-transition.md](merge-and-transition.md)).
 
 ## Data model
 
@@ -16,6 +17,7 @@ the server does not yet refuse a merge of a child, because merging arrives in mi
 
 - [server/internal/stacks/stacks.go](../../server/internal/stacks/stacks.go): pure `Detect` and `Info.MergeBlock`.
 - [server/internal/poller/build.go](../../server/internal/poller/build.go): runs `Detect` and fills `stack`.
+- [server/internal/merge/flow.go](../../server/internal/merge/flow.go): `check` refuses a child whose base is still open.
 - [web/src/lib/snapshot.ts](../../web/src/lib/snapshot.ts): `groupsOf` keeps a stack together. [Table.tsx](../../web/src/components/CommandTable/Table.tsx) and [Row.tsx](../../web/src/components/CommandTable/Row.tsx) draw the stack header and connector.
 
 ## Key flows
@@ -33,10 +35,11 @@ None. Detection uses the snapshot only.
 - O(n): one pass with a map, no nested scans.
 - Cycles are ignored and, when several PRs share a head branch, the first one is the parent.
 - The package is pure: no network, database or clock.
-- Not yet enforced: the server must refuse to merge a child before its base is merged (milestone 6).
+- Enforced by the merge: `POST /api/prs/{id}/merge` answers 409 `stack_base_open` when another open PR has the pull request's base branch as its head (`merge.check`, using `Snapshot.Refs` of the repo).
 
 ## Tests
 
 - [server/internal/stacks/stacks_test.go](../../server/internal/stacks/stacks_test.go): table tests, 100 % coverage.
+- [server/internal/merge/flow_test.go](../../server/internal/merge/flow_test.go): the `stack_base_open` refusal.
 - [server/internal/poller/poller_test.go](../../server/internal/poller/poller_test.go): stack info in the snapshot.
 - [web/src/lib/snapshot.test.ts](../../web/src/lib/snapshot.test.ts) (`groupsOf`) and [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx).

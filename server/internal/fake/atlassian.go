@@ -20,6 +20,8 @@ type atlassianConfig struct {
 	RefreshFail bool `json:"refreshFail"`
 	// Sites is how many Jira sites accessible-resources lists (1 or 2).
 	Sites int `json:"sites"`
+	// TransitionMode steers POST transition: "" applies it, "reject" answers 400 and "down" answers 503.
+	TransitionMode string `json:"transitionMode"`
 }
 
 func defaultAtlassianConfig() atlassianConfig { return atlassianConfig{ExpiresIn: 3600, Sites: 1} }
@@ -32,6 +34,10 @@ type atlassianState struct {
 	RejectedRefresh int             `json:"rejectedRefreshes"`
 	LastCallbackURL string          `json:"lastCallbackUrl"`
 	CurrentRefresh  string          `json:"currentRefreshToken"`
+	// Statuses holds the status of tickets moved so far, by key.
+	Statuses map[string]string `json:"statuses"`
+	// Moves is every accepted or refused transition request, as "KEY:transitionId:fields-json".
+	Moves []string `json:"moves"`
 }
 
 type atlassian struct {
@@ -43,9 +49,11 @@ type atlassian struct {
 	access safeMap[bool]
 }
 
-func newAtlassian() *atlassian {
-	return &atlassian{st: atlassianState{Config: defaultAtlassianConfig()}}
+func freshAtlassianState() atlassianState {
+	return atlassianState{Config: defaultAtlassianConfig(), Statuses: map[string]string{}, Moves: []string{}}
 }
+
+func newAtlassian() *atlassian { return &atlassian{st: freshAtlassianState()} }
 
 func (a *atlassian) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -74,7 +82,7 @@ func (a *atlassian) routes() http.Handler {
 	})
 	mux.HandleFunc("POST /__admin/reset", func(w http.ResponseWriter, _ *http.Request) {
 		a.mu.Lock()
-		a.st = atlassianState{Config: defaultAtlassianConfig()}
+		a.st = freshAtlassianState()
 		a.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})

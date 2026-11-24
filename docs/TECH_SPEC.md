@@ -240,11 +240,12 @@ against the database. `data.db` is created with mode 0600 before it is opened.
 | `rule_firings` | `rule_id, ticket_key` | Last fingerprint that fired for this rule and ticket (7.4) |
 | `activity` | `id` | Log of every transition and merge: when, what, who triggered (rule id or manual), result, error |
 | `pending_retries` | `id` | Failed transitions waiting for a retry: ticket, transition id, fields, last error |
+| `idempotency` | `key` | Result of a finished merge by `Idempotency-Key`: `pr_id`, `result_json`, `created_at`. Rows older than 24 hours are deleted in the transaction of the next merge |
 | `snapshot` | `id = 1` | Last full snapshot as compressed JSON, so the UI shows data immediately on start |
 | `sessions` | `id_hash` | Hashed session ids with `created`, `last_issued`, `expires` (8.3) |
 | `oauth_states` | `state_hash` | Pending OAuth flows: provider, bound session, PKCE verifier, expiry (5.4) |
 
-Indexes: `prs(state, repo_id)`, `ticket_links(ticket_key)`, `activity(created_at DESC)`.
+Indexes: `prs(state, repo_id)`, `ticket_links(ticket_key)`, `activity(created_at DESC)`, `idempotency(created_at)`.
 
 ## 7. Domain logic
 
@@ -497,12 +498,15 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/tickets/assigned` | Picker source |
 | `PUT /api/prs/{id}/tickets` | Set manual links and removed keys |
 | `POST /api/prs/{id}/merge` | Merge and transition (7.7) |
+| `GET /api/retries` | Failed transitions waiting for a retry |
 | `POST /api/retries/{id}` | Retry a failed transition |
+| `DELETE /api/retries/{id}` | Dismiss a failed transition |
 | `GET/PUT /api/settings` | Global settings |
 | `POST /api/sessions/revoke-all` | End every session, including the caller's |
 | `GET /api/setup`, `PUT /api/setup/{github\|atlassian}` | OAuth client credentials (write only) |
 | `GET /api/accounts`, `DELETE /api/accounts/{provider}`, `POST /api/accounts/{provider}/check` | Connection state, disconnect, check now |
 | `POST /api/oauth/complete` | Finish an OAuth flow from the finish page (5.4) |
+| `GET /api/repos` | Repos with their default and branch rules |
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
@@ -582,6 +586,27 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
 - The ticket picker JQL is `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`
   with a cap of 100.
 - Manual links are limited to 20 keys, hidden keys to 20, validated server side.
+
+### 10.4b Concrete choices (milestones 6 and 7)
+
+- `merge.Resolve` is pure. A branch pattern is an exact name or a glob where `*` matches any run of
+  characters, `/` included. Patterns are 1 to 200 characters of letters, digits and `. _ / * -`,
+  and a repo has at most 50 rules. `PUT /api/repos/{id}` replaces the default and the rules in one
+  transaction and rebuilds the snapshot from cached data, without an outside call.
+- `SnapshotPr.mergeMethod` is `{method, default, source, allowed, warning}`. The seeded rules are
+  `main` and `production` to merge commit.
+- The merge request carries at most 20 tickets. `Idempotency-Key` must be a UUID. A key that was
+  used for another pull request is `422 idempotency_key_reused`. Two requests with the same key at
+  once share one run.
+- The merge checks in step 2 also refuse a draft (`draft`), a closed pull request (`not_open`), an
+  open base pull request in the same repo (`stack_base_open`) and a missing or changing review
+  (`not_mergeable`). The transition list used in step 3 is the cached one when it is under 60 s old.
+- After the merge succeeded the remaining steps run on a context detached from the request, with a
+  timeout of its own, so a closed tab cannot leave a merged pull request with unmoved tickets.
+- One transaction (`RecordMerge`) writes the activity rows, the retries, the rule firings and the
+  idempotency row of a merge.
+- `GET /api/activity` pages by id, newest first (`limit` 1 to 100, `cursor` is the last id seen).
+- The browser fetches the transitions of a ticket only when the person chooses to move it.
 
 ### 10.5 Partial failures
 

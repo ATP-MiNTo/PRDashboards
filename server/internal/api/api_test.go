@@ -544,7 +544,9 @@ func TestSpecRequestSchemasRejectUnknownFields(t *testing.T) {
 	}
 	var walk func(where string, s *openapi3.Schema)
 	walk = func(where string, s *openapi3.Schema) {
-		if s.Type != nil && s.Type.Is("object") && (s.AdditionalProperties.Has == nil || *s.AdditionalProperties.Has) {
+		// A map whose values have a schema (merge ticket fields) has no fixed names to list. The
+		// merge service refuses the ids the transition does not have.
+		if s.Type != nil && s.Type.Is("object") && s.AdditionalProperties.Schema == nil && (s.AdditionalProperties.Has == nil || *s.AdditionalProperties.Has) {
 			t.Errorf("%s: object schema must set additionalProperties: false", where)
 		}
 		for name, p := range s.Properties {

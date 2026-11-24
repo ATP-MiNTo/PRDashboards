@@ -18,7 +18,7 @@ import (
 )
 
 // ErrNoSite means Jira is connected but no site is selected.
-var ErrNoSite = errors.New("no Jira site selected")
+var ErrNoSite = jira.ErrNoSite
 
 func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }
 
@@ -81,21 +81,16 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 		p.mu.Unlock()
 	}
 
-	repoStates, err := p.cfg.Store.RepoStates(ctx)
+	repos, err := p.cfg.Store.Repos(ctx)
 	if err != nil {
 		return err
-	}
-	repoNew := make(map[string]bool, len(ls))
-	for _, l := range ls {
-		isNew, known := repoStates[l.pr.Repo.ID]
-		repoNew[l.pr.Repo.ID] = isNew || !known
 	}
 
 	p.mu.Lock()
 	p.version++
 	version := p.version
 	snap := build(buildInput{
-		Now: now, Version: version, Linked: ls, RepoNew: repoNew, Issues: p.jira.issues, Site: p.jira.site,
+		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
 		GitHub: p.ghSrc, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings,
 	})
 	p.mu.Unlock()

@@ -18,7 +18,20 @@ import (
 )
 
 //go:embed open_prs.graphql
-var openPRsQuery string
+var openPRsSource string
+
+//go:embed pr_fields.graphql
+var prFields string
+
+//go:embed pull_request.graphql
+var pullRequestSource string
+
+// Both queries select the PullRequestFields fragment, so a search result and a single pull
+// request have the same shape.
+var (
+	openPRsQuery     = openPRsSource + "\n" + prFields
+	pullRequestQuery = pullRequestSource + "\n" + prFields
+)
 
 //go:embed merged_prs.graphql
 var mergedPRsQuery string
@@ -97,6 +110,8 @@ type Repo struct {
 type PR struct {
 	ID               string
 	Number           int
+	State            string
+	CrossRepo        bool
 	Title            string
 	URL              string
 	Draft            bool
@@ -176,6 +191,8 @@ type rawPR struct {
 	Typename         string     `json:"__typename"`
 	ID               string     `json:"id"`
 	Number           int        `json:"number"`
+	State            string     `json:"state"`
+	IsCrossRepo      bool       `json:"isCrossRepository"`
 	Title            string     `json:"title"`
 	URL              string     `json:"url"`
 	IsDraft          bool       `json:"isDraft"`
@@ -324,32 +341,44 @@ func (c *Client) paginate(ctx context.Context, token, query, q string, requests 
 	return nil
 }
 
-// searchPage posts one GraphQL page. A rate limit answer becomes *RateLimitedError, a rejected
-// token ErrBadCredentials. A blocked organization with no data at all is not an error: the page
-// is empty and handle sees the classification.
-func (c *Client) searchPage(ctx context.Context, token, query string, vars map[string]any) (*searchPage, int, http.Header, error) {
+// graphql posts one query. A rejected token is ErrBadCredentials and a rate limit answer is
+// *RateLimitedError. Any other answer is returned with its status and headers.
+func (c *Client) graphql(ctx context.Context, token, query string, vars map[string]any) ([]byte, int, http.Header, error) {
 	payload, err := json.Marshal(map[string]any{"query": query, "variables": vars})
 	if err != nil {
 		return nil, 0, nil, err
 	}
+	return c.send(ctx, token, http.MethodPost, c.base()+"/graphql", payload)
+}
+
+// send runs one request with the shared retry policy, reads the answer and maps a rejected token
+// and a rate limit answer to errors. Other statuses are the caller's to judge.
+func (c *Client) send(ctx context.Context, token, method, target string, payload []byte) ([]byte, int, http.Header, error) {
 	resp, err := c.Backoff.Do(ctx, func(ctx context.Context) (*http.Response, error) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base()+"/graphql", bytes.NewReader(payload))
+		var rd io.Reader
+		if payload != nil {
+			rd = bytes.NewReader(payload)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, target, rd)
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", apiVersion)
 		req.Header.Set("User-Agent", userAgent)
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
 		return c.HTTP.Do(req)
 	})
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("github search: %w", err)
+		return nil, 0, nil, fmt.Errorf("github %s: %w", method, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 	if err != nil {
-		return nil, 0, nil, fmt.Errorf("github search: %w", err)
+		return nil, 0, nil, fmt.Errorf("github %s: %w", method, err)
 	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
@@ -359,25 +388,36 @@ func (c *Client) searchPage(ctx context.Context, token, query string, vars map[s
 		wait, _ := backoff.Hint(resp.Header, now)
 		return nil, resp.StatusCode, resp.Header, &RateLimitedError{RetryAfter: wait, ResetAt: now.Add(wait)}
 	}
+	return body, resp.StatusCode, resp.Header, nil
+}
+
+// searchPage posts one search page. A GraphQL rate limit error becomes *RateLimitedError. A blocked
+// organization with no data at all is not an error: the page is empty and handle sees the
+// classification.
+func (c *Client) searchPage(ctx context.Context, token, query string, vars map[string]any) (*searchPage, int, http.Header, error) {
+	body, status, h, err := c.graphql(ctx, token, query, vars)
+	if err != nil {
+		return nil, status, h, err
+	}
 	var p searchPage
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusForbidden {
-		if err := json.Unmarshal(body, &p); err != nil && resp.StatusCode == http.StatusOK {
-			return nil, resp.StatusCode, resp.Header, fmt.Errorf("github search: bad response: %w", err)
+	if status == http.StatusOK || status == http.StatusForbidden {
+		if err := json.Unmarshal(body, &p); err != nil && status == http.StatusOK {
+			return nil, status, h, fmt.Errorf("github search: bad response: %w", err)
 		}
 	}
 	for _, e := range p.Errors {
 		if e.Type == "RATE_LIMITED" {
 			wait := max(0, p.Data.RateLimit.ResetAt.Sub(c.now()))
-			return nil, resp.StatusCode, resp.Header, &RateLimitedError{RetryAfter: wait, ResetAt: p.Data.RateLimit.ResetAt}
+			return nil, status, h, &RateLimitedError{RetryAfter: wait, ResetAt: p.Data.RateLimit.ResetAt}
 		}
 	}
-	if resp.StatusCode != http.StatusOK {
-		if len(blockedOf(resp.StatusCode, resp.Header, p.Errors)) > 0 {
-			return &p, resp.StatusCode, resp.Header, nil
+	if status != http.StatusOK {
+		if len(blockedOf(status, h, p.Errors)) > 0 {
+			return &p, status, h, nil
 		}
-		return nil, resp.StatusCode, resp.Header, fmt.Errorf("github search: unexpected status %d", resp.StatusCode)
+		return nil, status, h, fmt.Errorf("github search: unexpected status %d", status)
 	}
-	return &p, resp.StatusCode, resp.Header, nil
+	return &p, status, h, nil
 }
 
 // blockedOf lists the organizations that refused the token in one answer: the X-GitHub-SSO header
@@ -421,7 +461,7 @@ func otherErrors(errs []graphQLError) []string {
 
 func (n rawPR) pr() PR {
 	pr := PR{
-		ID: n.ID, Number: n.Number, Title: n.Title, URL: n.URL, Draft: n.IsDraft,
+		ID: n.ID, Number: n.Number, State: n.State, CrossRepo: n.IsCrossRepo, Title: n.Title, URL: n.URL, Draft: n.IsDraft,
 		Mergeable: n.Mergeable, MergeStateStatus: n.MergeStateStatus, ReviewDecision: n.ReviewDecision,
 		HeadRef: n.HeadRefName, HeadSHA: n.HeadRefOid, BaseRef: n.BaseRefName,
 		Repo: Repo{

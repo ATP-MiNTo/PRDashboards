@@ -294,6 +294,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/repos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every repository the dashboard has seen, with its merge settings
+         * @description Reads stored state only. Open pull request counts come from the stored pull requests.
+         */
+        get: operations["listRepos"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/repos/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Merge settings of one repository */
+        get: operations["getRepo"];
+        /**
+         * Set the default method and replace the branch rules of a repository
+         * @description Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data already fetched. No GitHub or Jira call. clearNew marks the repository as seen.
+         */
+        put: operations["putRepo"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prs/{id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge a pull request and move its tickets
+         * @description Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and checked before anything is written. A refusal is a 409 with the fresh state of the pull request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or transition_unavailable. A repeated Idempotency-Key returns the first result. Once GitHub has merged, failed steps are reported in the result and the merge is never rolled back.
+         */
+        post: operations["mergePr"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/retries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Failed transitions waiting for a retry */
+        get: operations["listRetries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/retries/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Try a failed transition again
+         * @description The transition must still be available for the ticket. A transition that fails again keeps its retry and is reported in the step.
+         */
+        post: operations["retryTransition"];
+        /** Forget a failed transition */
+        delete: operations["dismissRetry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The activity log, newest first */
+        get: operations["getActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -506,6 +622,7 @@ export interface components {
             tickets: components["schemas"]["SnapshotTicket"][];
             removedKeys: string[];
             ticketLookup: components["schemas"]["TicketLookup"];
+            mergeMethod: components["schemas"]["MethodResolution"];
         };
         AssignedTickets: {
             tickets: components["schemas"]["TicketSummary"][];
@@ -531,6 +648,120 @@ export interface components {
         Transitions: {
             key: string;
             transitions: components["schemas"]["Transition"][];
+        };
+        /** @enum {string} */
+        MergeMethodName: "squash" | "merge" | "rebase";
+        MethodResolution: {
+            method: components["schemas"]["MergeMethodName"];
+            /** @description The configured method, before the fallback for a method the repository disallows. */
+            default: components["schemas"]["MergeMethodName"];
+            /** @description One of "rule: <pattern>", "repo default" or "new repo default". */
+            source: string;
+            allowed: components["schemas"]["MergeMethodName"][];
+            warning: string | null;
+        };
+        BranchRule: {
+            pattern: string;
+            method: components["schemas"]["MergeMethodName"];
+        };
+        RepoSettings: {
+            id: string;
+            nameWithOwner: string;
+            isNew: boolean;
+            openPrs: number;
+            defaultMethod: components["schemas"]["MergeMethodName"];
+            branchRules: components["schemas"]["BranchRule"][];
+        };
+        Repos: {
+            repos: components["schemas"]["RepoSettings"][];
+        };
+        RepoUpdate: {
+            defaultMethod: components["schemas"]["MergeMethodName"];
+            branchRules: components["schemas"]["BranchRule"][];
+            clearNew: boolean;
+        };
+        MergeTicket: {
+            key: components["schemas"]["TicketKey"];
+            /** @description The transition to make, or null to leave the ticket where it is. */
+            transitionId: string | null;
+            fields: {
+                [key: string]: string;
+            };
+        };
+        MergeRequest: {
+            method: components["schemas"]["MergeMethodName"];
+            expectedHeadSha: string;
+            deleteBranch: boolean;
+            tickets: components["schemas"]["MergeTicket"][];
+        };
+        MergeStep: {
+            /** @enum {string} */
+            kind: "merge" | "delete_branch" | "transition";
+            ticket: string | null;
+            /** @enum {string} */
+            state: "ok" | "failed" | "skipped";
+            message: string | null;
+            toStatus: string | null;
+            /** Format: int64 */
+            retryId: number | null;
+        };
+        MergeResult: {
+            prId: string;
+            method: components["schemas"]["MergeMethodName"];
+            sha: string;
+            steps: components["schemas"]["MergeStep"][];
+        };
+        FreshPr: {
+            state: string;
+            headSha: string;
+            baseRef: string;
+            isDraft: boolean;
+            mergeable: string;
+            mergeStateStatus: string;
+            reviewDecision: string | null;
+        };
+        MergeProblem: {
+            type: string;
+            title: string;
+            status: number;
+            code: string;
+            detail?: string;
+            pr: components["schemas"]["FreshPr"] | null;
+        };
+        Retry: {
+            /** Format: int64 */
+            id: number;
+            prId: string | null;
+            ticketKey: string;
+            transitionId: string;
+            toStatus: string;
+            lastError: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        Retries: {
+            retries: components["schemas"]["Retry"][];
+        };
+        RetryResult: {
+            step: components["schemas"]["MergeStep"];
+        };
+        ActivityItem: {
+            /** Format: int64 */
+            id: number;
+            /** Format: date-time */
+            createdAt: string;
+            kind: string;
+            ticketKey: string | null;
+            prId: string | null;
+            triggeredBy: string;
+            result: string;
+            summary: string;
+            error: string | null;
+        };
+        ActivityPage: {
+            items: components["schemas"]["ActivityItem"][];
+            /** Format: int64 */
+            nextCursor: number | null;
         };
         Problem: {
             type: string;
@@ -577,7 +808,16 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site). */
+        /** @description GitHub's rate limit is used up (rate_limited). */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused). */
         Unprocessable: {
             headers: {
                 [name: string]: unknown;
@@ -599,6 +839,8 @@ export interface components {
     parameters: {
         TicketKey: components["schemas"]["TicketKey"];
         PrId: string;
+        RepoId: string;
+        RetryId: number;
         Provider: components["schemas"]["Provider"];
     };
     requestBodies: never;
@@ -998,6 +1240,208 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    listRepos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repositories, ordered by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repos"];
+                };
+            };
+        };
+    };
+    getRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repository. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoSettings"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    putRepo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RepoUpdate"];
+            };
+        };
+        responses: {
+            /** @description The saved repository. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepoSettings"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    mergePr: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                id: components["parameters"]["PrId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeRequest"];
+            };
+        };
+        responses: {
+            /** @description The pull request is merged. Steps tell what happened to the rest. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MergeResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description The state does not allow the merge. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["MergeProblem"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    listRetries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The pending retries, oldest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retries"];
+                };
+            };
+        };
+    };
+    retryTransition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RetryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The outcome. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetryResult"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    dismissRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["RetryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dismissed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getActivity: {
+        parameters: {
+            query?: {
+                /** @description Return entries with an id below this one. */
+                cursor?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityPage"];
+                };
+            };
         };
     };
 }

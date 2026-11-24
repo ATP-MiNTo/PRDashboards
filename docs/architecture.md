@@ -159,11 +159,11 @@ sequenceDiagram
 | Poller and snapshot | [features/poller.md](features/poller.md) | Built |
 | Command Table | [features/command-table.md](features/command-table.md) | Built |
 | Ticket linking | [features/ticket-linking.md](features/ticket-linking.md) | Built |
-| Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Partial |
-| Merge method | `features/merge-method.md` | Not built |
-| Merge and transition | `features/merge-and-transition.md` | Not built |
+| Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
+| Merge method | [features/merge-method.md](features/merge-method.md) | Built |
+| Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
 | Status sync rules and Multi-PR tickets | `features/status-sync-rules.md` | Not built |
-| Settings drawer | `features/settings.md` | Not built |
+| Settings drawer | [features/settings.md](features/settings.md) | Partial |
 | Theme | [features/theme.md](features/theme.md) | Built |
 | Installable app (PWA) | `features/installable-app.md` | Not built |
 

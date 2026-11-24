@@ -35,7 +35,7 @@ Secrets, keychain service `prdashboards` (or the same names in `secrets.enc`):
 nonce, then the AES-256-GCM ciphertext of a JSON map. The whole header is the additional data.
 Argon2id with time 3, 64 MiB, 4 threads, 32-byte key. A fresh salt and nonce on every write.
 
-SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql)):
+SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md)):
 `schema_migrations`, `settings`, `repos`, `repo_branch_rules`, `prs`, `ticket_links`, `sync_rules`,
 `rule_firings`, `activity`, `pending_retries`, `snapshot`, `sessions` (hashed id, created, last
 issued, expires) and `oauth_states` (hashed state, provider, session key, PKCE verifier, expiry).
@@ -56,6 +56,7 @@ Server:
 - [server/internal/secrets/open.go](../../server/internal/secrets/open.go): `Open` (choose the backend), `Prompter`, `TerminalPrompter`, `ErrNoTerminal`.
 - [server/internal/store/store.go](../../server/internal/store/store.go): `Open`, `Write` (the one write transaction), `Close`.
 - [server/internal/store/migrate.go](../../server/internal/store/migrate.go): embedded numbered migrations, applied in order, each in a transaction.
+- [server/internal/store/repos.go](../../server/internal/store/repos.go) and [merges.go](../../server/internal/store/merges.go): repo settings, `RecordMerge` and the retry, activity and idempotency queries.
 - [server/internal/store/refresh.go](../../server/internal/store/refresh.go): `SaveRefresh` (one transaction for repos, PRs, links, resolutions and the snapshot), snapshot load and save, user links.
 - [server/internal/store/settings.go](../../server/internal/store/settings.go): `Settings`, defaults, `GetSettings`, `PutSettings`.
 - [server/internal/store/sessions.go](../../server/internal/store/sessions.go): session rows and `oauth_states` (`InsertOAuthState`, `ConsumeOAuthState`).

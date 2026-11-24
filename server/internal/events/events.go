@@ -23,6 +23,7 @@ const (
 const (
 	Snapshot   = "snapshot"
 	SyncStatus = "sync-status"
+	Activity   = "activity"
 )
 
 // Options tune the hub. Zero fields take the defaults.

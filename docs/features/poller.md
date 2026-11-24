@@ -17,7 +17,7 @@ Differences from the spec:
 
 - API schemas: `Snapshot`, `SnapshotPr`, `SnapshotRepo`, `Ci`, `Check`, `Review`, `StackInfo`, `SnapshotTicket`, `Sources`, `SourceStatus`, `BlockedOrg`, `Warning`, `SyncStatus` in [api/openapi.yaml](../../api/openapi.yaml). `version` is an integer that grows with every build of the snapshot and continues after a restart.
 - `snapshot` table: one row (`id = 1`) with `version`, gzip-compressed JSON `data` and `updated_at`.
-- `repos` (`is_new` until the user has seen the repo), `repo_branch_rules` (seeded `main` and `production` to `merge`), `prs` (`state` open, merged or closed, `last_seen_at`) and `ticket_links` are written by one transaction per refresh ([storage.md](storage.md)). New repos get the global default method.
+- `repos` (`is_new` until the user has seen the repo), `repo_branch_rules` (seeded `main` and `production` to `merge`), `prs` (`state` open, merged or closed, `last_seen_at`) and `ticket_links` are written by one transaction per refresh ([storage.md](storage.md)). New repos get the global default method. The refresh reads the stored repo configuration (`Store.Repos`) so `build` can resolve `SnapshotPr.mergeMethod` ([merge-method.md](merge-method.md)). `Linked` and `Refs` give the merge flow the ticket keys and the head and base branches of the open PRs from the current snapshot.
 - Settings read: `polling.githubSec`, `polling.jiraSec` (re-read before every wait, so a change applies without a restart).
 
 ## Code map
@@ -26,7 +26,7 @@ Differences from the spec:
 - [server/internal/poller/refresh.go](../../server/internal/poller/refresh.go): `refresh`, GitHub and Jira fetch steps, failure handling, merged-search resolution, snapshot persistence.
 - [server/internal/poller/build.go](../../server/internal/poller/build.go): `build`, the pure assembly of a `gen.Snapshot` from fetched data, links and stacks.
 - [server/internal/github/search.go](../../server/internal/github/search.go), [open_prs.graphql](../../server/internal/github/open_prs.graphql), [merged_prs.graphql](../../server/internal/github/merged_prs.graphql): `SearchOpen`, `SearchMerged`, check mapping, rate limit and block classification.
-- [server/internal/store/refresh.go](../../server/internal/store/refresh.go): `SaveRefresh`, `SaveSnapshot`, `LoadSnapshot`, `OpenPRs`, `UserLinks`, `SetUserLinks`, `RepoStates`.
+- [server/internal/store/refresh.go](../../server/internal/store/refresh.go): `SaveRefresh`, `SaveSnapshot`, `LoadSnapshot`, `OpenPRs`, `UserLinks`, `SetUserLinks`, `SeedRules`. [repos.go](../../server/internal/store/repos.go): `Repos`.
 - [server/internal/events/events.go](../../server/internal/events/events.go): the SSE `Hub`.
 - [server/internal/api/handlers_snapshot.go](../../server/internal/api/handlers_snapshot.go): `GetSnapshot`, `SyncNow`.
 - [server/cmd/prdash/run.go](../../server/cmd/prdash/run.go) and [accounts.go](../../server/cmd/prdash/accounts.go): wiring and the `Accounts` adapter.
@@ -50,6 +50,8 @@ Per refresh, independent of the number of PRs:
 - Backoff: GitHub rate limits wait for `Retry-After` or `resetAt`, other errors use `internal/backoff`. Jira honours `Retry-After` on `429` and `503`.
 
 ## Rules and invariants
+
+- Lifecycle: `New` creates the base context of every refresh, so `Sync`, `Trigger` and `Relink` work before `Run`. When `Run`'s context ends it cancels that context, refuses new refreshes (a flight that is already done with `context.Canceled`; a later `Run` starts afresh) and returns only after the running refresh goroutine has finished (a `sync.WaitGroup`), so nothing touches the database after the server closes it.
 
 - One refresh at a time. `Sync` and `Trigger` join the running one. `Relink` waits for it.
 - Exactly one store transaction per refresh that fetched GitHub data. A refresh without a GitHub fetch writes only the snapshot row.

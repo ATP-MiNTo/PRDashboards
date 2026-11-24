@@ -16,6 +16,10 @@ export function useSnapshotEvents(): void {
     source.addEventListener('snapshot', () => {
       void client.invalidateQueries({ queryKey: keys.snapshot });
     });
+    source.addEventListener('activity', () => {
+      void client.invalidateQueries({ queryKey: keys.activity });
+      void client.invalidateQueries({ queryKey: keys.retries });
+    });
     source.addEventListener('sync-status', (e) => {
       try {
         const data: unknown = JSON.parse((e as MessageEvent<string>).data);

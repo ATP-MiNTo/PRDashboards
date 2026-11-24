@@ -42,7 +42,7 @@ func TestMigrateFromEmptyCreatesEveryTable(t *testing.T) {
 	_, path, _ := open(t)
 	db := rawDB(t, path)
 	want := []string{
-		"activity", "oauth_states", "pending_retries", "prs", "repo_branch_rules", "repos", "rule_firings",
+		"activity", "idempotency", "oauth_states", "pending_retries", "prs", "repo_branch_rules", "repos", "rule_firings",
 		"schema_migrations", "sessions", "settings", "snapshot", "sync_rules", "ticket_links",
 	}
 	rows, err := db.Query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
@@ -83,7 +83,7 @@ func TestMigrationsAreRecordedOnceAndReopenIsIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 	var n int
-	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 1 {
+	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 2 {
 		t.Fatalf("migrations recorded %d, %v", n, err)
 	}
 }

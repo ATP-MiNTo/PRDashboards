@@ -511,10 +511,17 @@
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mergeButton:disabled {
   background: var(--surface2);
   color: var(--text);
-  font: inherit;
   opacity: 0.6;
+  cursor: default;
 }
 
 .reason {
@@ -527,4 +534,102 @@
   margin-top: 4px;
   color: var(--good);
   font-size: 12px;
+}
+
+.method {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.warning {
+  color: var(--warn);
+}
+
+.panelRow td {
+  padding: 0;
+  background: var(--surface2);
+}
+
+.mergePanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+.mergeLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.moves,
+.steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moveRow {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.moveChoice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field input,
+.field select {
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--page-bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.recent {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.recent h2 {
+  margin: 0;
+  font-size: 14px;
 }

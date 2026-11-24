@@ -21,6 +21,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/logging"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/netguard"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
@@ -166,6 +167,17 @@ func run(ctx context.Context, o options, e env) error {
 	if err := snapshots.Load(ctx); err != nil {
 		return fmt.Errorf("load snapshot: %w", err)
 	}
+	merger := merge.New(merge.Config{
+		GitHub:    ghClient,
+		Jira:      jiraClient,
+		Store:     db,
+		Snapshot:  snapshots,
+		Accounts:  acc,
+		Refresh:   func() { snapshots.Trigger() },
+		Publisher: hub,
+		Log:       log,
+		Clock:     e.clock,
+	})
 	handler, err := api.New(api.Config{
 		Port:     o.port,
 		Version:  e.version,
@@ -174,6 +186,7 @@ func run(ctx context.Context, o options, e env) error {
 		Store:    db,
 		OAuth:    oauth,
 		Poller:   snapshots,
+		Merger:   merger,
 		Jira:     jiraClient,
 		Accounts: acc,
 		Events:   hub,

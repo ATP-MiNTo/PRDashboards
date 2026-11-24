@@ -41,13 +41,18 @@ export async function fakeState<T = Record<string, unknown>>(
   return (await res.json()) as T;
 }
 
-// Session creation is rate limited (10 a minute), so the suite signs in once through the launch
-// URL, where the token travels in the fragment, and later tests reuse that session's cookies.
-let cookies: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
+// Session creation is rate limited (10 a minute), so each named session signs in once through the
+// launch URL, where the token travels in the fragment, and later tests reuse its cookies. Writes
+// are limited per session (30 a minute), so a spec that makes many writes asks for its own name.
+const sessions = new Map<
+  string,
+  Awaited<ReturnType<BrowserContext["cookies"]>>
+>();
 
-export async function signIn(page: Page) {
-  if (cookies) {
-    await page.context().addCookies(cookies);
+export async function signIn(page: Page, name = "shared") {
+  const saved = sessions.get(name);
+  if (saved) {
+    await page.context().addCookies(saved);
   } else {
     const { token } = JSON.parse(
       readFileSync(join(dataDir, "launch.token"), "utf8"),
@@ -59,7 +64,7 @@ export async function signIn(page: Page) {
   }
   await page.goto(`${APP}/accounts/`);
   await expect(page.getByText("Signed in", { exact: true })).toBeVisible();
-  cookies ??= await page.context().cookies();
+  if (!saved) sessions.set(name, await page.context().cookies());
 }
 
 // Disconnects whatever a previous test left behind, through the UI's own API.

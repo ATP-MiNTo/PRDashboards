@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -46,6 +47,8 @@ var (
 	ErrUnauthorized = errors.New("jira rejected the access token")
 	// ErrNotFound means the ticket does not exist or is not visible.
 	ErrNotFound = errors.New("jira ticket not found")
+	// ErrNoSite means Jira is connected but no site is selected.
+	ErrNoSite = errors.New("no Jira site selected")
 	// ErrBadInput means a key or a site id is not shaped like one.
 	ErrBadInput = errors.New("invalid ticket key or site id")
 
@@ -59,6 +62,8 @@ var (
 type StatusError struct {
 	Status     int
 	RetryAfter time.Duration
+	// Detail is the message Jira gave for a rejected request, shortened.
+	Detail string
 }
 
 func (e *StatusError) Error() string { return "jira answered " + strconv.Itoa(e.Status) }
@@ -484,4 +489,50 @@ func cmpName(name, value string) string {
 		return name
 	}
 	return value
+}
+
+// Transition moves a ticket with POST /issue/{key}/transitions. fields holds the values Jira
+// expects per field id (already shaped, for example {"id": "10000"} for a resolution). Jira's
+// reason for rejecting the request is in StatusError.Detail. The cached transitions of the ticket
+// are dropped, because its status changed.
+func (c *Client) Transition(ctx context.Context, site, key, id string, fields map[string]any) error {
+	if !keyShape.MatchString(key) {
+		return ErrBadInput
+	}
+	body := map[string]any{"transition": map[string]string{"id": id}}
+	if len(fields) > 0 {
+		body["fields"] = fields
+	}
+	status, raw, err := c.call(ctx, http.MethodPost, site, "/issue/"+key+"/transitions", nil, body)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	delete(c.transitions, site+"|"+key)
+	c.mu.Unlock()
+	if status == http.StatusNoContent || status == http.StatusOK {
+		return nil
+	}
+	if status == http.StatusBadRequest {
+		return &StatusError{Status: status, Detail: rejection(raw)}
+	}
+	return statusErr(status)
+}
+
+// rejection extracts Jira's own explanation from a 400 answer.
+func rejection(raw []byte) string {
+	var e struct {
+		ErrorMessages []string          `json:"errorMessages"`
+		Errors        map[string]string `json:"errors"`
+	}
+	_ = json.Unmarshal(raw, &e)
+	parts := slices.Clone(e.ErrorMessages)
+	for _, k := range slices.Sorted(maps.Keys(e.Errors)) {
+		parts = append(parts, k+": "+e.Errors[k])
+	}
+	out := strings.Join(parts, "; ")
+	if len(out) > 200 {
+		out = out[:200] + "..."
+	}
+	return out
 }

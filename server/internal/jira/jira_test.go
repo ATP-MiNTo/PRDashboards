@@ -360,3 +360,60 @@ func TestBadBodies(t *testing.T) {
 		t.Fatal("bad transitions body")
 	}
 }
+
+func TestTransitionPostsTheMoveAndDropsTheCache(t *testing.T) {
+	status := http.StatusNoContent
+	var reply string
+	r := newRig(t, func(c call, w http.ResponseWriter) bool {
+		if c.Method == http.MethodPost {
+			w.WriteHeader(status)
+			_, _ = io.WriteString(w, reply)
+			return true
+		}
+		_, _ = io.WriteString(w, `{"transitions":[]}`)
+		return true
+	})
+	ctx := context.Background()
+	const site = "cloud-1"
+	_, _ = r.c.Transitions(ctx, site, "INP-1")
+	if err := r.c.Transition(ctx, site, "INP-1", "31", map[string]any{"resolution": map[string]string{"id": "10000"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = r.c.Transitions(ctx, site, "INP-1")
+	calls := r.seen()
+	if len(calls) != 3 || calls[1].Method != http.MethodPost || calls[1].Path != "/ex/jira/cloud-1/rest/api/3/issue/INP-1/transitions" {
+		t.Fatalf("%+v", calls)
+	}
+	body := calls[1].Body
+	if tr, _ := body["transition"].(map[string]any); tr["id"] != "31" || body["fields"] == nil {
+		t.Fatalf("%+v", body)
+	}
+
+	if err := r.c.Transition(ctx, site, "INP-1", "21", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, has := r.seen()[3].Body["fields"]; has {
+		t.Fatal("empty fields are not sent")
+	}
+
+	status, reply = http.StatusBadRequest, `{"errorMessages":["Transition failed"],"errors":{"resolution":"Resolution is required"}}`
+	var se *jira.StatusError
+	if err := r.c.Transition(ctx, site, "INP-1", "31", nil); !errors.As(err, &se) || se.Status != 400 || se.Detail != "Transition failed; resolution: Resolution is required" {
+		t.Fatalf("%v", err)
+	}
+	reply = `{"errorMessages":["` + strings.Repeat("x", 300) + `"]}`
+	if err := r.c.Transition(ctx, site, "INP-1", "31", nil); !errors.As(err, &se) || len(se.Detail) != 203 {
+		t.Fatalf("%v", err)
+	}
+	status = http.StatusUnauthorized
+	if err := r.c.Transition(ctx, site, "INP-1", "31", nil); !errors.Is(err, jira.ErrUnauthorized) {
+		t.Fatalf("%v", err)
+	}
+	status = http.StatusNotFound
+	if err := r.c.Transition(ctx, site, "INP-1", "31", nil); !errors.Is(err, jira.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	if err := r.c.Transition(ctx, site, "lower-1", "31", nil); !errors.Is(err, jira.ErrBadInput) {
+		t.Fatalf("%v", err)
+	}
+}

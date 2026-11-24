@@ -9,6 +9,11 @@ const api = vi.hoisted(() => ({
   getSettings: vi.fn(),
   putSettings: vi.fn(),
   syncNow: vi.fn(),
+  getRepos: vi.fn(),
+  getActivity: vi.fn(),
+  getRetries: vi.fn(),
+  getAccounts: vi.fn(),
+  getSetup: vi.fn(),
 }));
 const renders = vi.hoisted(() => new Map<string, number>());
 
@@ -77,6 +82,17 @@ beforeEach(() => {
   api.putSettings.mockImplementation((s: unknown) => Promise.resolve(s));
   api.syncNow.mockResolvedValue({ running: true });
   api.getSnapshot.mockResolvedValue(snapshot(rows()));
+  api.getRepos.mockResolvedValue({ repos: [] });
+  api.getActivity.mockResolvedValue({ items: [], nextCursor: null });
+  api.getRetries.mockResolvedValue({ retries: [] });
+  api.getAccounts.mockResolvedValue({
+    github: { connected: false, login: null, method: null, warning: null },
+    jira: { connected: false, needsReconnect: false, sites: [], selectedSiteId: null },
+  });
+  api.getSetup.mockResolvedValue({
+    github: { configured: true, callbackUrl: '' },
+    atlassian: { configured: true, callbackUrl: '' },
+  });
   vi.stubGlobal('EventSource', FakeEventSource);
   document.documentElement.removeAttribute('data-mode');
 });
@@ -258,5 +274,51 @@ describe('CommandTable', () => {
 
     expect(renders.get('c')).toBe((before.get('c') ?? 0) + 1);
     for (const id of ['a', 'b', 'd']) expect(renders.get(id)).toBe(before.get(id));
+  });
+
+  it('shows the resolved merge method in the Method column', async () => {
+    api.getSnapshot.mockResolvedValue(
+      snapshot([
+        pr('a', 1, {
+          title: 'Add login',
+          mergeMethod: {
+            method: 'merge',
+            default: 'squash',
+            source: 'rule: main',
+            allowed: ['merge'],
+            warning: 'Repo disallows squash merge, using merge commit',
+          },
+        }),
+      ]),
+    );
+    renderWithClient(<CommandTable />);
+    const row = (await screen.findByText('Add login')).closest('tr')!;
+    expect(within(row).getByRole('combobox', { name: 'Merge method' })).toHaveTextContent(
+      'Merge commit (default)',
+    );
+    expect(within(row).getByText('Branch rule main')).toBeInTheDocument();
+    expect(
+      within(row).getByText('Repo disallows squash merge, using merge commit'),
+    ).toBeInTheDocument();
+  });
+
+  it('opens the merge panel under a ready row and closes it again', async () => {
+    renderWithClient(<CommandTable />);
+    const row = (await screen.findByText('Add login')).closest('tr')!;
+    const button = within(row).getByRole('button', { name: 'Merge' });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('group', { name: 'Merge #1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Merge #1' })).toBeNull();
+  });
+
+  it('opens the settings drawer from the top bar', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

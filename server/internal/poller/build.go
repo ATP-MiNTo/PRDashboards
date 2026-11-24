@@ -13,6 +13,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/stacks"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
@@ -47,10 +48,13 @@ func keysOf(ls []linked) []string {
 }
 
 type buildInput struct {
-	Now      time.Time
-	Version  int64
-	Linked   []linked
-	RepoNew  map[string]bool
+	Now     time.Time
+	Version int64
+	Linked  []linked
+	// Repos holds the merge settings of the repos the store knows. A repo missing from it is seen for
+	// the first time and gets NewRepo.
+	Repos    map[string]merge.Repo
+	NewRepo  merge.Repo
 	Issues   map[string]jira.Issue
 	Site     jira.Site
 	GitHub   gen.SourceStatus
@@ -102,12 +106,50 @@ func build(in buildInput) gen.Snapshot {
 	return snap
 }
 
+// mergeRepos maps the stored repos to the resolver's input.
+func mergeRepos(repos []store.RepoConfig) map[string]merge.Repo {
+	out := make(map[string]merge.Repo, len(repos))
+	for _, r := range repos {
+		rules := make([]merge.Rule, len(r.Rules))
+		for i, rule := range r.Rules {
+			rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
+		}
+		out[r.ID] = merge.Repo{Default: merge.Method(r.DefaultMethod), IsNew: r.IsNew, Rules: rules}
+	}
+	return out
+}
+
+// newRepo is the configuration of a repo the store has not seen: the global default for new repos
+// and the seeded branch rules.
+func newRepo(method string) merge.Repo {
+	rules := make([]merge.Rule, len(store.SeedRules))
+	for i, rule := range store.SeedRules {
+		rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
+	}
+	return merge.Repo{Default: merge.Method(method), IsNew: true, Rules: rules}
+}
+
+func resolutionOf(r merge.Resolution) gen.MethodResolution {
+	allowed := make([]gen.MergeMethodName, len(r.Allowed))
+	for i, m := range r.Allowed {
+		allowed[i] = gen.MergeMethodName(m)
+	}
+	return gen.MethodResolution{
+		Method: gen.MergeMethodName(r.Method), Default: gen.MergeMethodName(r.Default), Source: r.Source,
+		Allowed: allowed, Warning: ptr(r.Warning),
+	}
+}
+
 func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.SnapshotPr {
 	pr := l.pr
+	repo, known := in.Repos[pr.Repo.ID]
+	if !known {
+		repo = in.NewRepo
+	}
 	row := gen.SnapshotPr{
 		Id: pr.ID, Number: pr.Number, Title: pr.Title,
 		Repo: gen.SnapshotRepo{
-			Id: pr.Repo.ID, NameWithOwner: pr.Repo.NameWithOwner, IsNew: in.RepoNew[pr.Repo.ID],
+			Id: pr.Repo.ID, NameWithOwner: pr.Repo.NameWithOwner, IsNew: repo.IsNew,
 			SquashAllowed: pr.Repo.SquashAllowed, MergeAllowed: pr.Repo.MergeAllowed, RebaseAllowed: pr.Repo.RebaseAllowed,
 		},
 		IsDraft:          pr.Draft,
@@ -120,6 +162,8 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		ReviewRequests: append([]string{}, pr.ReviewRequests...),
 		RemovedKeys:    append([]string{}, l.removed...),
 		Tickets:        make([]gen.SnapshotTicket, 0, len(l.res.Links)),
+		MergeMethod: resolutionOf(merge.Resolve(repo, pr.BaseRef,
+			merge.Allowed{Squash: pr.Repo.SquashAllowed, Merge: pr.Repo.MergeAllowed, Rebase: pr.Repo.RebaseAllowed})),
 	}
 	if d := gen.SnapshotPrReviewDecision(pr.ReviewDecision); d != "" {
 		row.ReviewDecision = &d
