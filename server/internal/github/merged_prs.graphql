@@ -1,0 +1,22 @@
+query MergedPullRequests($q: String!, $cursor: String) {
+  rateLimit {
+    limit
+    cost
+    remaining
+    resetAt
+  }
+  search(query: $q, type: ISSUE, first: 50, after: $cursor) {
+    issueCount
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
+    nodes {
+      __typename
+      ... on PullRequest {
+        id
+        mergedAt
+      }
+    }
+  }
+}

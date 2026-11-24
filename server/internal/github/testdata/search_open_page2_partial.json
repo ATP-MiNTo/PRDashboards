@@ -1,0 +1,89 @@
+{
+  "status": 200,
+  "headers": {
+    "X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=ABC"
+  },
+  "body": {
+    "data": {
+      "rateLimit": {
+        "limit": 5000,
+        "cost": 1,
+        "remaining": 4989,
+        "resetAt": "2026-11-24T10:00:00Z"
+      },
+      "search": {
+        "issueCount": 3,
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": "CURSOR2"
+        },
+        "nodes": [
+          {
+            "__typename": "PullRequest",
+            "id": "PR_3",
+            "number": 7,
+            "title": "Fix api",
+            "url": "https://github.com/acme/api/pull/7",
+            "isDraft": false,
+            "mergeable": "CONFLICTING",
+            "mergeStateStatus": "DIRTY",
+            "reviewDecision": "CHANGES_REQUESTED",
+            "headRefName": "fix/api",
+            "headRefOid": "sha-7",
+            "baseRefName": "develop",
+            "repository": {
+              "id": "R_api",
+              "nameWithOwner": "acme/api",
+              "squashMergeAllowed": true,
+              "mergeCommitAllowed": true,
+              "rebaseMergeAllowed": true
+            },
+            "commits": {
+              "nodes": []
+            },
+            "latestReviews": {
+              "nodes": [
+                {
+                  "id": "RV_7",
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-24T08:30:00Z",
+                  "author": {
+                    "login": "alice"
+                  }
+                }
+              ]
+            },
+            "reviewRequests": {
+              "nodes": [
+                {
+                  "requestedReviewer": {
+                    "__typename": "User",
+                    "id": "U_bob"
+                  }
+                },
+                {
+                  "requestedReviewer": null
+                }
+              ]
+            }
+          },
+          null,
+          {
+            "__typename": "Issue"
+          }
+        ]
+      }
+    },
+    "errors": [
+      {
+        "type": "FORBIDDEN",
+        "path": [
+          "search",
+          "nodes",
+          1
+        ],
+        "message": "Resource protected by organization SAML enforcement. The `acme-corp` organization requires SSO."
+      }
+    ]
+  }
+}

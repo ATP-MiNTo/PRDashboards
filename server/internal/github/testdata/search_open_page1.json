@@ -1,0 +1,266 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "data": {
+      "rateLimit": {
+        "limit": 5000,
+        "cost": 1,
+        "remaining": 4990,
+        "resetAt": "2026-11-24T10:00:00Z"
+      },
+      "search": {
+        "issueCount": 3,
+        "pageInfo": {
+          "hasNextPage": true,
+          "endCursor": "CURSOR1"
+        },
+        "nodes": [
+          {
+            "__typename": "PullRequest",
+            "id": "PR_1",
+            "number": 101,
+            "title": "INP-101 Add login",
+            "url": "https://github.com/acme/web/pull/101",
+            "isDraft": false,
+            "mergeable": "MERGEABLE",
+            "mergeStateStatus": "CLEAN",
+            "reviewDecision": "APPROVED",
+            "headRefName": "feat/INP-101-login",
+            "headRefOid": "sha-101",
+            "baseRefName": "main",
+            "repository": {
+              "id": "R_web",
+              "nameWithOwner": "acme/web",
+              "squashMergeAllowed": true,
+              "mergeCommitAllowed": true,
+              "rebaseMergeAllowed": true
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "committedDate": "2026-11-24T08:00:00Z",
+                    "statusCheckRollup": {
+                      "state": "FAILURE",
+                      "contexts": {
+                        "totalCount": 60,
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "lint",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/2",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:02:30Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "unit",
+                            "status": "COMPLETED",
+                            "conclusion": "FAILURE",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/3",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:05:00Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "e2e",
+                            "status": "IN_PROGRESS",
+                            "conclusion": null,
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/4",
+                            "startedAt": "2026-11-24T08:03:00Z",
+                            "completedAt": null,
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "deploy-preview",
+                            "status": "QUEUED",
+                            "conclusion": null,
+                            "detailsUrl": null,
+                            "startedAt": null,
+                            "completedAt": null,
+                            "checkSuite": null
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "docs",
+                            "status": "COMPLETED",
+                            "conclusion": "SKIPPED",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/5",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:01:01Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "nightly",
+                            "status": "COMPLETED",
+                            "conclusion": "CANCELLED",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/6",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:01:10Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "CheckRun",
+                            "name": "advisory",
+                            "status": "COMPLETED",
+                            "conclusion": "NEUTRAL",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/7",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:01:20Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "Advisor"
+                              }
+                            }
+                          },
+                          {
+                            "__typename": "StatusContext",
+                            "context": "ci/jenkins",
+                            "state": "SUCCESS",
+                            "targetUrl": "https://ci.example.com/job/web/42",
+                            "createdAt": "2026-11-24T08:02:00Z"
+                          },
+                          {
+                            "__typename": "StatusContext",
+                            "context": "ci/legacy",
+                            "state": "ERROR",
+                            "targetUrl": "http://insecure.example.com/1",
+                            "createdAt": "2026-11-24T08:02:00Z"
+                          },
+                          {
+                            "__typename": "StatusContext",
+                            "context": "ci/queue",
+                            "state": "EXPECTED",
+                            "targetUrl": null,
+                            "createdAt": "2026-11-24T08:02:00Z"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "latestReviews": {
+              "nodes": [
+                {
+                  "id": "RV_101",
+                  "state": "APPROVED",
+                  "submittedAt": "2026-11-24T08:30:00Z",
+                  "author": {
+                    "login": "alice"
+                  }
+                }
+              ]
+            },
+            "reviewRequests": {
+              "nodes": [
+                {
+                  "requestedReviewer": {
+                    "__typename": "User",
+                    "id": "U_bob"
+                  }
+                },
+                {
+                  "requestedReviewer": null
+                }
+              ]
+            }
+          },
+          {
+            "__typename": "PullRequest",
+            "id": "PR_2",
+            "number": 102,
+            "title": "Draft work",
+            "url": "https://github.com/acme/web/pull/102",
+            "isDraft": true,
+            "mergeable": "UNKNOWN",
+            "mergeStateStatus": "DRAFT",
+            "reviewDecision": null,
+            "headRefName": "feat/draft",
+            "headRefOid": "sha-102",
+            "baseRefName": "main",
+            "repository": {
+              "id": "R_web",
+              "nameWithOwner": "acme/web",
+              "squashMergeAllowed": false,
+              "mergeCommitAllowed": true,
+              "rebaseMergeAllowed": true
+            },
+            "commits": {
+              "nodes": [
+                {
+                  "commit": {
+                    "committedDate": "2026-11-23T08:00:00Z",
+                    "statusCheckRollup": {
+                      "state": "SUCCESS",
+                      "contexts": {
+                        "totalCount": 1,
+                        "nodes": [
+                          {
+                            "__typename": "CheckRun",
+                            "name": "lint",
+                            "status": "COMPLETED",
+                            "conclusion": "SUCCESS",
+                            "detailsUrl": "https://github.com/acme/web/actions/runs/1/job/2",
+                            "startedAt": "2026-11-24T08:01:00Z",
+                            "completedAt": "2026-11-24T08:02:30Z",
+                            "checkSuite": {
+                              "app": {
+                                "name": "GitHub Actions"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "latestReviews": {
+              "nodes": [
+                {
+                  "id": "RV_x",
+                  "state": "COMMENTED",
+                  "submittedAt": null,
+                  "author": null
+                }
+              ]
+            },
+            "reviewRequests": {
+              "nodes": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

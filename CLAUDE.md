@@ -24,15 +24,23 @@ tickets, with merge and Jira status sync. Background: [docs/PRD.md](docs/PRD.md)
 
 ## Commands
 
-Not built yet. Planned:
-
 ```sh
-scripts/start.sh            # build if needed, run, open the browser
-go test -race ./server/...  # server tests
-pnpm -C web test            # UI tests
-pnpm -C web build           # static export
-pnpm e2e                    # Playwright against the e2e build
+scripts/start.sh [--port N] [--data-dir DIR] [--no-browser]   # build if needed, run, open the browser
+pnpm install                    # once, from the repo root (workspace: web)
+pnpm gen                        # regenerate Go and TS code from api/openapi.yaml
+go test -race ./server/...      # server tests (go.work at the root; or run `go test -race ./...` in server/)
+golangci-lint run               # lint, from server/
+pnpm coverage-check             # 90% gate for rules, linking, stacks, merge once they exist
+pnpm -C web typecheck           # also: lint, format:check, test, build (build writes the manifest, icons, out/csp.json and out/sw.js)
+pnpm docs-check                 # feature docs, links, index
+pnpm version-check              # VERSION and CHANGELOG; add `--base origin/main` to compare
+pnpm test:scripts               # tests of the check scripts
+pnpm e2e                        # build the e2e binary (fake GitHub and Atlassian) and run Playwright
 ```
+
+`pnpm e2e` builds the web export and `bin/prdash-e2e` (`-tags e2e`), starts it with `--fake` and runs
+the Playwright specs in `e2e/` with Chromium from `PW_CHROMIUM_PATH` (else
+`/opt/pw-browsers/chromium`; CI installs its own).
 
 ## Security
 

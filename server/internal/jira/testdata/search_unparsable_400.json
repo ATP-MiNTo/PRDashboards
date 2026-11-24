@@ -1,0 +1,10 @@
+{
+  "status": 400,
+  "headers": {},
+  "body": {
+    "errorMessages": [
+      "The operator 'in' is not supported."
+    ],
+    "errors": {}
+  }
+}

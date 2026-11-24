@@ -1,0 +1,47 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "issues": [
+      {
+        "id": "1",
+        "key": "INP-7",
+        "fields": {
+          "summary": "Seven",
+          "status": {
+            "name": "In Progress",
+            "statusCategory": {
+              "key": "indeterminate"
+            }
+          },
+          "project": {
+            "key": "INP"
+          },
+          "issuetype": {
+            "name": "Story"
+          }
+        }
+      },
+      {
+        "id": "1",
+        "key": "OPS-3",
+        "fields": {
+          "summary": "Three",
+          "status": {
+            "name": "To Do",
+            "statusCategory": {
+              "key": "new"
+            }
+          },
+          "project": {
+            "key": "OPS"
+          },
+          "issuetype": {
+            "name": "Task"
+          }
+        }
+      }
+    ],
+    "isLast": true
+  }
+}

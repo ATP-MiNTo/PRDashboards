@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "values": [
+      {
+        "key": "INP"
+      },
+      {
+        "key": "OPS"
+      }
+    ],
+    "isLast": false,
+    "total": 3
+  }
+}

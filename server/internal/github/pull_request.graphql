@@ -1,0 +1,14 @@
+query PullRequest($id: ID!) {
+  rateLimit {
+    limit
+    cost
+    remaining
+    resetAt
+  }
+  node(id: $id) {
+    __typename
+    ... on PullRequest {
+      ...PullRequestFields
+    }
+  }
+}

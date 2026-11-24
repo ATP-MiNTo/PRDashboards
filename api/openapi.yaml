@@ -1,0 +1,1658 @@
+openapi: 3.0.3
+info:
+  title: PR Dashboards API
+  version: 0.1.0
+  description: >
+    Same-origin API of the local prdash binary. Every request passes the middleware chain in
+    docs/TECH_SPEC.md section 8.4. Errors use application/problem+json with a stable code.
+paths:
+  /api/session:
+    post:
+      operationId: createSession
+      summary: Exchange a one-time launch token for a session cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '204':
+          description: Session created. The prd_session cookie is set.
+          headers:
+            Set-Cookie:
+              description: The prd_session cookie.
+              required: true
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/InvalidLaunchToken'
+    get:
+      operationId: getSession
+      summary: Session info and CSRF token
+      responses:
+        '200':
+          description: The current session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+  /api/sessions/revoke-all:
+    post:
+      operationId: revokeAllSessions
+      summary: Sign out every browser, including this one
+      responses:
+        '204':
+          description: Every session is deleted. The response expires the prd_session cookie.
+          headers:
+            Set-Cookie:
+              description: The expired prd_session cookie.
+              required: true
+              schema:
+                type: string
+  /api/settings:
+    get:
+      operationId: getSettings
+      summary: Global settings
+      responses:
+        '200':
+          description: The current settings, with defaults for anything never saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+    put:
+      operationId: putSettings
+      summary: Replace the global settings
+      description: >
+        Stores every setting in one transaction. A non-null jiraSiteId must be one of the sites of
+        the connected Atlassian account, otherwise the problem code is unknown_site.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settings'
+      responses:
+        '200':
+          description: The saved settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Settings'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/setup:
+    get:
+      operationId: getSetup
+      summary: Which OAuth apps are configured, and the callback URLs to register
+      description: Never returns a client id or a secret.
+      responses:
+        '200':
+          description: Setup state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Setup'
+  /api/setup/{provider}:
+    put:
+      operationId: putSetupClient
+      summary: Store the OAuth app client credentials of a provider in the secrets store
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientCredentials'
+      responses:
+        '204':
+          description: Stored.
+  /api/github/pat:
+    put:
+      operationId: putGithubPat
+      summary: Validate and store a GitHub personal access token
+      description: >
+        Checks the token with viewer { login } and the X-OAuth-Scopes header. Classic tokens need
+        repo and read:org (problem code insufficient_scopes otherwise). Fine-grained tokens are
+        accepted with a warning.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatRequest'
+      responses:
+        '200':
+          description: The token is stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubAccount'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/accounts:
+    get:
+      operationId: getAccounts
+      summary: Connection state of GitHub and Jira
+      description: Reads stored state only. It never calls GitHub or Atlassian.
+      responses:
+        '200':
+          description: The accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accounts'
+  /api/accounts/{provider}:
+    delete:
+      operationId: disconnectAccount
+      summary: Remove the stored tokens of a provider
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '204':
+          description: Disconnected. Client credentials are kept.
+  /api/accounts/{provider}/check:
+    post:
+      operationId: checkAccount
+      summary: Check a connection with the provider now
+      description: >
+        A user action. GitHub: asks who the token belongs to. Atlassian: refreshes the access token
+        when needed and reloads the site list. A refresh that Atlassian rejects sets needsReconnect.
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '200':
+          description: The accounts after the check.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Accounts'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/oauth/complete:
+    post:
+      operationId: completeOAuth
+      summary: Finish an OAuth authorization with the code and state from the provider redirect
+      description: >
+        Called by the static /oauth/finish/ page. The state must be unspent, unexpired, issued for
+        this provider and this session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthComplete'
+      responses:
+        '204':
+          description: Tokens are stored.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/snapshot:
+    get:
+      operationId: getSnapshot
+      summary: The latest dashboard snapshot
+      description: >
+        The ETag is the snapshot version. A matching If-None-Match answers 304 without a body. Before
+        the first refresh the version is 0 and the list is empty.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        '200':
+          description: The snapshot.
+          headers:
+            ETag:
+              description: The snapshot version as a quoted string.
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        '304':
+          description: The caller already has this version.
+  /api/sync:
+    post:
+      operationId: syncNow
+      summary: Start a refresh now
+      description: >
+        Joins the running refresh when there is one. The answer does not wait for the refresh. The
+        end is announced by the snapshot event on /events.
+      responses:
+        '202':
+          description: The refresh is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncStatus'
+  /api/tickets/assigned:
+    get:
+      operationId: getAssignedTickets
+      summary: Jira tickets assigned to the user, for the ticket picker
+      description: One JQL per Jira interval, served from a cache in between.
+      responses:
+        '200':
+          description: Up to 100 open tickets, newest update first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignedTickets'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/tickets/{key}/transitions:
+    get:
+      operationId: getTransitions
+      summary: Transitions available for a ticket, with the fields they require
+      description: Cached per ticket for 60 seconds.
+      parameters:
+        - $ref: '#/components/parameters/TicketKey'
+      responses:
+        '200':
+          description: The transitions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transitions'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/prs/{id}/tickets:
+    put:
+      operationId: putPrTickets
+      summary: Set the manual ticket links and the hidden keys of a pull request
+      description: >
+        Replaces both lists in one transaction, then rebuilds the snapshot from the data already
+        fetched, with one Jira lookup for keys it has not seen. No GitHub call. The two lists must
+        not share a key.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketLinks'
+      responses:
+        '204':
+          description: Saved. A snapshot event follows.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/repos:
+    get:
+      operationId: listRepos
+      summary: Every repository the dashboard has seen, with its merge settings
+      description: Reads stored state only. Open pull request counts come from the stored pull requests.
+      responses:
+        '200':
+          description: The repositories, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repos'
+  /api/repos/{id}:
+    get:
+      operationId: getRepo
+      summary: Merge settings of one repository
+      parameters:
+        - $ref: '#/components/parameters/RepoId'
+      responses:
+        '200':
+          description: The repository.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepoSettings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      operationId: putRepo
+      summary: Set the default method and replace the branch rules of a repository
+      description: >
+        Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data
+        already fetched. No GitHub or Jira call. clearNew marks the repository as seen.
+      parameters:
+        - $ref: '#/components/parameters/RepoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RepoUpdate'
+      responses:
+        '200':
+          description: The saved repository.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepoSettings'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/rules:
+    get:
+      operationId: getRules
+      summary: The ordered status sync rules
+      responses:
+        '200':
+          description: Every rule, first match first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rules'
+    put:
+      operationId: putRules
+      summary: Replace the whole ordered list of status sync rules
+      description: >
+        Replaces the list in one transaction (at most 100 rules). A rule that is new or whose
+        condition changed starts with no stored fingerprints, so it is evaluated against the current
+        data. With baseline true, the fingerprints that hold now are recorded for those rules
+        instead, so existing tickets are not moved ("Don't move existing tickets"). The rules are
+        then evaluated again from cached data. Problem code invalid_rule for a rule that fails the
+        checks the schema cannot express.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulesUpdate'
+      responses:
+        '200':
+          description: The saved rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rules'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/rules/preview:
+    post:
+      operationId: previewRule
+      summary: The tickets a rule would move now
+      description: >
+        Evaluates one rule against the cached snapshot as if it had never fired. No GitHub or Jira
+        call, and nothing is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulePreviewRequest'
+      responses:
+        '200':
+          description: The tickets that would move, and the tickets still waiting on other pull requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePreview'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/prs/{id}/merge:
+    post:
+      operationId: mergePr
+      summary: Merge a pull request and move its tickets
+      description: >
+        Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and
+        checked before anything is written. A refusal is a 409 with the fresh state of the pull
+        request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or
+        transition_unavailable. A repeated Idempotency-Key returns the first result. Once GitHub has
+        merged, failed steps are reported in the result and the merge is never rolled back.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MergeRequest'
+      responses:
+        '200':
+          description: The pull request is merged. Steps tell what happened to the rest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MergeResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The state does not allow the merge.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/MergeProblem'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/retries:
+    get:
+      operationId: listRetries
+      summary: Failed transitions waiting for a retry
+      responses:
+        '200':
+          description: The pending retries, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Retries'
+  /api/retries/{id}:
+    post:
+      operationId: retryTransition
+      summary: Try a failed transition again
+      description: >
+        The transition must still be available for the ticket. A transition that fails again keeps
+        its retry and is reported in the step.
+      parameters:
+        - $ref: '#/components/parameters/RetryId'
+      responses:
+        '200':
+          description: The outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetryResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+    delete:
+      operationId: dismissRetry
+      summary: Forget a failed transition
+      parameters:
+        - $ref: '#/components/parameters/RetryId'
+      responses:
+        '204':
+          description: Dismissed.
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/activity:
+    get:
+      operationId: getActivity
+      summary: The activity log, newest first
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Return entries with an id below this one.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: One page.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityPage'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: prd_session
+  schemas:
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [launchToken]
+      properties:
+        launchToken:
+          type: string
+          minLength: 1
+          maxLength: 128
+    Session:
+      type: object
+      additionalProperties: false
+      required: [csrfToken, expiresAt, version]
+      properties:
+        csrfToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+    Provider:
+      type: string
+      enum: [github, atlassian]
+    PollingSeconds:
+      type: integer
+      enum: [60, 120, 300, 900, 3600]
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, jiraSiteId]
+      properties:
+        polling:
+          type: object
+          additionalProperties: false
+          required: [githubSec, jiraSec]
+          properties:
+            githubSec:
+              $ref: '#/components/schemas/PollingSeconds'
+            jiraSec:
+              $ref: '#/components/schemas/PollingSeconds'
+        theme:
+          type: string
+          enum: [light, dark, auto]
+        defaultMethodForNewRepos:
+          type: string
+          enum: [squash, merge, rebase]
+        deleteBranchAfterMerge:
+          type: boolean
+        jiraSiteId:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 128
+    ClientCredentials:
+      type: object
+      additionalProperties: false
+      required: [clientId, clientSecret]
+      properties:
+        clientId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        clientSecret:
+          type: string
+          minLength: 1
+          maxLength: 512
+    ProviderSetup:
+      type: object
+      additionalProperties: false
+      required: [configured, callbackUrl]
+      properties:
+        configured:
+          type: boolean
+        callbackUrl:
+          type: string
+    Setup:
+      type: object
+      additionalProperties: false
+      required: [github, atlassian]
+      properties:
+        github:
+          $ref: '#/components/schemas/ProviderSetup'
+        atlassian:
+          $ref: '#/components/schemas/ProviderSetup'
+    PatRequest:
+      type: object
+      additionalProperties: false
+      required: [token]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 512
+    OAuthComplete:
+      type: object
+      additionalProperties: false
+      required: [provider, code, state]
+      properties:
+        provider:
+          $ref: '#/components/schemas/Provider'
+        code:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        state:
+          type: string
+          minLength: 1
+          maxLength: 256
+    GithubAccount:
+      type: object
+      additionalProperties: false
+      required: [connected]
+      properties:
+        connected:
+          type: boolean
+        login:
+          type: string
+        method:
+          type: string
+          enum: [oauth, pat]
+        warning:
+          type: string
+    JiraSite:
+      type: object
+      additionalProperties: false
+      required: [id, name, url]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        url:
+          type: string
+    JiraAccount:
+      type: object
+      additionalProperties: false
+      required: [connected, sites, selectedSiteId, needsReconnect]
+      properties:
+        connected:
+          type: boolean
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/JiraSite'
+        selectedSiteId:
+          type: string
+          nullable: true
+        needsReconnect:
+          type: boolean
+    Accounts:
+      type: object
+      additionalProperties: false
+      required: [github, jira]
+      properties:
+        github:
+          $ref: '#/components/schemas/GithubAccount'
+        jira:
+          $ref: '#/components/schemas/JiraAccount'
+    TicketKey:
+      type: string
+      pattern: '^[A-Z][A-Z0-9]+-[0-9]+$'
+      maxLength: 64
+    TicketLinks:
+      type: object
+      additionalProperties: false
+      required: [manual, removed]
+      properties:
+        manual:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TicketKey'
+        removed:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TicketKey'
+    SyncStatus:
+      type: object
+      additionalProperties: false
+      required: [running, githubAt, jiraAt, nextGithubAt, nextJiraAt]
+      properties:
+        running:
+          type: boolean
+        githubAt:
+          type: string
+          format: date-time
+          nullable: true
+        jiraAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextGithubAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextJiraAt:
+          type: string
+          format: date-time
+          nullable: true
+    SourceState:
+      type: string
+      enum: [pending, ok, rate_limited, error, unreachable, disconnected]
+    SourceStatus:
+      type: object
+      additionalProperties: false
+      required: [state, syncedAt, error, resetAt]
+      properties:
+        state:
+          $ref: '#/components/schemas/SourceState'
+        syncedAt:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        resetAt:
+          type: string
+          format: date-time
+          nullable: true
+    BlockedOrg:
+      type: object
+      additionalProperties: false
+      required: [org]
+      properties:
+        org:
+          type: string
+          description: The organization login, or an empty string when GitHub did not name it.
+    Sources:
+      type: object
+      additionalProperties: false
+      required: [github, jira, blockedOrgs]
+      properties:
+        github:
+          $ref: '#/components/schemas/SourceStatus'
+        jira:
+          $ref: '#/components/schemas/SourceStatus'
+        blockedOrgs:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedOrg'
+    Warning:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [version, generatedAt, sources, prs, warnings]
+      properties:
+        version:
+          type: integer
+          format: int64
+        generatedAt:
+          type: string
+          format: date-time
+        sources:
+          $ref: '#/components/schemas/Sources'
+        prs:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotPr'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Warning'
+    SnapshotRepo:
+      type: object
+      additionalProperties: false
+      required: [id, nameWithOwner, isNew, squashAllowed, mergeAllowed, rebaseAllowed]
+      properties:
+        id:
+          type: string
+        nameWithOwner:
+          type: string
+        isNew:
+          type: boolean
+        squashAllowed:
+          type: boolean
+        mergeAllowed:
+          type: boolean
+        rebaseAllowed:
+          type: boolean
+    CheckState:
+      type: string
+      enum: [passing, failing, running, pending, skipped, neutral, cancelled]
+    CiState:
+      type: string
+      enum: [passing, failing, running, none]
+    Check:
+      type: object
+      additionalProperties: false
+      required: [name, app, state, url, startedAt, completedAt]
+      properties:
+        name:
+          type: string
+        app:
+          type: string
+          nullable: true
+        state:
+          $ref: '#/components/schemas/CheckState'
+        url:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+    Ci:
+      type: object
+      additionalProperties: false
+      required: [state, total, checks]
+      properties:
+        state:
+          $ref: '#/components/schemas/CiState'
+        total:
+          type: integer
+          description: Number of checks GitHub reports. Larger than checks when the list was cut at 50.
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Check'
+    Review:
+      type: object
+      additionalProperties: false
+      required: [id, state, submittedAt, author]
+      properties:
+        id:
+          type: string
+        state:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+          nullable: true
+        author:
+          type: string
+          nullable: true
+    StackInfo:
+      type: object
+      additionalProperties: false
+      required: [id, position, size, parentId, parentNumber]
+      properties:
+        id:
+          type: string
+          description: Id of the PR at the base of the stack.
+        position:
+          type: integer
+          description: 1-based position in the stack.
+        size:
+          type: integer
+        parentId:
+          type: string
+          nullable: true
+        parentNumber:
+          type: integer
+          nullable: true
+    TicketSource:
+      type: string
+      enum: [branch, title, manual]
+    TicketSummary:
+      type: object
+      additionalProperties: false
+      required: [key, summary, status, statusCategory, project, issueType]
+      properties:
+        key:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+        statusCategory:
+          type: string
+          enum: [new, indeterminate, done]
+        project:
+          type: string
+        issueType:
+          type: string
+    SnapshotTicket:
+      type: object
+      additionalProperties: false
+      required: [key, source, found, summary, status, statusCategory, project, issueType, url, waiting, mergePlan]
+      properties:
+        key:
+          type: string
+        source:
+          $ref: '#/components/schemas/TicketSource'
+        found:
+          type: boolean
+          description: False when Jira has no such ticket, or has not been asked yet.
+        summary:
+          type: string
+          nullable: true
+        status:
+          type: string
+          nullable: true
+        statusCategory:
+          type: string
+          nullable: true
+        project:
+          type: string
+        issueType:
+          type: string
+          nullable: true
+        url:
+          type: string
+          nullable: true
+          description: Browse URL built from the Jira site and the key. Null without a site.
+        waiting:
+          allOf:
+            - $ref: '#/components/schemas/TicketWaiting'
+          nullable: true
+        mergePlan:
+          allOf:
+            - $ref: '#/components/schemas/TicketMergePlan'
+          nullable: true
+    TicketLookup:
+      type: string
+      enum: [ok, unverified, unreachable]
+    SnapshotPr:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - number
+        - title
+        - repo
+        - isDraft
+        - mergeable
+        - mergeStateStatus
+        - reviewDecision
+        - headRef
+        - headSha
+        - baseRef
+        - committedAt
+        - ci
+        - reviews
+        - reviewRequests
+        - stack
+        - tickets
+        - removedKeys
+        - ticketLookup
+        - mergeMethod
+      properties:
+        id:
+          type: string
+        number:
+          type: integer
+        title:
+          type: string
+        repo:
+          $ref: '#/components/schemas/SnapshotRepo'
+        isDraft:
+          type: boolean
+        mergeable:
+          type: string
+          enum: [MERGEABLE, CONFLICTING, UNKNOWN]
+        mergeStateStatus:
+          type: string
+        reviewDecision:
+          type: string
+          nullable: true
+          enum: [APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, null]
+        headRef:
+          type: string
+        headSha:
+          type: string
+        baseRef:
+          type: string
+        committedAt:
+          type: string
+          format: date-time
+          nullable: true
+        ci:
+          $ref: '#/components/schemas/Ci'
+        reviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        reviewRequests:
+          type: array
+          items:
+            type: string
+        stack:
+          allOf:
+            - $ref: '#/components/schemas/StackInfo'
+          nullable: true
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotTicket'
+        removedKeys:
+          type: array
+          items:
+            type: string
+        ticketLookup:
+          $ref: '#/components/schemas/TicketLookup'
+        mergeMethod:
+          $ref: '#/components/schemas/MethodResolution'
+    AssignedTickets:
+      type: object
+      additionalProperties: false
+      required: [tickets]
+      properties:
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketSummary'
+    TransitionField:
+      type: object
+      additionalProperties: false
+      required: [id, name, required, type, allowedValues]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        required:
+          type: boolean
+        type:
+          type: string
+        allowedValues:
+          type: array
+          items:
+            $ref: '#/components/schemas/NamedId'
+    NamedId:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    Transition:
+      type: object
+      additionalProperties: false
+      required: [id, name, toStatus, toCategory, fields]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        toStatus:
+          type: string
+        toCategory:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitionField'
+    Transitions:
+      type: object
+      additionalProperties: false
+      required: [key, transitions]
+      properties:
+        key:
+          type: string
+        transitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transition'
+    MergeMethodName:
+      type: string
+      enum: [squash, merge, rebase]
+    MethodResolution:
+      type: object
+      additionalProperties: false
+      required: [method, default, source, allowed, warning]
+      properties:
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        default:
+          allOf:
+            - $ref: '#/components/schemas/MergeMethodName'
+          description: The configured method, before the fallback for a method the repository disallows.
+        source:
+          type: string
+          description: 'One of "rule: <pattern>", "repo default" or "new repo default".'
+        allowed:
+          type: array
+          items:
+            $ref: '#/components/schemas/MergeMethodName'
+        warning:
+          type: string
+          nullable: true
+    BranchRule:
+      type: object
+      additionalProperties: false
+      required: [pattern, method]
+      properties:
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]+$'
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+    RepoSettings:
+      type: object
+      additionalProperties: false
+      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules]
+      properties:
+        id:
+          type: string
+        nameWithOwner:
+          type: string
+        isNew:
+          type: boolean
+        openPrs:
+          type: integer
+        defaultMethod:
+          $ref: '#/components/schemas/MergeMethodName'
+        branchRules:
+          type: array
+          items:
+            $ref: '#/components/schemas/BranchRule'
+    Repos:
+      type: object
+      additionalProperties: false
+      required: [repos]
+      properties:
+        repos:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepoSettings'
+    RepoUpdate:
+      type: object
+      additionalProperties: false
+      required: [defaultMethod, branchRules, clearNew]
+      properties:
+        defaultMethod:
+          $ref: '#/components/schemas/MergeMethodName'
+        branchRules:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/BranchRule'
+        clearNew:
+          type: boolean
+    RuleTrigger:
+      type: string
+      enum:
+        - review_submitted
+        - review_approved
+        - changes_requested
+        - review_requested
+        - ready_for_review
+        - commit_stale
+        - ci_failing
+        - ci_passing
+        - merged
+    RuleMode:
+      type: string
+      enum: [all, any]
+    RuleFilters:
+      type: object
+      additionalProperties: false
+      required: [repo, branch, project, issueType, status]
+      description: Every filter is optional (an empty string is no filter) and they combine with AND.
+      properties:
+        repo:
+          type: string
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]*$'
+        branch:
+          type: string
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]*$'
+        project:
+          type: string
+          maxLength: 50
+          pattern: '^[A-Za-z0-9_]*$'
+        issueType:
+          type: string
+          maxLength: 100
+        status:
+          type: string
+          maxLength: 100
+    SyncRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, enabled, trigger, hours, filters, target, mode]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+        name:
+          type: string
+          maxLength: 100
+        enabled:
+          type: boolean
+        trigger:
+          $ref: '#/components/schemas/RuleTrigger'
+        hours:
+          type: integer
+          minimum: 0
+          maximum: 720
+          description: Age of the latest commit in hours, 1 to 720, for commit_stale. 0 for every other trigger.
+        filters:
+          $ref: '#/components/schemas/RuleFilters'
+        target:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The name of the Jira status to move the ticket to.
+        mode:
+          $ref: '#/components/schemas/RuleMode'
+    Rules:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncRule'
+    RulesUpdate:
+      type: object
+      additionalProperties: false
+      required: [rules, baseline]
+      properties:
+        rules:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncRule'
+        baseline:
+          type: boolean
+    RulePreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [rule]
+      properties:
+        rule:
+          $ref: '#/components/schemas/SyncRule'
+    PrRef:
+      type: object
+      additionalProperties: false
+      required: [prId, number, repo]
+      properties:
+        prId:
+          type: string
+        number:
+          type: integer
+        repo:
+          type: string
+          description: The repository as owner/name.
+    RuleMove:
+      type: object
+      additionalProperties: false
+      required: [ticketKey, status, alreadyInTarget]
+      properties:
+        ticketKey:
+          type: string
+        status:
+          type: string
+          description: The status the ticket has now.
+        alreadyInTarget:
+          type: boolean
+    RuleWaiting:
+      type: object
+      additionalProperties: false
+      required: [ticketKey, total, waitingOn]
+      properties:
+        ticketKey:
+          type: string
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
+    RulePreview:
+      type: object
+      additionalProperties: false
+      required: [moves, waiting]
+      properties:
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleMove'
+        waiting:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleWaiting'
+    TicketMergePlan:
+      type: object
+      additionalProperties: false
+      required: [rule, target, total, waitingOn]
+      description: >
+        What the first enabled merged rule that applies to this ticket does when the pull request of
+        this row is merged. waitingOn lists the other pull requests that still have to merge first
+        (mode all), so the ticket would not move yet.
+      properties:
+        rule:
+          type: string
+          description: The name of the rule.
+        target:
+          type: string
+          description: The Jira status the rule moves the ticket to.
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
+    TicketWaiting:
+      type: object
+      additionalProperties: false
+      required: [rule, total, waitingOn]
+      description: A mode all rule that some linked pull requests meet and others do not yet.
+      properties:
+        rule:
+          type: string
+          description: The name of the rule.
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
+    MergeTicket:
+      type: object
+      additionalProperties: false
+      required: [key, transitionId, fields]
+      properties:
+        key:
+          $ref: '#/components/schemas/TicketKey'
+        transitionId:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 64
+          description: The transition to make, or null to leave the ticket where it is.
+        fields:
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+            maxLength: 2000
+    MergeRequest:
+      type: object
+      additionalProperties: false
+      required: [method, expectedHeadSha, deleteBranch, tickets]
+      properties:
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        expectedHeadSha:
+          type: string
+          minLength: 1
+          maxLength: 64
+        deleteBranch:
+          type: boolean
+        tickets:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/MergeTicket'
+    MergeStep:
+      type: object
+      additionalProperties: false
+      required: [kind, ticket, state, message, toStatus, retryId]
+      properties:
+        kind:
+          type: string
+          enum: [merge, delete_branch, transition]
+        ticket:
+          type: string
+          nullable: true
+        state:
+          type: string
+          enum: [ok, failed, skipped]
+        message:
+          type: string
+          nullable: true
+        toStatus:
+          type: string
+          nullable: true
+        retryId:
+          type: integer
+          format: int64
+          nullable: true
+    MergeResult:
+      type: object
+      additionalProperties: false
+      required: [prId, method, sha, steps]
+      properties:
+        prId:
+          type: string
+        method:
+          $ref: '#/components/schemas/MergeMethodName'
+        sha:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/MergeStep'
+    FreshPr:
+      type: object
+      additionalProperties: false
+      required: [state, headSha, baseRef, isDraft, mergeable, mergeStateStatus, reviewDecision]
+      properties:
+        state:
+          type: string
+        headSha:
+          type: string
+        baseRef:
+          type: string
+        isDraft:
+          type: boolean
+        mergeable:
+          type: string
+        mergeStateStatus:
+          type: string
+        reviewDecision:
+          type: string
+          nullable: true
+    MergeProblem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code, pr]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        pr:
+          allOf:
+            - $ref: '#/components/schemas/FreshPr'
+          nullable: true
+    Retry:
+      type: object
+      additionalProperties: false
+      required: [id, prId, ticketKey, transitionId, toStatus, lastError, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        prId:
+          type: string
+          nullable: true
+        ticketKey:
+          type: string
+        transitionId:
+          type: string
+        toStatus:
+          type: string
+        lastError:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Retries:
+      type: object
+      additionalProperties: false
+      required: [retries]
+      properties:
+        retries:
+          type: array
+          items:
+            $ref: '#/components/schemas/Retry'
+    RetryResult:
+      type: object
+      additionalProperties: false
+      required: [step]
+      properties:
+        step:
+          $ref: '#/components/schemas/MergeStep'
+    ActivityItem:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, kind, ticketKey, prId, triggeredBy, result, summary, error]
+      properties:
+        id:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        kind:
+          type: string
+        ticketKey:
+          type: string
+          nullable: true
+        prId:
+          type: string
+          nullable: true
+        triggeredBy:
+          type: string
+        result:
+          type: string
+        summary:
+          type: string
+        error:
+          type: string
+          nullable: true
+    ActivityPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityItem'
+        nextCursor:
+          type: integer
+          format: int64
+          nullable: true
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+  parameters:
+    TicketKey:
+      name: key
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/TicketKey'
+    PrId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_=-]{1,128}$'
+    RepoId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_=-]{1,128}$'
+    RetryId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Provider'
+  responses:
+    InvalidLaunchToken:
+      description: The launch token is unknown, expired or already used.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadRequest:
+      description: The request was understood but refused (for example invalid_oauth_state).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The current state does not allow it (for example not_connected or provider_not_configured).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: No such pull request.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    TooManyRequests:
+      description: GitHub's rate limit is used up (rate_limited).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BadGateway:
+      description: GitHub or Atlassian failed or refused (oauth_exchange_failed, upstream_error, org_blocked).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+security:
+  - cookieAuth: []

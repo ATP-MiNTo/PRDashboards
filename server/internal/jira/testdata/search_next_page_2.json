@@ -1,0 +1,28 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": {
+    "issues": [
+      {
+        "id": "1",
+        "key": "INP-2",
+        "fields": {
+          "summary": "Second",
+          "status": {
+            "name": "Done",
+            "statusCategory": {
+              "key": "done"
+            }
+          },
+          "project": {
+            "key": "INP"
+          },
+          "issuetype": {
+            "name": "Bug"
+          }
+        }
+      }
+    ],
+    "isLast": true
+  }
+}

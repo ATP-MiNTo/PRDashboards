@@ -1,0 +1,15 @@
+{
+  "status": 403,
+  "headers": {
+    "X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=ABC"
+  },
+  "body": {
+    "message": "Resource protected by organization SAML enforcement.",
+    "errors": [
+      {
+        "type": "FORBIDDEN",
+        "message": "The `acme-corp` organization forbids access via a personal access token (classic)."
+      }
+    ]
+  }
+}

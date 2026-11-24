@@ -1,0 +1,5 @@
+{
+  "status": 200,
+  "headers": { "X-OAuth-Scopes": "repo, read:org", "X-RateLimit-Remaining": "4999" },
+  "body": { "data": { "viewer": { "login": "octocat" } } }
+}

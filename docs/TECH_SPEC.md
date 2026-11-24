@@ -22,9 +22,9 @@ server. The browser and the backend are treated as if they were on different mac
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
-| Backend language | Go 1.25 | Single static binary, `net/http` with Go 1.22+ routing patterns |
+| Backend language | Go 1.26+ (toolchain 1.27.4) | Single static binary, `net/http` with Go 1.22+ routing patterns |
 | HTTP router | `net/http` `ServeMux` | No framework. Middleware chain written in `internal/api/mw` |
-| API contract | OpenAPI 3.1 in `api/openapi.yaml` | Go types and server interface via `oapi-codegen` (strict server), TS types via `openapi-typescript` |
+| API contract | OpenAPI 3.0.3 in `api/openapi.yaml` | 3.0 because `oapi-codegen` does not support 3.1. Go types and server interface via `oapi-codegen` (strict server, pinned as a `tool` in `go.mod`), TS types via `openapi-typescript`. Generated code is committed and `pnpm gen` regenerates it |
 | GitHub client | Hand-written GraphQL over `net/http` | Queries live in `.graphql` files, embedded. REST only for merge and branch delete |
 | Jira client | Hand-written REST v3 client | Jira Cloud via `api.atlassian.com/ex/jira/{cloudId}` |
 | Storage | SQLite via `modernc.org/sqlite` | Pure Go, no cgo. WAL mode. Migrations embedded and versioned |
@@ -41,9 +41,11 @@ Node 22 LTS is required to build the UI only. It is not needed at runtime.
 
 ```text
 api/openapi.yaml              API contract (source of truth)
+api/oapi-codegen.yaml         oapi-codegen settings
+go.work                       Workspace file, `use ./server`
 server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   cmd/prdash/                 main: flags, wiring, browser launch
-  internal/api/               generated server interface, handlers, middleware (mw/)
+  internal/api/               handlers, static UI server, generated code (gen/), middleware (mw/)
   internal/auth/              OAuth flows, PAT entry, session cookies, launch tokens
   internal/secrets/           keychain + encrypted-file fallback
   internal/store/             SQLite access, migrations/, typed queries
@@ -55,11 +57,15 @@ server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   internal/merge/             merge method resolution, merge-and-transition orchestration
   internal/poller/            single-flight refresh scheduler, snapshot builder
   internal/events/            SSE hub
+  internal/logging/           redacting slog handler
+  internal/testutil/          fake clock and random source for tests
   internal/netguard/          outbound host allowlist transport
+  internal/backoff/           shared retry and rate-limit backoff helper
   internal/fake/              fake GitHub and Jira servers (build tag e2e only)
-  web/                        go:embed target, filled by the web build
+  web.go                      go:embed of web/ (package server)
+  web/                        go:embed target, filled by the web build (only .gitkeep is committed)
 web/                          Next.js app (static export)
-  src/app/                    routes: / (dashboard), /setup, /auth/done
+  src/app/                    routes: / (dashboard), /setup, /auth/done, /oauth/finish
   src/components/             CommandTable, MergePanel, SettingsDrawer, ...
   src/api/                    generated types + typed fetch client
   src/theme/                  tokens and Auto theme logic
@@ -101,25 +107,38 @@ The scripts do not run `git pull` or switch branches. Updating is a separate, ex
 
 ```text
 prdash [--port 4317] [--data-dir ~/.prdashboards] [--no-browser]
+prdash --fake ...        # e2e build only (`-tags e2e`): fake GitHub and Atlassian, secrets in memory
 ```
 
 - Listens on `127.0.0.1:<port>` only. The port is fixed (default 4317) because the Atlassian
   callback URL must match exactly. If the port is busy, the binary exits with a message. It never
   picks a random port and never binds `0.0.0.0` or `::`.
 - Single instance: an exclusive lock on `<data-dir>/prdash.lock`. A second start finds the running
-  instance, reads a fresh launch token from `<data-dir>/launch.token` (mode 0600) and opens the
-  browser, then exits.
+  instance, reads the port and a fresh launch token from `<data-dir>/launch.token` (mode 0600, JSON
+  `{"port":N,"token":"..."}`) and opens the browser on that port, then exits.
 - Data dir is created with mode 0700. `data.db` and every file in it are 0600. The binary refuses
-  to start if the data dir is group- or world-writable (POSIX).
+  to start if the data dir is group- or world-writable (POSIX), or if `session.key`, `secrets.enc`
+  or `data.db` is readable or writable by group or others. The message names the file and the
+  `chmod 600` to run.
+- Start order: create the data dir, check its mode, take the lock, then bind the port. A busy port
+  exits with a message.
+- The cookie signing key is the secrets item `session.key`. A `<data-dir>/session.key` file from
+  milestone 1 is imported once and deleted. Sessions are persisted in SQLite (8.3).
+- The HTTP server has `ReadHeaderTimeout` 10 s and `ReadTimeout` 30 s. `WriteTimeout` stays unset
+  because a write deadline would cut off the SSE stream (`/events`) that arrives with the poller.
+- Logs go to stdout as JSON. With `--no-browser` the launch URL is printed to stderr and never
+  logged. When the port is not 4317 the binary warns that OAuth callbacks need 4317.
 - Graceful shutdown on SIGINT and SIGTERM: stop the poller, finish in-flight writes, close the DB.
 
 ### 4.3 Launch token and installable app
 
-- On start and after each use, the server writes a random 256-bit launch token to `launch.token`.
-- The browser is opened at `http://127.0.0.1:4317/auth/launch#t=<token>`. The token is in the
+- On start, after each use and every 60 s, the server writes a new random 256-bit launch token to
+  `launch.token` (atomic write, mode 0600). The current and the previous token are accepted while
+  unexpired, each once. The file is removed on shutdown.
+- The browser is opened at `http://127.0.0.1:<port>/auth/launch#t=<token>`. The token is in the
   fragment, so it never reaches logs, history sync or `Referer`. A small static page posts it to
   `POST /api/session` and the server answers with the session cookie (8.3).
-- The UI ships a web app manifest and a service worker, so the browser's "Install app" adds a dock
+- From milestone 9, the UI ships a web app manifest and a service worker, so the browser's "Install app" adds a dock
   or taskbar icon. The installed app reuses the persistent session cookie. When the server is not
   running, the service worker shows an offline page that says to run the start script. The service
   worker caches static assets only, never `/api/*` responses.
@@ -134,6 +153,9 @@ to register:
 
 - GitHub: `http://127.0.0.1:4317/oauth/github/callback`
 - Atlassian: `http://127.0.0.1:4317/oauth/atlassian/callback`
+
+The API is `GET /api/setup` (which providers are configured, plus the callback URLs) and
+`PUT /api/setup/{github|atlassian}` (client id and secret). Neither ever returns the secret.
 
 ### 5.2 GitHub
 
@@ -160,9 +182,22 @@ to register:
 
 - `state` is 256 random bits, stored server-side with a 10-minute expiry, bound to the session, and
   deleted on first use.
-- Callbacks accept only `GET` with `code` and `state`, and only when the request carries the
-  session cookie that started the flow.
-- After the callback the browser is redirected to `/auth/done`, which carries no token or code.
+- The state is stored hashed, bound to the session that started the flow, and consumed with one
+  `DELETE ... RETURNING`, so a rejected attempt spends it too.
+- The callback cannot rely on the session cookie. The provider redirects the browser from another
+  site, and a `SameSite=Strict` cookie is not sent on a cross-site navigation, nor on the redirect
+  chain that follows it. So `GET /oauth/{provider}/callback` is a cookie-less route: exact paths,
+  `GET` only, it checks only the shape of `code`, `state` and `error` (length and charset) and
+  answers `303` to the static page `/oauth/finish/?provider=..&code=..&state=..`. That page is a
+  fresh same-origin navigation that carries the cookie. Its script first removes the query with
+  `history.replaceState`, then sends `POST /api/oauth/complete {provider, code, state}` through the
+  full middleware chain (session, CSRF, schema). The server checks the state against the session
+  that started the flow, exchanges the code and stores the token. The page then goes to
+  `/auth/done/?provider=..&result=ok|denied|invalid_state|error`, which carries no code or token.
+  The callback response has `Cache-Control: no-store`. `GET /oauth/{provider}/start` is protected
+  (session required) and redirects `302` to the provider.
+- GitHub uses PKCE S256 (the verifier stays on the server with the state). The Atlassian token
+  response is checked for `accessible-resources` sites on `https://*.atlassian.net` only.
 
 ## 6. Storage
 
@@ -173,15 +208,25 @@ Keychain service `prdashboards`. Items: `github.oauth.client`, `github.token`,
 `session.key` (HMAC key for cookies).
 
 Fallback when no keychain is available: `secrets.enc`, AES-256-GCM, with a key derived with
-Argon2id (64 MiB, 3 passes) from a passphrase asked on start. Without the passphrase, the app
-starts locked.
+Argon2id (time 3, memory 64 MiB, 4 threads, 32-byte key, 16-byte salt) from a passphrase. Every
+write uses a fresh 12-byte nonce, and the file header (magic, version, KDF parameters, salt,
+nonce) is authenticated as additional data. The file is rewritten atomically with mode 0600.
+
+The backend is chosen at start by probing the keychain (write, read, delete a probe item). When
+the probe fails, the binary asks for the passphrase on the terminal (twice when it creates
+`secrets.enc`, minimum 8 characters, 3 attempts to unlock). Without a terminal it exits with a
+message that says to run it from one. The "starts locked" mode of the first draft is not built: a
+locked app could do nothing, and exiting says so sooner.
 
 Tokens are never written to SQLite, logs, crash output or API responses.
 
 ### 6.2 SQLite schema
 
-WAL mode, `foreign_keys=ON`, `busy_timeout=5000`. One writer goroutine owns all writes. Every
-multi-row change runs in one transaction. No per-row loops against the database.
+WAL mode, `foreign_keys=ON`, `busy_timeout=5000`. There is one writer: a `*sql.DB` limited to a
+single connection (`MaxOpenConns(1)`, transactions begin `IMMEDIATE`), so writes are serialized by
+the pool and need no writer goroutine. Reads use a second, read-only pool (`query_only`), which WAL
+lets run beside the writer. Every multi-row change runs in one transaction. No per-row loops
+against the database. `data.db` is created with mode 0600 before it is opened.
 
 | Table | Key | Purpose |
 | --- | --- | --- |
@@ -195,9 +240,12 @@ multi-row change runs in one transaction. No per-row loops against the database.
 | `rule_firings` | `rule_id, ticket_key` | Last fingerprint that fired for this rule and ticket (7.4) |
 | `activity` | `id` | Log of every transition and merge: when, what, who triggered (rule id or manual), result, error |
 | `pending_retries` | `id` | Failed transitions waiting for a retry: ticket, transition id, fields, last error |
+| `idempotency` | `key` | Result of a finished merge by `Idempotency-Key`: `pr_id`, `result_json`, `created_at`. Rows older than 24 hours are deleted in the transaction of the next merge |
 | `snapshot` | `id = 1` | Last full snapshot as compressed JSON, so the UI shows data immediately on start |
+| `sessions` | `id_hash` | Hashed session ids with `created`, `last_issued`, `expires` (8.3) |
+| `oauth_states` | `state_hash` | Pending OAuth flows: provider, bound session, PKCE verifier, expiry (5.4) |
 
-Indexes: `prs(state, repo_id)`, `ticket_links(ticket_key)`, `activity(created_at DESC)`.
+Indexes: `prs(state, repo_id)`, `ticket_links(ticket_key)`, `activity(created_at DESC)`, `idempotency(created_at)`.
 
 ## 7. Domain logic
 
@@ -368,9 +416,12 @@ Out of scope: malware already running as the same OS user with keychain access.
 - `POST /api/session` exchanges a valid one-time launch token for a session. Launch tokens are
   single use, expire after 2 minutes, and compared in constant time.
 - Cookie `prd_session`: random 256-bit id, HMAC-signed with `session.key`, `HttpOnly`,
-  `SameSite=Strict`, `Path=/`, and `Secure` where the browser accepts it on loopback. Lifetime
-  30 days, sliding, so the installed app keeps working. Sessions are stored hashed in memory and in
-  SQLite and can be revoked from Settings ("Sign out all browsers").
+  `SameSite=Strict`, `Path=/`, no `Secure` flag. The app is plain `http` on loopback, and a
+  `Secure` cookie would not be sent back on `http://127.0.0.1`, so the flag would break sign-in.
+  Lifetime 30 days, sliding (the cookie is sent again when the last issue is older than 24 h), so
+  the installed app keeps working. Sessions are stored hashed (SHA-256 of the id) in SQLite, with a
+  write-through in-memory cache that is loaded at start, and can all be revoked with
+  `POST /api/sessions/revoke-all` ("Sign out all browsers"): `204` and an expired cookie.
 - A CSRF token bound to the session is returned by `GET /api/session` and must be sent as
   `X-PRD-CSRF` on every non-GET request.
 
@@ -380,14 +431,20 @@ Out of scope: malware already running as the same OS user with keychain access.
 2. Reject any request with a CORS preflight (`OPTIONS`) or that would need CORS. No
    `Access-Control-*` header is ever sent.
 3. `/api/*` and `/events`: `Sec-Fetch-Site` must be `same-origin` (or absent for non-browser
-   clients, which then fail step 4). Non-GET requests must also have `Origin` equal to
+   clients, which then fail step 5). Non-GET requests must also have `Origin` equal to
    `http://127.0.0.1:4317` or `http://localhost:4317`.
-4. Valid session cookie, otherwise `401`.
-5. Non-GET: valid `X-PRD-CSRF`, otherwise `403`.
-6. Body: `Content-Type: application/json`, max 64 KiB, strict decoding (unknown fields rejected),
-   then validation against the OpenAPI schema.
-7. Write endpoints are rate limited per session (30 per minute) so a compromised page cannot spam
-   merges or transitions.
+4. Write endpoints are rate limited (30 per minute) so a compromised page cannot spam merges or
+   transitions. The bucket is per session, with one shared bucket for requests without a valid
+   session. `POST /api/session` has its own bucket of 10 per minute. Limited requests get `429`
+   with `Retry-After`. The session cookie is read before this step, only to pick the bucket.
+5. Valid session cookie, otherwise `401`. `POST /api/session` is the only exception.
+6. Non-GET: valid `X-PRD-CSRF`, otherwise `403`. `POST /api/session` is the only exception.
+7. Body of non-GET requests: `Content-Type: application/json`, max 64 KiB, one JSON value, then
+   validation against the OpenAPI schema. Every request schema sets `additionalProperties: false`,
+   so unknown fields are rejected (a test enforces this).
+
+Each rejection is an `application/problem+json` response with a stable `code`. The implementation
+and the code table are in [features/security.md](features/security.md).
 
 ### 8.5 Response headers
 
@@ -441,13 +498,20 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/tickets/assigned` | Picker source |
 | `PUT /api/prs/{id}/tickets` | Set manual links and removed keys |
 | `POST /api/prs/{id}/merge` | Merge and transition (7.7) |
+| `GET /api/retries` | Failed transitions waiting for a retry |
 | `POST /api/retries/{id}` | Retry a failed transition |
+| `DELETE /api/retries/{id}` | Dismiss a failed transition |
 | `GET/PUT /api/settings` | Global settings |
+| `POST /api/sessions/revoke-all` | End every session, including the caller's |
+| `GET /api/setup`, `PUT /api/setup/{github\|atlassian}` | OAuth client credentials (write only) |
+| `GET /api/accounts`, `DELETE /api/accounts/{provider}`, `POST /api/accounts/{provider}/check` | Connection state, disconnect, check now |
+| `POST /api/oauth/complete` | Finish an OAuth flow from the finish page (5.4) |
+| `GET /api/repos` | Repos with their default and branch rules |
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
 | `GET /api/activity` | Activity log, paginated |
-| `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flows |
+| `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |
 | `PUT /api/github/pat` | Store a PAT |
 
 Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head_moved`,
@@ -471,9 +535,17 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
    mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate
-   statusCheckRollup { state } } }`, `latestReviews(first: 10) { id state submittedAt author { login } }`,
+   statusCheckRollup { state contexts(first: 50) { totalCount nodes { __typename ... on CheckRun {
+   name status conclusion detailsUrl startedAt completedAt checkSuite { app { name } } } ... on
+   StatusContext { context state targetUrl createdAt } } } } } }`, `latestReviews(first: 10) { id state submittedAt author { login } }`,
    `reviewRequests(first: 10) { requestedReviewer { ... on User { id } ... on Team { id } } }`.
    The query also selects `rateLimit { cost remaining resetAt }`.
+
+   Per-check CI comes from the same query, so it costs no extra call. Each check is mapped to
+   `{name, app, state, url, startedAt, completedAt}` with state one of passing, failing, running,
+   pending, skipped, neutral or cancelled. `app` is the check suite's app name, or null for a
+   commit status. When `totalCount` is larger than the 50 returned, the snapshot keeps `total`
+   and the UI shows "+N more" linking to the PR's checks page.
 2. One search for recently merged PRs (7.5), only when PRs left the open list.
 
 No per-PR follow-up calls. The only single-PR call is the re-check right before a merge.
@@ -493,8 +565,74 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
   On `403` or `429` with `Retry-After` or `x-ratelimit-reset`, wait that long. Secondary limits use
   exponential backoff with jitter (base 2 s, max 5 min).
 - Jira: on `429` or `503`, honour `Retry-After`, otherwise exponential backoff with jitter.
-- At most 4 parallel outbound requests per provider.
+- At most 4 parallel outbound requests per provider (`netguard`). The retry loop is the shared
+  package `internal/backoff`: honours `Retry-After` and the GitHub reset header, otherwise
+  exponential backoff with jitter, with an injectable clock and sleep for tests.
 - The search cap of 1,000 results shows a warning when reached.
+
+### 10.4a Concrete choices (milestones 4 and 5)
+
+- Search results carry `isDraft`, `mergeable` and `reviewDecision` as GitHub reports them. A PR is
+  stale when its last commit is older than 3 days.
+- The snapshot is encoded once, stored gzip-compressed in the `snapshot` table and loaded at start.
+  `version` continues after a restart. The ETag is the quoted version.
+- The merged search is `is:pr assignee:@me is:merged updated:>=<since>`, where `since` is the
+  oldest last-seen time of the PRs that left the list, minus one minute. It runs only when the open
+  search was complete (no cap, no errors, no blocked organization).
+- SSE: heartbeat comment every 25 s, buffer of 16 events per client, a full buffer drops the client,
+  write deadline of 10 s per write. The hub replays the last event of each name to a new client.
+- Jira lookups are incremental between Jira intervals: only keys not asked before. A key Jira
+  does not return is remembered as missing until the next full Jira refresh.
+- The ticket picker JQL is `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`
+  with a cap of 100.
+- Manual links are limited to 20 keys, hidden keys to 20, validated server side.
+
+### 10.4b Concrete choices (milestones 6 and 7)
+
+- `merge.Resolve` is pure. A branch pattern is an exact name or a glob where `*` matches any run of
+  characters, `/` included. Patterns are 1 to 200 characters of letters, digits and `. _ / * -`,
+  and a repo has at most 50 rules. `PUT /api/repos/{id}` replaces the default and the rules in one
+  transaction and rebuilds the snapshot from cached data, without an outside call.
+- `SnapshotPr.mergeMethod` is `{method, default, source, allowed, warning}`. The seeded rules are
+  `main` and `production` to merge commit.
+- The merge request carries at most 20 tickets. `Idempotency-Key` must be a UUID. A key that was
+  used for another pull request is `422 idempotency_key_reused`. Two requests with the same key at
+  once share one run.
+- The merge checks in step 2 also refuse a draft (`draft`), a closed pull request (`not_open`), an
+  open base pull request in the same repo (`stack_base_open`) and a missing or changing review
+  (`not_mergeable`). The transition list used in step 3 is the cached one when it is under 60 s old.
+- After the merge succeeded the remaining steps run on a context detached from the request, with a
+  timeout of its own, so a closed tab cannot leave a merged pull request with unmoved tickets.
+- One transaction (`RecordMerge`) writes the activity rows, the retries, the rule firings and the
+  idempotency row of a merge.
+- `GET /api/activity` pages by id, newest first (`limit` 1 to 100, `cursor` is the last id seen).
+- The browser fetches the transitions of a ticket only when the person chooses to move it.
+
+### 10.4c Concrete choices (milestones 8 and 9)
+
+- Rules are evaluated by the pure `rules.Evaluate` after every refresh and after a rules change, from
+  cached data. Merged pull requests count only for 30 days, and only for `merged` rules and the set
+  of a mode All rule. They are ignored by the other triggers. A closed pull request never counts.
+- `ready_for_review` keeps the head SHA of the moment the pull request became ready in
+  `prs.ready_sha`. A push keeps it, going back to draft clears it.
+- A transition is the one of the ticket whose `to` status name equals the target, ignoring case.
+  Transitions with required fields are recorded as `needs_input` and not sent. A target without a
+  transition from the current status is recorded once as `skipped`. A failed lookup records nothing,
+  so the next refresh tries again. At most 4 moves run in parallel.
+- The activity rows, firings and retries of a refresh are written in the refresh transaction.
+- `PUT /api/rules` takes `{rules, baseline}`: the whole ordered list (at most 100), one
+  transaction. A rule that is new or whose enabled flag, trigger, hours, filters, target or mode
+  changed loses its firings. With `baseline` the current holds of those rules are stored, so
+  nothing moves ("Don't move existing tickets"). A mode change in the Multi-PR section always
+  saves with the baseline.
+- The merge flow records the `merged` fingerprints with the merged pull request counted as merged,
+  and `SnapshotTicket.mergePlan` lets the merge panel preselect the rule's transition.
+- A `403` whose body names a secondary rate limit is treated like a rate limit with exponential
+  backoff even without headers. The web shows the state of each source in the top bar, the age of
+  the last good data in the banner and on every row, and the warning of the 1,000 result cap.
+- The manifest and the icons are generated by `web/scripts/pwa-assets.mjs` before the build, and
+  `web/scripts/service-worker.mjs` writes `sw.js` after it, with the cache name
+  `prdash-v<VERSION>`. The worker never touches `/api/`, `/events`, `/oauth/` or `/auth/launch/`.
 
 ### 10.5 Partial failures
 
@@ -514,7 +652,11 @@ Based on the Command Table prototype:
 - Stat strip (open, ready, blocked, draft, stale) and filter chips.
 - Table columns, in this order: **Repo/PR, Ticket, Last commit, Review, CI, Method, Merge**.
   Stacks are grouped rows with a connector line. Each ticket shows key, status, title, matched rule
-  and source (branch, title, manual), plus unlink and the picker.
+  and source (branch, title, manual), plus unlink and the picker. The CI column shows the rollup
+  pill on top, then each check as a compact row (status dot, name, app, duration) that links to
+  its run page. Only https links are shown, github.com links are rebuilt from validated parts, and
+  a check from an external CI shows the host of its link. A PR with more than 50 checks ends the
+  list with "+N more".
 - Merge panel (7.7) opens inline under the row.
 - Settings drawer on the right with sections: Connected accounts, Repositories (search, default
   for new repos, per-repo default and branch rules, delete branch after merge), Status sync rules
@@ -549,6 +691,14 @@ Mobile layout, chained stack merge, multiple Jira sites, notifications.
 
 All Go tests run with `-race`. No test calls the real GitHub or Jira.
 
+The fakes listen on fixed loopback ports: GitHub `127.0.0.1:4411`, Atlassian `127.0.0.1:4412`
+(the app is on 4317). The browser is sent to the `localhost` spelling of their authorize URLs, so
+the redirect back to `127.0.0.1:4317` is cross-site like the real one. Each fake has
+`/__admin/state`, `/__admin/config` and `/__admin/reset` for the specs. `pnpm e2e` builds the web
+export and the `-tags e2e` binary, starts it with `--fake --port 4317 --data-dir .e2e-data` and
+runs `e2e/*.spec.ts` with one worker. The suite signs in once, because session creation is rate
+limited to 10 a minute.
+
 Playwright stays lean and covers only the parts that cross into systems we don't control. It runs
 against the real binary built with `-tags e2e --fake`, which starts in-process fake GitHub and Jira
 servers that serve fixtures and can be told to fail:
@@ -572,11 +722,12 @@ GitHub Actions on every pull request:
 3. OpenAPI drift check: regenerate Go and TS code and fail if the diff is not empty
 4. Docs check: required headings, links, feature index
 5. Version check: `VERSION` changed and `CHANGELOG.md` has a dated entry for it
-6. Playwright e2e against the `e2e` build
+6. Playwright e2e against the `e2e` build (`pnpm e2e`), plus `go vet` and `go test -race` with
+   `-tags e2e`
 
 ## 14. Versioning and changelog
 
-- `VERSION` at the repo root, semver, `0.x` until v1 is complete.
+- `VERSION` at the repo root, semver. `0.x` until v1 was complete, `1.0.0` is the first complete release.
 - Every merged change bumps `VERSION` and adds a dated entry for that version at the top of
   `CHANGELOG.md`. There is no "Unreleased" section.
 - Prebuilt binaries (goreleaser) are a later item. v1 builds from source with the start scripts.

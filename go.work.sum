@@ -1,0 +1,6 @@
+github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 h1:1EYB5IzjZawrrnELUi78f9fPu57HuXjmddZPjrls/28=
+github.com/santhosh-tekuri/jsonschema/v6 v6.0.3/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
+github.com/theory/jsonpath v0.12.3 h1:hRYcJGqnIetJJKJNS5yLLW0LDtY1kzo8S0zHAOTxUQs=
+github.com/theory/jsonpath v0.12.3/go.mod h1:fYTXa8TVFAnyGzDL5JyaFlfaHzKMm+2XfwK3rbEzTC4=
+go.yaml.in/yaml/v4 v4.0.0 h1:/LG1pNO84Z4l603j/xMn69CcS5OYhMQ/f7l2LoQUGuw=
+go.yaml.in/yaml/v4 v4.0.0/go.mod h1:aZqd9kCMsGL7AuUv/m/PvWLdg5sjJsZ4oHDEnfPPfY0=

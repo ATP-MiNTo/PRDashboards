@@ -1,0 +1,10 @@
+{
+  "status": 403,
+  "headers": {
+    "X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=ABCDEF123"
+  },
+  "body": {
+    "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization.",
+    "documentation_url": "https://docs.github.com/graphql"
+  }
+}
