@@ -152,8 +152,8 @@ sequenceDiagram
 
 | Feature | Doc | Status |
 | --- | --- | --- |
-| App shell, launch and session | `features/app-shell.md` | Not built |
-| Security middleware | `features/security.md` | Not built |
+| App shell, launch and session | [features/app-shell.md](features/app-shell.md) | Built |
+| Security middleware | [features/security.md](features/security.md) | Built |
 | Storage and secrets | `features/storage.md` | Not built |
 | GitHub and Jira auth | `features/auth.md` | Not built |
 | Poller and snapshot | `features/poller.md` | Not built |

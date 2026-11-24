@@ -22,9 +22,9 @@ server. The browser and the backend are treated as if they were on different mac
 
 | Layer | Choice | Notes |
 | --- | --- | --- |
-| Backend language | Go 1.25 | Single static binary, `net/http` with Go 1.22+ routing patterns |
+| Backend language | Go 1.24+ | Single static binary, `net/http` with Go 1.22+ routing patterns |
 | HTTP router | `net/http` `ServeMux` | No framework. Middleware chain written in `internal/api/mw` |
-| API contract | OpenAPI 3.1 in `api/openapi.yaml` | Go types and server interface via `oapi-codegen` (strict server), TS types via `openapi-typescript` |
+| API contract | OpenAPI 3.0.3 in `api/openapi.yaml` | 3.0 because `oapi-codegen` does not support 3.1. Go types and server interface via `oapi-codegen` (strict server, pinned as a `tool` in `go.mod`), TS types via `openapi-typescript`. Generated code is committed and `pnpm gen` regenerates it |
 | GitHub client | Hand-written GraphQL over `net/http` | Queries live in `.graphql` files, embedded. REST only for merge and branch delete |
 | Jira client | Hand-written REST v3 client | Jira Cloud via `api.atlassian.com/ex/jira/{cloudId}` |
 | Storage | SQLite via `modernc.org/sqlite` | Pure Go, no cgo. WAL mode. Migrations embedded and versioned |
@@ -41,9 +41,11 @@ Node 22 LTS is required to build the UI only. It is not needed at runtime.
 
 ```text
 api/openapi.yaml              API contract (source of truth)
+api/oapi-codegen.yaml         oapi-codegen settings
+go.work                       Workspace file, `use ./server`
 server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   cmd/prdash/                 main: flags, wiring, browser launch
-  internal/api/               generated server interface, handlers, middleware (mw/)
+  internal/api/               handlers, static UI server, generated code (gen/), middleware (mw/)
   internal/auth/              OAuth flows, PAT entry, session cookies, launch tokens
   internal/secrets/           keychain + encrypted-file fallback
   internal/store/             SQLite access, migrations/, typed queries
@@ -55,9 +57,12 @@ server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   internal/merge/             merge method resolution, merge-and-transition orchestration
   internal/poller/            single-flight refresh scheduler, snapshot builder
   internal/events/            SSE hub
+  internal/logging/           redacting slog handler
+  internal/testutil/          fake clock and random source for tests
   internal/netguard/          outbound host allowlist transport
   internal/fake/              fake GitHub and Jira servers (build tag e2e only)
-  web/                        go:embed target, filled by the web build
+  web.go                      go:embed of web/ (package server)
+  web/                        go:embed target, filled by the web build (only .gitkeep is committed)
 web/                          Next.js app (static export)
   src/app/                    routes: / (dashboard), /setup, /auth/done
   src/components/             CommandTable, MergePanel, SettingsDrawer, ...
@@ -111,15 +116,23 @@ prdash [--port 4317] [--data-dir ~/.prdashboards] [--no-browser]
   browser, then exits.
 - Data dir is created with mode 0700. `data.db` and every file in it are 0600. The binary refuses
   to start if the data dir is group- or world-writable (POSIX).
+- Start order: create the data dir, check its mode, take the lock, then bind the port. A busy port
+  exits with a message.
+- Until the keychain arrives (milestone 2), the cookie signing key is `<data-dir>/session.key`
+  (32 random bytes, mode 0600). Sessions are in memory only until SQLite arrives.
+- Logs go to stdout as JSON. With `--no-browser` the launch URL is printed to stderr and never
+  logged. When the port is not 4317 the binary warns that OAuth callbacks need 4317.
 - Graceful shutdown on SIGINT and SIGTERM: stop the poller, finish in-flight writes, close the DB.
 
 ### 4.3 Launch token and installable app
 
-- On start and after each use, the server writes a random 256-bit launch token to `launch.token`.
+- On start, after each use and every 60 s, the server writes a new random 256-bit launch token to
+  `launch.token` (atomic write, mode 0600). The current and the previous token are accepted while
+  unexpired, each once. The file is removed on shutdown.
 - The browser is opened at `http://127.0.0.1:4317/auth/launch#t=<token>`. The token is in the
   fragment, so it never reaches logs, history sync or `Referer`. A small static page posts it to
   `POST /api/session` and the server answers with the session cookie (8.3).
-- The UI ships a web app manifest and a service worker, so the browser's "Install app" adds a dock
+- From milestone 9, the UI ships a web app manifest and a service worker, so the browser's "Install app" adds a dock
   or taskbar icon. The installed app reuses the persistent session cookie. When the server is not
   running, the service worker shows an offline page that says to run the start script. The service
   worker caches static assets only, never `/api/*` responses.
@@ -368,9 +381,11 @@ Out of scope: malware already running as the same OS user with keychain access.
 - `POST /api/session` exchanges a valid one-time launch token for a session. Launch tokens are
   single use, expire after 2 minutes, and compared in constant time.
 - Cookie `prd_session`: random 256-bit id, HMAC-signed with `session.key`, `HttpOnly`,
-  `SameSite=Strict`, `Path=/`, and `Secure` where the browser accepts it on loopback. Lifetime
-  30 days, sliding, so the installed app keeps working. Sessions are stored hashed in memory and in
-  SQLite and can be revoked from Settings ("Sign out all browsers").
+  `SameSite=Strict`, `Path=/`, no `Secure` flag. The app is plain `http` on loopback, and a
+  `Secure` cookie would not be sent back on `http://127.0.0.1`, so the flag would break sign-in.
+  Lifetime 30 days, sliding (the cookie is sent again when the last issue is older than 24 h), so
+  the installed app keeps working. Sessions are stored hashed (SHA-256 of the id) in memory, and
+  in SQLite from milestone 2, and can be revoked from Settings ("Sign out all browsers").
 - A CSRF token bound to the session is returned by `GET /api/session` and must be sent as
   `X-PRD-CSRF` on every non-GET request.
 
@@ -380,14 +395,20 @@ Out of scope: malware already running as the same OS user with keychain access.
 2. Reject any request with a CORS preflight (`OPTIONS`) or that would need CORS. No
    `Access-Control-*` header is ever sent.
 3. `/api/*` and `/events`: `Sec-Fetch-Site` must be `same-origin` (or absent for non-browser
-   clients, which then fail step 4). Non-GET requests must also have `Origin` equal to
+   clients, which then fail step 5). Non-GET requests must also have `Origin` equal to
    `http://127.0.0.1:4317` or `http://localhost:4317`.
-4. Valid session cookie, otherwise `401`.
-5. Non-GET: valid `X-PRD-CSRF`, otherwise `403`.
-6. Body: `Content-Type: application/json`, max 64 KiB, strict decoding (unknown fields rejected),
-   then validation against the OpenAPI schema.
-7. Write endpoints are rate limited per session (30 per minute) so a compromised page cannot spam
-   merges or transitions.
+4. Write endpoints are rate limited (30 per minute) so a compromised page cannot spam merges or
+   transitions. The bucket is per session, with one shared bucket for requests without a valid
+   session. `POST /api/session` has its own bucket of 10 per minute. Limited requests get `429`
+   with `Retry-After`. The session cookie is read before this step, only to pick the bucket.
+5. Valid session cookie, otherwise `401`. `POST /api/session` is the only exception.
+6. Non-GET: valid `X-PRD-CSRF`, otherwise `403`. `POST /api/session` is the only exception.
+7. Body of non-GET requests: `Content-Type: application/json`, max 64 KiB, one JSON value, then
+   validation against the OpenAPI schema. Every request schema sets `additionalProperties: false`,
+   so unknown fields are rejected (a test enforces this).
+
+Each rejection is an `application/problem+json` response with a stable `code`. The implementation
+and the code table are in [features/security.md](features/security.md).
 
 ### 8.5 Response headers
 
@@ -572,7 +593,8 @@ GitHub Actions on every pull request:
 3. OpenAPI drift check: regenerate Go and TS code and fail if the diff is not empty
 4. Docs check: required headings, links, feature index
 5. Version check: `VERSION` changed and `CHANGELOG.md` has a dated entry for it
-6. Playwright e2e against the `e2e` build
+6. Playwright e2e against the `e2e` build, from milestone 3 (there is no outside boundary before
+   OAuth)
 
 ## 14. Versioning and changelog
 

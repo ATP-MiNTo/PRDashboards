@@ -1,0 +1,12 @@
+bin/
+.build-hash
+node_modules/
+.next/
+web/out/
+server/web/*
+!server/web/.gitkeep
+coverage/
+*.log
+.DS_Store
+next-env.d.ts
+*.tsbuildinfo

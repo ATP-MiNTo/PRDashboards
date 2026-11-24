@@ -1,0 +1,92 @@
+openapi: 3.0.3
+info:
+  title: PR Dashboards API
+  version: 0.1.0
+  description: >
+    Same-origin API of the local prdash binary. Every request passes the middleware chain in
+    docs/TECH_SPEC.md section 8.4. Errors use application/problem+json with a stable code.
+paths:
+  /api/session:
+    post:
+      operationId: createSession
+      summary: Exchange a one-time launch token for a session cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '204':
+          description: Session created. The prd_session cookie is set.
+          headers:
+            Set-Cookie:
+              description: The prd_session cookie.
+              required: true
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/InvalidLaunchToken'
+    get:
+      operationId: getSession
+      summary: Session info and CSRF token
+      responses:
+        '200':
+          description: The current session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: prd_session
+  schemas:
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [launchToken]
+      properties:
+        launchToken:
+          type: string
+          minLength: 1
+          maxLength: 128
+    Session:
+      type: object
+      additionalProperties: false
+      required: [csrfToken, expiresAt, version]
+      properties:
+        csrfToken:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+  responses:
+    InvalidLaunchToken:
+      description: The launch token is unknown, expired or already used.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+security:
+  - cookieAuth: []

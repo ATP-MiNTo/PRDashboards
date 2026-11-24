@@ -1,0 +1,30 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - errcheck
+    - govet
+    - gosec
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
