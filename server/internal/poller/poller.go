@@ -27,6 +27,8 @@ type Store interface {
 	LoadSnapshot(ctx context.Context) (store.StoredSnapshot, error)
 	SaveRefresh(ctx context.Context, r store.Refresh) error
 	SaveSnapshot(ctx context.Context, version int64, data []byte, now time.Time) error
+	SaveSync(ctx context.Context, version int64, data []byte, now time.Time, w store.SyncWrite) error
+	SyncState(ctx context.Context, since time.Time, justMerged []string) (store.SyncState, error)
 	OpenPRs(ctx context.Context) (map[string]time.Time, error)
 	Repos(ctx context.Context) ([]store.RepoConfig, error)
 	UserLinks(ctx context.Context) (map[string]store.UserLinks, error)
@@ -42,6 +44,8 @@ type GitHub interface {
 type Jira interface {
 	Search(ctx context.Context, site string, keys []string) (jira.SearchResult, error)
 	Projects(ctx context.Context, site string) ([]string, error)
+	Transitions(ctx context.Context, site, key string) ([]jira.Transition, error)
+	Transition(ctx context.Context, site, key, id string, fields map[string]any) error
 }
 
 // Accounts says who the poller talks as. GitHubToken returns an error that wraps
@@ -117,6 +121,7 @@ type Poller struct {
 	fl      *flight
 	version int64
 	gh      ghData
+	ls      []linked
 	jira    jiraData
 	ghSrc   gen.SourceStatus
 	rl      github.RateLimit

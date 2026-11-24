@@ -66,14 +66,23 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	if err != nil {
 		return err
 	}
+	state, err := p.cfg.Store.SyncState(ctx, now.Add(-mergedWindow), resolvedMerged(resolved))
+	if err != nil {
+		p.cfg.Log.WarnContext(ctx, "read status sync state", "err", err)
+		state = store.SyncState{}
+	}
 	site, jiraDue := p.connectJira(ctx, req)
 	projectsOK := true
 	if site.ID != "" && jiraDue {
 		projectsOK = p.fetchProjects(ctx, now, site)
 	}
 	ls := resolve(p.gh.prs, user, p.jira.projects)
+	keys := keysOf(ls)
+	if hasEnabled(state.Rules) {
+		keys = withKeys(keys, mergedKeys(state))
+	}
 	if site.ID != "" && projectsOK {
-		p.lookupTickets(ctx, now, site, keysOf(ls), jiraDue)
+		p.lookupTickets(ctx, now, site, keys, jiraDue)
 	}
 	if jiraDue || req.jira {
 		p.mu.Lock()
@@ -87,11 +96,16 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	}
 
 	p.mu.Lock()
+	p.ls = ls
+	p.mu.Unlock()
+	out := p.runRules(ctx, now, state, ls, site)
+
+	p.mu.Lock()
 	p.version++
 	version := p.version
 	snap := build(buildInput{
 		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
-		GitHub: p.ghSrc, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings,
+		GitHub: p.ghSrc, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
 	})
 	p.mu.Unlock()
 
@@ -107,16 +121,28 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	if fetched {
 		saveErr = p.cfg.Store.SaveRefresh(ctx, store.Refresh{
 			Now: now, DefaultMethod: st.DefaultMethod, Repos: repoRows(p.gh.prs), PRs: prRows(p.gh.prs),
-			Links: linkRows(ls), Resolved: resolved, Version: version, Snapshot: data,
+			Links: linkRows(ls), Resolved: resolved, Version: version, Snapshot: data, Sync: out.write,
 		})
-	} else {
+	} else if out.write.Empty() {
 		saveErr = p.cfg.Store.SaveSnapshot(ctx, version, data, now)
+	} else {
+		saveErr = p.cfg.Store.SaveSync(ctx, version, data, now, out.write)
 	}
 	p.cur.Store(&Published{Snapshot: snap, JSON: raw})
 	if p.cfg.Publisher != nil {
 		_ = p.cfg.Publisher.Publish(events.Snapshot, map[string]int64{"version": version})
 	}
+	if saveErr == nil {
+		p.publishActivity(out.write)
+	}
 	return saveErr
+}
+
+// withKeys adds the extra keys to the sorted, unique list.
+func withKeys(keys, extra []string) []string {
+	all := slices.Concat(keys, extra)
+	slices.Sort(all)
+	return slices.Compact(all)
 }
 
 func repoRows(prs []github.PR) []store.RepoRow {
@@ -136,7 +162,7 @@ func prRows(prs []github.PR) []store.PRRow {
 	for i, pr := range prs {
 		out[i] = store.PRRow{
 			ID: pr.ID, RepoID: pr.Repo.ID, Number: pr.Number, Title: pr.Title,
-			HeadBranch: pr.HeadRef, BaseBranch: pr.BaseRef, HeadSHA: pr.HeadSHA,
+			HeadBranch: pr.HeadRef, BaseBranch: pr.BaseRef, HeadSHA: pr.HeadSHA, Draft: pr.Draft,
 		}
 	}
 	return out

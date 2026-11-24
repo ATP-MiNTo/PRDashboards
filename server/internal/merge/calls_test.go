@@ -80,7 +80,7 @@ func TestOutboundCallsOfOneMerge(t *testing.T) {
 	}
 	transitionGets.Store(0)
 
-	snap := fakeSnapshot{
+	snap := &fakeSnapshot{
 		linked: map[string]merge.Linked{prID: {RepoID: "R1", NameWithOwner: "acme/web", Number: 7, Tickets: []string{"INP-1", "INP-2", "INP-3"}}},
 		refs:   map[string][]merge.Ref{"R1": {{ID: prID, Number: 7, Head: "feat/x", Base: "main"}}},
 	}

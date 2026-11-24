@@ -121,12 +121,21 @@ func (f *fakeJira) moveCount() int {
 }
 
 type fakeSnapshot struct {
-	linked map[string]merge.Linked
-	refs   map[string][]merge.Ref
+	linked  map[string]merge.Linked
+	refs    map[string][]merge.Ref
+	firings []store.Firing
+	askedPR string
+	askedTK []string
+	err     error
 }
 
 func (s fakeSnapshot) Linked(id string) (merge.Linked, bool) { l, ok := s.linked[id]; return l, ok }
 func (s fakeSnapshot) Refs(repo string) []merge.Ref          { return s.refs[repo] }
+
+func (s *fakeSnapshot) MergedFirings(_ context.Context, pr string, tickets []string) ([]store.Firing, error) {
+	s.askedPR, s.askedTK = pr, tickets
+	return s.firings, s.err
+}
 
 type fakeAccounts struct {
 	tokenErr, siteErr error

@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import type { Snapshot, SyncStatus } from '@/api/client';
+import type { Snapshot, SourceStatus, SyncStatus } from '@/api/client';
 import { useSyncNow } from '@/api/queries';
-import { countdown } from '@/lib/snapshot';
+import { countdown, sourceLabel } from '@/lib/snapshot';
 import type { ThemeSetting } from '@/theme/theme';
 import styles from './CommandTable.module.css';
 import { RelativeTime } from './RelativeTime';
@@ -17,6 +17,16 @@ function Countdown({ iso }: { iso: string | null }) {
   const now = useNow(1000);
   const text = countdown(iso, now);
   return text ? <span>Next sync in {text}</span> : null;
+}
+
+function Source({ name, source }: { name: string; source: SourceStatus }) {
+  const now = useNow(1000);
+  const label = sourceLabel(source, now);
+  return (
+    <span className={styles.sourceItem} data-state={source.state}>
+      {name} <b>{label}</b>
+    </span>
+  );
 }
 
 export function TopBar({
@@ -77,6 +87,12 @@ export function TopBar({
           </button>
         </div>
         <div className={styles.tbNote}>
+          {snapshot && (
+            <span className={styles.sources} role="status" aria-label="Source status">
+              <Source name="GitHub" source={snapshot.sources.github} />
+              <Source name="Jira" source={snapshot.sources.jira} />
+            </span>
+          )}
           <span>
             GitHub synced <RelativeTime iso={githubAt} />
           </span>

@@ -13,6 +13,8 @@ export function ticket(key: string, over: Partial<SnapshotTicket> = {}): Snapsho
     project: key.split('-')[0] ?? 'INP',
     issueType: 'Story',
     url: `https://acme.atlassian.net/browse/${key}`,
+    waiting: null,
+    mergePlan: null,
     ...over,
   };
 }

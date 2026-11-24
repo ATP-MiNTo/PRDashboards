@@ -106,6 +106,7 @@ export const completeOAuth = (body: OAuthComplete) => send('POST', '/api/oauth/c
 export const revokeAllSessions = () => send('POST', '/api/sessions/revoke-all');
 
 export type Snapshot = Schemas['Snapshot'];
+export type SourceStatus = Schemas['SourceStatus'];
 export type SnapshotPr = Schemas['SnapshotPr'];
 export type SnapshotTicket = Schemas['SnapshotTicket'];
 export type Check = Schemas['Check'];
@@ -178,3 +179,19 @@ export const getActivity = (cursor?: number) =>
     'GET',
     cursor === undefined ? '/api/activity?limit=25' : `/api/activity?limit=25&cursor=${cursor}`,
   );
+
+export type SyncRule = Schemas['SyncRule'];
+export type RuleTrigger = Schemas['RuleTrigger'];
+export type RuleMode = Schemas['RuleMode'];
+export type RuleFilters = Schemas['RuleFilters'];
+export type RulePreview = Schemas['RulePreview'];
+export type RulesUpdate = Schemas['RulesUpdate'];
+export type PrRef = Schemas['PrRef'];
+export type TicketWaiting = Schemas['TicketWaiting'];
+export type TicketMergePlan = Schemas['TicketMergePlan'];
+
+export const getRules = () => json<Schemas['Rules']>('GET', '/api/rules');
+export const putRules = (update: RulesUpdate) =>
+  json<Schemas['Rules']>('PUT', '/api/rules', update);
+export const previewRule = (rule: SyncRule) =>
+  json<RulePreview>('POST', '/api/rules/preview', { rule });

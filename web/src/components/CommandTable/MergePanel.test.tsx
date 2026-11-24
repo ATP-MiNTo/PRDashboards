@@ -311,4 +311,50 @@ describe('MergePanel', () => {
     expect(screen.getByText('Not found in Jira, it will not be moved')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Move INP-9' })).toBeNull();
   });
+
+  describe('with a status sync rule', () => {
+    const READY = {
+      id: '41',
+      name: 'Ready',
+      toStatus: 'Ready to Merge',
+      toCategory: 'indeterminate',
+      fields: [],
+    };
+    const plan = (waitingOn: { prId: string; number: number; repo: string }[]) => ({
+      rule: 'Done on merge',
+      target: 'ready to merge',
+      total: 3,
+      waitingOn,
+    });
+
+    it('preselects the transition of the rule and still asks for a confirmation', async () => {
+      api.getTransitions.mockResolvedValue({ key: 'INP-1', transitions: [DONE, READY] });
+      const p = pr('a', 7, { tickets: [ticket('INP-1', { mergePlan: plan([]) })] });
+      renderWithClient(<MergePanel pr={p} method="squash" onClose={vi.fn()} />);
+      expect(
+        await screen.findByRole('button', { name: 'Merge & move to Ready to Merge' }),
+      ).toBeDisabled();
+      expect(screen.getByRole('combobox', { name: 'Move INP-1' })).toHaveTextContent(
+        'Move to Ready to Merge',
+      );
+      expect(screen.getByText('Confirm the move of INP-1')).toBeInTheDocument();
+    });
+
+    it('says why a rule waiting on other PRs does not move yet, and the dropdown can still force it', async () => {
+      api.getTransitions.mockResolvedValue({ key: 'INP-1', transitions: [DONE, READY] });
+      const waiting = plan([
+        { prId: 'x', number: 34, repo: 'acme/fe' },
+        { prId: 'y', number: 56, repo: 'acme/proxy' },
+      ]);
+      const p = pr('a', 7, { tickets: [ticket('INP-1', { mergePlan: waiting })] });
+      renderWithClient(<MergePanel pr={p} method="squash" onClose={vi.fn()} />);
+      expect(
+        await screen.findByText("Won't move yet: waiting on fe #34, proxy #56"),
+      ).toBeInTheDocument();
+      const box = await screen.findByRole('combobox', { name: 'Move INP-1' });
+      expect(box).toHaveTextContent("Don't move");
+      choose('Move INP-1', 'Move to Ready to Merge');
+      expect(screen.getByRole('button', { name: 'Merge & move to Ready to Merge' })).toBeDisabled();
+    });
+  });
 });

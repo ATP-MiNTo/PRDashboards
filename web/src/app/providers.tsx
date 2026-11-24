@@ -1,7 +1,8 @@
 'use client';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { registerServiceWorker } from '@/lib/pwa';
 
 export function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -11,5 +12,8 @@ export function makeQueryClient(): QueryClient {
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(makeQueryClient);
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') void registerServiceWorker();
+  }, []);
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

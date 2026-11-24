@@ -17,6 +17,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/events"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
@@ -27,6 +28,12 @@ type stubPoller struct {
 	relinks     int
 	reschedules int
 	relinkErr   error
+
+	reevaluations int
+	previewed     []rules.Rule
+	baselined     []rules.Rule
+	preview       poller.RulePreview
+	baseline      []store.Firing
 }
 
 func newStubPoller(prs ...gen.SnapshotPr) *stubPoller {
@@ -56,6 +63,27 @@ func (s *stubPoller) Relink(context.Context) error {
 	s.relinks++
 	return s.relinkErr
 }
+func (s *stubPoller) Reevaluate(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.reevaluations++
+	return s.relinkErr
+}
+
+func (s *stubPoller) Preview(_ context.Context, r rules.Rule) (poller.RulePreview, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.previewed = append(s.previewed, r)
+	return s.preview, nil
+}
+
+func (s *stubPoller) Baseline(_ context.Context, rs []rules.Rule) ([]store.Firing, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.baselined = append(s.baselined, rs...)
+	return s.baseline, nil
+}
+
 func (s *stubPoller) Reschedule() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

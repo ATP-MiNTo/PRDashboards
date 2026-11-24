@@ -1,7 +1,14 @@
 import { useActivity, useDismissRetry, useRetries, useRetryTransition } from '@/api/queries';
-import { Pill } from '../CommandTable/Pill';
+import { Pill, type Tone } from '../CommandTable/Pill';
 import { RelativeTime } from '../CommandTable/RelativeTime';
 import styles from './Settings.module.css';
+
+const RESULT_TONE: Record<string, Tone> = { ok: 'good', failed: 'bad', needs_input: 'warn' };
+const RESULT_LABEL: Record<string, string> = { needs_input: 'needs input' };
+
+function byText(by: string): string {
+  return by.startsWith('rule:') ? 'a status sync rule' : by;
+}
 
 function PendingMoves() {
   const retries = useRetries();
@@ -67,14 +74,19 @@ export function ActivitySection() {
         {items.map((a) => (
           <li key={a.id}>
             <div>
-              <Pill tone={a.result === 'ok' ? 'good' : a.result === 'failed' ? 'bad' : 'mute'}>
-                {a.result}
+              <Pill tone={RESULT_TONE[a.result] ?? 'mute'}>
+                {RESULT_LABEL[a.result] ?? a.result}
               </Pill>{' '}
               {a.summary}
             </div>
+            {a.result === 'needs_input' && (
+              <div className={styles.muted}>
+                Jira asks for fields on this move. Open the ticket in Jira and move it there.
+              </div>
+            )}
             {a.error && <div className={styles.error}>{a.error}</div>}
             <div className={styles.muted}>
-              <RelativeTime iso={a.createdAt} /> by {a.triggeredBy}
+              <RelativeTime iso={a.createdAt} /> by {byText(a.triggeredBy)}
             </div>
           </li>
         ))}

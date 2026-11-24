@@ -41,6 +41,7 @@ source_hash() {
     find web server api -type f \
       -not -path '*/node_modules/*' -not -path '*/.next/*' \
       -not -path 'web/out/*' -not -path 'server/web/*' \
+      -not -path 'web/public/icons/*' -not -name manifest.webmanifest \
       -not -name next-env.d.ts -not -name '*.tsbuildinfo' -print0
     printf '%s\0' VERSION package.json pnpm-workspace.yaml pnpm-lock.yaml go.work .nvmrc
   } | LC_ALL=C sort -z | xargs -0 "${sha[@]}" | "${sha[@]}" | cut -d' ' -f1

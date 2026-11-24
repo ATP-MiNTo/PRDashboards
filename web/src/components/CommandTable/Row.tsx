@@ -1,8 +1,8 @@
 import { memo, useState } from 'react';
 import type { MergeMethodName, SnapshotPr } from '@/api/client';
-import { useSnapshotPr } from '@/api/queries';
+import { useSnapshot, useSnapshotPr } from '@/api/queries';
 import { effectiveMethod } from '@/lib/merge';
-import { blockOf, githubPrUrl, isStale } from '@/lib/snapshot';
+import { blockOf, githubPrUrl, isStale, lastGoodGithub } from '@/lib/snapshot';
 import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
 import { MergePanel } from './MergePanel';
@@ -51,6 +51,7 @@ function Commit({ pr }: { pr: SnapshotPr }) {
 
 function RowView({ id }: { id: string }) {
   const pr = useSnapshotPr(id);
+  const lastGood = useSnapshot(lastGoodGithub).data ?? null;
   const [chosen, setChosen] = useState<MergeMethodName | null>(null);
   const [panel, setPanel] = useState(false);
   if (!pr) return null;
@@ -65,6 +66,11 @@ function RowView({ id }: { id: string }) {
           <div className={styles.repo}>
             {pr.repo.nameWithOwner}
             {pr.repo.isNew && <Pill tone="info">New repo</Pill>}
+            {lastGood !== null && (
+              <Pill tone="warn">
+                Last data <RelativeTime iso={lastGood.syncedAt} />
+              </Pill>
+            )}
           </div>
           <div className={styles.prTitle}>
             {url ? (

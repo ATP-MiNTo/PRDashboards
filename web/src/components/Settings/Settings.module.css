@@ -217,3 +217,150 @@
 .close {
   font: inherit;
 }
+
+.stack {
+  display: grid;
+  gap: 2px;
+}
+
+.form {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.filters {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.preview {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--info-bg);
+  color: var(--info);
+}
+
+.preview p,
+.preview ul {
+  margin: 0;
+}
+
+.preview ul {
+  padding-left: 18px;
+}
+
+.rulesList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ruleItem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.ruleMain {
+  display: grid;
+  flex: 1 1 200px;
+  gap: 2px;
+}
+
+.dragging {
+  opacity: 0.5;
+}
+
+.titleWithHint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hintWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.drawer .info {
+  padding: 0 6px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.tip {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2;
+  display: none;
+  width: min(360px, 80vw);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 12px var(--shadow);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.hintWrap:hover .tip,
+.hintWrap:focus-within .tip {
+  display: block;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drawer .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+}
+
+.drawer .chip[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.drawer .chip[aria-pressed='false'] {
+  background: var(--stack-bg);
+  color: var(--stack-fg);
+}
+
+.drawer input[type='number'] {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+}
+
+.sessionNote {
+  margin: 0;
+  color: var(--sub);
+}

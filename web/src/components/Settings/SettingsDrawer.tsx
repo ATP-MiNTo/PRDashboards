@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { useSaveSettings, useSettings } from '@/api/queries';
+import { useRevokeAll, useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { useTheme } from '@/theme/useTheme';
 import type { ThemeSetting } from '@/theme/theme';
 import { AccountsPanel } from '../AccountsPanel';
 import { ActivitySection } from './ActivitySection';
+import { MultiPrSection } from './MultiPrSection';
 import { RepositoriesSection } from './RepositoriesSection';
+import { RulesSection } from './RulesSection';
 import styles from './Settings.module.css';
 
 const FOCUSABLE =
@@ -98,6 +100,31 @@ function Preferences() {
   );
 }
 
+function SessionsSection() {
+  const revoke = useRevokeAll();
+  return (
+    <section className={styles.section} aria-labelledby="set-sessions">
+      <h3 id="set-sessions">Sessions</h3>
+      <p className={styles.sessionNote}>Signs out every browser, including this one.</p>
+      <div className={styles.actions}>
+        <button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(undefined)}>
+          Sign out all browsers
+        </button>
+      </div>
+      {revoke.isSuccess && (
+        <p className={styles.sessionNote} role="status">
+          Signed out everywhere. Open the launch link from scripts/start.sh to sign in again.
+        </p>
+      )}
+      {revoke.isError && (
+        <p className={styles.error} role="alert">
+          Could not sign out the other browsers.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialog = useRef<HTMLElement>(null);
 
@@ -157,14 +184,9 @@ export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () =
           <AccountsPanel />
           <RepositoriesSection />
           <Preferences />
-          <section className={styles.section} aria-labelledby="set-rules">
-            <h3 id="set-rules">Status sync rules</h3>
-            <p className={styles.muted}>Arrives in a later release.</p>
-          </section>
-          <section className={styles.section} aria-labelledby="set-multi">
-            <h3 id="set-multi">Multi-PR tickets</h3>
-            <p className={styles.muted}>Arrives in a later release.</p>
-          </section>
+          <RulesSection />
+          <MultiPrSection />
+          <SessionsSection />
           <ActivitySection />
         </div>
       </aside>

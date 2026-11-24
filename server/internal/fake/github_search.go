@@ -47,7 +47,33 @@ func statusContext(name, state, url string, created time.Time) map[string]any {
 	}
 }
 
-func fixturePRs(now time.Time) []fixturePR {
+// multiPRs are the pull requests of the multi-PR ticket INP-105, one per repository.
+func multiPRs() []fixturePR {
+	pr := func(repo string, number int, name string) fixturePR {
+		return fixturePR{
+			repo: repo, org: "acme", number: number, title: "INP-105 " + name, head: "feat/INP-105-" + name, base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: time.Hour, rollup: "SUCCESS",
+		}
+	}
+	return []fixturePR{pr("acme/fe", 34, "frontend"), pr("acme/be", 12, "backend"), pr("acme/proxy", 56, "proxy")}
+}
+
+// fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
+// requests the config asks for.
+func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
+	prs := basePRs(now)
+	if cfg.MultiPR {
+		prs = append(prs, multiPRs()...)
+	}
+	for i, p := range prs {
+		if slices.Contains(cfg.Approved, p.number) {
+			prs[i].decision, prs[i].reviewApproved = "APPROVED", true
+		}
+	}
+	return prs
+}
+
+func basePRs(now time.Time) []fixturePR {
 	ago := func(d time.Duration) time.Time { return now.Add(-d) }
 	run := func(repo string, id int) string {
 		return fmt.Sprintf("https://github.com/%s/actions/runs/%d", repo, id)
@@ -121,8 +147,8 @@ func (p fixturePR) headSHA(moved bool) string {
 	return fmt.Sprintf("%040x", n)
 }
 
-func findFixture(repo string, number int) (fixturePR, bool) {
-	for _, p := range fixturePRs(time.Now()) {
+func findFixture(repo string, number int, cfg githubConfig) (fixturePR, bool) {
+	for _, p := range fixturePRs(time.Now(), cfg) {
 		if p.repo == repo && p.number == number {
 			return p, true
 		}
@@ -176,19 +202,21 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 // searchBody answers the open and merged pull request searches. With the sso option the pull
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
-func searchBody(query string, sso, moved bool, merged []string, now time.Time) (header map[string]string, body map[string]any) {
+func searchBody(query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
+	sso, moved := cfg.SSO, cfg.HeadMoved
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4900, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 	}
 	nodes := []any{}
-	if !strings.Contains(query, "is:merged") {
-		for _, p := range fixturePRs(now) {
-			if sso && p.org == "acme-corp" {
-				continue
-			}
-			if !slices.Contains(merged, p.id()) {
-				nodes = append(nodes, p.node(now, moved, "OPEN"))
-			}
+	for _, p := range fixturePRs(now, cfg) {
+		if sso && p.org == "acme-corp" {
+			continue
+		}
+		switch isMerged := slices.Contains(merged, p.id()); {
+		case strings.Contains(query, "is:merged") && isMerged:
+			nodes = append(nodes, map[string]any{"__typename": "PullRequest", "id": p.id(), "mergedAt": now.UTC().Format(time.RFC3339)})
+		case !strings.Contains(query, "is:merged") && !isMerged:
+			nodes = append(nodes, p.node(now, moved, "OPEN"))
 		}
 	}
 	data["search"] = map[string]any{
@@ -208,18 +236,18 @@ func searchBody(query string, sso, moved bool, merged []string, now time.Time) (
 }
 
 // nodeBody answers the single pull request lookup by node id.
-func nodeBody(id string, moved bool, merged []string, now time.Time) map[string]any {
+func nodeBody(id string, cfg githubConfig, merged []string, now time.Time) map[string]any {
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4899, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 		"node":      nil,
 	}
-	for _, p := range fixturePRs(now) {
+	for _, p := range fixturePRs(now, cfg) {
 		if p.id() == id {
 			state := "OPEN"
 			if slices.Contains(merged, id) {
 				state = "MERGED"
 			}
-			data["node"] = p.node(now, moved, state)
+			data["node"] = p.node(now, cfg.HeadMoved, state)
 		}
 	}
 	return map[string]any{"data": data}

@@ -1,6 +1,6 @@
 # Merge and transition
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.7. Related: [merge-method.md](merge-method.md), [command-table.md](command-table.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [settings.md](settings.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.7. Related: [status-sync-rules.md](status-sync-rules.md), [merge-method.md](merge-method.md), [command-table.md](command-table.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [settings.md](settings.md).
 
 ## Purpose
 
@@ -10,9 +10,9 @@ can be retried. Every step is logged in the activity log.
 
 Differences from the spec:
 
-- Status sync rules do not exist yet (milestone 8), so no transition is preselected: every ticket starts at "Don't move". "Won't move yet" for multi-PR tickets arrives with that milestone.
-- Transitions are fetched in the browser only for a ticket the person chooses to move ("Move..."), so opening the panel costs no Jira call.
-- The `merged` rule fingerprints are written (`rule_firings`) with the PR id as fingerprint for the tickets handled, so the later sync engine can skip them.
+- The panel preselects the transition of the first matching `merged` status sync rule (`SnapshotTicket.mergePlan`), once the transitions of that ticket are loaded, and the person still confirms it. A mode All rule that still waits on other pull requests shows "Won't move yet: waiting on ..." and starts at "Don't move", and the dropdown can still move the ticket. A ticket without a plan starts at "Don't move" ([status-sync-rules.md](status-sync-rules.md)).
+- Transitions are fetched in the browser only for a ticket the person chooses to move ("Move...") or that has a merge plan, so opening the panel of a ticket without a plan costs no Jira call. They are cached for 60 s.
+- The `merged` rule fingerprints are written (`rule_firings`) in the merge transaction, as the sync engine would compute them with this pull request counted as merged (`Poller.MergedFirings`), so the engine does not move the same ticket again.
 
 ## Data model
 

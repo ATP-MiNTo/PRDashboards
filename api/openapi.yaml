@@ -350,6 +350,64 @@ paths:
                 $ref: '#/components/schemas/RepoSettings'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/rules:
+    get:
+      operationId: getRules
+      summary: The ordered status sync rules
+      responses:
+        '200':
+          description: Every rule, first match first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rules'
+    put:
+      operationId: putRules
+      summary: Replace the whole ordered list of status sync rules
+      description: >
+        Replaces the list in one transaction (at most 100 rules). A rule that is new or whose
+        condition changed starts with no stored fingerprints, so it is evaluated against the current
+        data. With baseline true, the fingerprints that hold now are recorded for those rules
+        instead, so existing tickets are not moved ("Don't move existing tickets"). The rules are
+        then evaluated again from cached data. Problem code invalid_rule for a rule that fails the
+        checks the schema cannot express.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulesUpdate'
+      responses:
+        '200':
+          description: The saved rules.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Rules'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/rules/preview:
+    post:
+      operationId: previewRule
+      summary: The tickets a rule would move now
+      description: >
+        Evaluates one rule against the cached snapshot as if it had never fired. No GitHub or Jira
+        call, and nothing is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulePreviewRequest'
+      responses:
+        '200':
+          description: The tickets that would move, and the tickets still waiting on other pull requests.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePreview'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
   /api/prs/{id}/merge:
     post:
       operationId: mergePr
@@ -867,7 +925,7 @@ components:
     SnapshotTicket:
       type: object
       additionalProperties: false
-      required: [key, source, found, summary, status, statusCategory, project, issueType, url]
+      required: [key, source, found, summary, status, statusCategory, project, issueType, url, waiting, mergePlan]
       properties:
         key:
           type: string
@@ -894,6 +952,14 @@ components:
           type: string
           nullable: true
           description: Browse URL built from the Jira site and the key. Null without a site.
+        waiting:
+          allOf:
+            - $ref: '#/components/schemas/TicketWaiting'
+          nullable: true
+        mergePlan:
+          allOf:
+            - $ref: '#/components/schemas/TicketMergePlan'
+          nullable: true
     TicketLookup:
       type: string
       enum: [ok, unverified, unreachable]
@@ -1118,6 +1184,189 @@ components:
             $ref: '#/components/schemas/BranchRule'
         clearNew:
           type: boolean
+    RuleTrigger:
+      type: string
+      enum:
+        - review_submitted
+        - review_approved
+        - changes_requested
+        - review_requested
+        - ready_for_review
+        - commit_stale
+        - ci_failing
+        - ci_passing
+        - merged
+    RuleMode:
+      type: string
+      enum: [all, any]
+    RuleFilters:
+      type: object
+      additionalProperties: false
+      required: [repo, branch, project, issueType, status]
+      description: Every filter is optional (an empty string is no filter) and they combine with AND.
+      properties:
+        repo:
+          type: string
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]*$'
+        branch:
+          type: string
+          maxLength: 200
+          pattern: '^[A-Za-z0-9._/*-]*$'
+        project:
+          type: string
+          maxLength: 50
+          pattern: '^[A-Za-z0-9_]*$'
+        issueType:
+          type: string
+          maxLength: 100
+        status:
+          type: string
+          maxLength: 100
+    SyncRule:
+      type: object
+      additionalProperties: false
+      required: [id, name, enabled, trigger, hours, filters, target, mode]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{1,64}$'
+        name:
+          type: string
+          maxLength: 100
+        enabled:
+          type: boolean
+        trigger:
+          $ref: '#/components/schemas/RuleTrigger'
+        hours:
+          type: integer
+          minimum: 0
+          maximum: 720
+          description: Age of the latest commit in hours, 1 to 720, for commit_stale. 0 for every other trigger.
+        filters:
+          $ref: '#/components/schemas/RuleFilters'
+        target:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The name of the Jira status to move the ticket to.
+        mode:
+          $ref: '#/components/schemas/RuleMode'
+    Rules:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncRule'
+    RulesUpdate:
+      type: object
+      additionalProperties: false
+      required: [rules, baseline]
+      properties:
+        rules:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncRule'
+        baseline:
+          type: boolean
+    RulePreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [rule]
+      properties:
+        rule:
+          $ref: '#/components/schemas/SyncRule'
+    PrRef:
+      type: object
+      additionalProperties: false
+      required: [prId, number, repo]
+      properties:
+        prId:
+          type: string
+        number:
+          type: integer
+        repo:
+          type: string
+          description: The repository as owner/name.
+    RuleMove:
+      type: object
+      additionalProperties: false
+      required: [ticketKey, status, alreadyInTarget]
+      properties:
+        ticketKey:
+          type: string
+        status:
+          type: string
+          description: The status the ticket has now.
+        alreadyInTarget:
+          type: boolean
+    RuleWaiting:
+      type: object
+      additionalProperties: false
+      required: [ticketKey, total, waitingOn]
+      properties:
+        ticketKey:
+          type: string
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
+    RulePreview:
+      type: object
+      additionalProperties: false
+      required: [moves, waiting]
+      properties:
+        moves:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleMove'
+        waiting:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleWaiting'
+    TicketMergePlan:
+      type: object
+      additionalProperties: false
+      required: [rule, target, total, waitingOn]
+      description: >
+        What the first enabled merged rule that applies to this ticket does when the pull request of
+        this row is merged. waitingOn lists the other pull requests that still have to merge first
+        (mode all), so the ticket would not move yet.
+      properties:
+        rule:
+          type: string
+          description: The name of the rule.
+        target:
+          type: string
+          description: The Jira status the rule moves the ticket to.
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
+    TicketWaiting:
+      type: object
+      additionalProperties: false
+      required: [rule, total, waitingOn]
+      description: A mode all rule that some linked pull requests meet and others do not yet.
+      properties:
+        rule:
+          type: string
+          description: The name of the rule.
+        total:
+          type: integer
+        waitingOn:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrRef'
     MergeTicket:
       type: object
       additionalProperties: false
@@ -1394,7 +1643,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Unprocessable:
-      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused).
+      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused).
       content:
         application/problem+json:
           schema:

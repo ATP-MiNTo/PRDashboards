@@ -12,6 +12,10 @@ const api = vi.hoisted(() => ({
   getSnapshot: vi.fn(),
   getActivity: vi.fn(),
   getRetries: vi.fn(),
+  getRules: vi.fn(),
+  putRules: vi.fn(),
+  previewRule: vi.fn(),
+  revokeAllSessions: vi.fn(),
   retryTransition: vi.fn(),
   dismissRetry: vi.fn(),
 }));
@@ -46,6 +50,7 @@ beforeEach(() => {
   api.getSnapshot.mockResolvedValue(snapshot([pr('a', 1)]));
   api.getActivity.mockResolvedValue({ items: [], nextCursor: null });
   api.getRetries.mockResolvedValue({ retries: [] });
+  api.getRules.mockResolvedValue({ rules: [] });
 });
 
 const lastSaved = () => api.putSettings.mock.calls.at(-1)?.[0];
@@ -56,7 +61,7 @@ describe('SettingsDrawer', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('is a modal dialog with every section and the later-release placeholders', async () => {
+  it('is a modal dialog with every section', async () => {
     renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -68,6 +73,7 @@ describe('SettingsDrawer', () => {
       'Theme',
       'Status sync rules',
       'Multi-PR tickets',
+      'Sessions',
       'Activity',
     ]) {
       expect(await within(dialog).findByRole('heading', { name })).toBeInTheDocument();
@@ -196,5 +202,34 @@ describe('SettingsDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss the move of INP-1' }));
     await waitFor(() => expect(api.dismissRetry).toHaveBeenCalled());
     expect(api.dismissRetry.mock.calls[0]?.[0]).toBe(7);
+  });
+
+  it('signs out every browser', async () => {
+    api.revokeAllSessions.mockResolvedValue(undefined);
+    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out all browsers' }));
+    await waitFor(() => expect(api.revokeAllSessions).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Signed out everywhere/)).toBeInTheDocument();
+  });
+
+  it('shows a rule move that needs input in the activity', async () => {
+    api.getActivity.mockResolvedValue({
+      items: [
+        {
+          id: 1,
+          kind: 'transition',
+          result: 'needs_input',
+          summary: 'INP-7 to Done',
+          error: null,
+          triggeredBy: 'rule:r1',
+          createdAt: '2026-11-24T11:00:00Z',
+        },
+      ],
+      nextCursor: null,
+    });
+    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    expect(await screen.findByText('needs input')).toBeInTheDocument();
+    expect(screen.getByText(/by a status sync rule/)).toBeInTheDocument();
+    expect(screen.getByText(/Jira asks for fields on this move/)).toBeInTheDocument();
   });
 });

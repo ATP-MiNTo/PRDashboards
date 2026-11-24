@@ -2,10 +2,18 @@ package api
 
 import (
 	"io/fs"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
 )
+
+func init() {
+	// The platform's MIME tables differ, and a manifest served as anything else is ignored.
+	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
+		panic(err)
+	}
+}
 
 const notBuiltPage = `<!doctype html>
 <html lang="en">

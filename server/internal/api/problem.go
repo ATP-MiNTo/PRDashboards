@@ -5,6 +5,7 @@ import "fmt"
 // Problem codes raised by handlers. The codes of the middleware are in package mw.
 const (
 	codeUnknownSite       = "unknown_site"
+	codeInvalidRule       = "invalid_rule"
 	codeInvalidToken      = "invalid_token"
 	codeInsufficientScope = "insufficient_scopes"
 	codeOrgBlocked        = "org_blocked"

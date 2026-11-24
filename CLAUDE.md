@@ -31,7 +31,7 @@ pnpm gen                        # regenerate Go and TS code from api/openapi.yam
 go test -race ./server/...      # server tests (go.work at the root; or run `go test -race ./...` in server/)
 golangci-lint run               # lint, from server/
 pnpm coverage-check             # 90% gate for rules, linking, stacks, merge once they exist
-pnpm -C web typecheck           # also: lint, format:check, test, build (build writes out/csp.json)
+pnpm -C web typecheck           # also: lint, format:check, test, build (build writes the manifest, icons, out/csp.json and out/sw.js)
 pnpm docs-check                 # feature docs, links, index
 pnpm version-check              # VERSION and CHANGELOG; add `--base origin/main` to compare
 pnpm test:scripts               # tests of the check scripts

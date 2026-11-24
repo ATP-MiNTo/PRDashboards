@@ -139,6 +139,9 @@ type Store interface {
 type Snapshot interface {
 	Linked(id string) (Linked, bool)
 	Refs(repoID string) []Ref
+	// MergedFirings returns the fingerprints of the merged rules that hold for the tickets of a pull
+	// request that was just merged, to record with the merge.
+	MergedFirings(ctx context.Context, prID string, tickets []string) ([]store.Firing, error)
 }
 
 // Accounts says who the merge acts as. Both methods return errors that wrap auth.ErrNotConnected

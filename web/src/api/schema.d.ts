@@ -335,6 +335,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The ordered status sync rules */
+        get: operations["getRules"];
+        /**
+         * Replace the whole ordered list of status sync rules
+         * @description Replaces the list in one transaction (at most 100 rules). A rule that is new or whose condition changed starts with no stored fingerprints, so it is evaluated against the current data. With baseline true, the fingerprints that hold now are recorded for those rules instead, so existing tickets are not moved ("Don't move existing tickets"). The rules are then evaluated again from cached data. Problem code invalid_rule for a rule that fails the checks the schema cannot express.
+         */
+        put: operations["putRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/rules/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The tickets a rule would move now
+         * @description Evaluates one rule against the cached snapshot as if it had never fired. No GitHub or Jira call, and nothing is stored.
+         */
+        post: operations["previewRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/prs/{id}/merge": {
         parameters: {
             query?: never;
@@ -596,6 +637,8 @@ export interface components {
             issueType: string | null;
             /** @description Browse URL built from the Jira site and the key. Null without a site. */
             url: string | null;
+            waiting: components["schemas"]["TicketWaiting"] | null;
+            mergePlan: components["schemas"]["TicketMergePlan"] | null;
         };
         /** @enum {string} */
         TicketLookup: "ok" | "unverified" | "unreachable";
@@ -679,6 +722,77 @@ export interface components {
             defaultMethod: components["schemas"]["MergeMethodName"];
             branchRules: components["schemas"]["BranchRule"][];
             clearNew: boolean;
+        };
+        /** @enum {string} */
+        RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged";
+        /** @enum {string} */
+        RuleMode: "all" | "any";
+        /** @description Every filter is optional (an empty string is no filter) and they combine with AND. */
+        RuleFilters: {
+            repo: string;
+            branch: string;
+            project: string;
+            issueType: string;
+            status: string;
+        };
+        SyncRule: {
+            id: string;
+            name: string;
+            enabled: boolean;
+            trigger: components["schemas"]["RuleTrigger"];
+            /** @description Age of the latest commit in hours, 1 to 720, for commit_stale. 0 for every other trigger. */
+            hours: number;
+            filters: components["schemas"]["RuleFilters"];
+            /** @description The name of the Jira status to move the ticket to. */
+            target: string;
+            mode: components["schemas"]["RuleMode"];
+        };
+        Rules: {
+            rules: components["schemas"]["SyncRule"][];
+        };
+        RulesUpdate: {
+            rules: components["schemas"]["SyncRule"][];
+            baseline: boolean;
+        };
+        RulePreviewRequest: {
+            rule: components["schemas"]["SyncRule"];
+        };
+        PrRef: {
+            prId: string;
+            number: number;
+            /** @description The repository as owner/name. */
+            repo: string;
+        };
+        RuleMove: {
+            ticketKey: string;
+            /** @description The status the ticket has now. */
+            status: string;
+            alreadyInTarget: boolean;
+        };
+        RuleWaiting: {
+            ticketKey: string;
+            total: number;
+            waitingOn: components["schemas"]["PrRef"][];
+        };
+        RulePreview: {
+            moves: components["schemas"]["RuleMove"][];
+            waiting: components["schemas"]["RuleWaiting"][];
+        };
+        /** @description What the first enabled merged rule that applies to this ticket does when the pull request of this row is merged. waitingOn lists the other pull requests that still have to merge first (mode all), so the ticket would not move yet. */
+        TicketMergePlan: {
+            /** @description The name of the rule. */
+            rule: string;
+            /** @description The Jira status the rule moves the ticket to. */
+            target: string;
+            total: number;
+            waitingOn: components["schemas"]["PrRef"][];
+        };
+        /** @description A mode all rule that some linked pull requests meet and others do not yet. */
+        TicketWaiting: {
+            /** @description The name of the rule. */
+            rule: string;
+            total: number;
+            waitingOn: components["schemas"]["PrRef"][];
         };
         MergeTicket: {
             key: components["schemas"]["TicketKey"];
@@ -817,7 +931,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused). */
+        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused). */
         Unprocessable: {
             headers: {
                 [name: string]: unknown;
@@ -1310,6 +1424,76 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+        };
+    };
+    getRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every rule, first match first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rules"];
+                };
+            };
+        };
+    };
+    putRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RulesUpdate"];
+            };
+        };
+        responses: {
+            /** @description The saved rules. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Rules"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    previewRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RulePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description The tickets that would move, and the tickets still waiting on other pull requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulePreview"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
         };
     };
     mergePr: {

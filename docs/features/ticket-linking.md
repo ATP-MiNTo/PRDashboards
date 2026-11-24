@@ -10,7 +10,7 @@ and shows each ticket with its status. Transitions are read (cached) but nothing
 ## Data model
 
 - `ticket_links(pr_id, ticket_key, source, removed, position)`: automatic links are rewritten by every refresh, manual links (`source = manual`) and hidden keys (`removed = 1`) are written only by `SetUserLinks`.
-- API schemas: `SnapshotTicket`, `TicketLookup` (`ok`, `unverified`, `unreachable`), `TicketLinks`, `TicketSummary`, `AssignedTickets`, `Transitions`.
+- API schemas: `SnapshotTicket`, `TicketLookup` (`ok`, `unverified`, `unreachable`), the `waiting` hint of a ticket with an All rule that waits ([status-sync-rules.md](status-sync-rules.md)), `TicketLinks`, `TicketSummary`, `AssignedTickets`, `Transitions`.
 - Setting read: `jiraSiteId` (or the only site).
 
 ## Code map

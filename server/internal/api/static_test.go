@@ -84,3 +84,28 @@ func TestStaticNilFS(t *testing.T) {
 		t.Fatalf("status %d", w.Code)
 	}
 }
+
+func TestInstallFilesAreServedWithoutASessionAndWithTheSecurityHeaders(t *testing.T) {
+	g := newRig(t, webFS())
+	for path, contentType := range map[string]string{
+		"/manifest.webmanifest": "application/manifest+json",
+		"/sw.js":                "text/javascript",
+	} {
+		w := g.do(http.MethodGet, path, "")
+		if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), contentType) {
+			t.Fatalf("%s: %d %q", path, w.Code, w.Header().Get("Content-Type"))
+		}
+		if w.Header().Get("Cache-Control") != "no-cache" {
+			t.Errorf("%s: a service worker or manifest that is cached for long cannot be updated: %q", path, w.Header().Get("Cache-Control"))
+		}
+		if w.Header().Get("X-Content-Type-Options") != "nosniff" {
+			t.Errorf("%s: no nosniff", path)
+		}
+		csp := w.Header().Get("Content-Security-Policy")
+		for _, want := range []string{"worker-src 'self'", "manifest-src 'self'", "script-src 'self'"} {
+			if !strings.Contains(csp, want) {
+				t.Errorf("%s: CSP lacks %q: %s", path, want, csp)
+			}
+		}
+	}
+}

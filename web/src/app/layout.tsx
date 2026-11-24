@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   title: 'PR Dashboards',
   description: 'Open pull requests assigned to you, linked to Jira.',
   referrer: 'no-referrer',
+  manifest: '/manifest.webmanifest',
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/icon-192.png' },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

@@ -61,6 +61,10 @@ type buildInput struct {
 	Jira     gen.SourceStatus
 	Blocked  []github.OrgBlocked
 	Warnings []gen.Warning
+	// Waiting is the hint of each ticket whose mode all rule is waiting on other pull requests.
+	Waiting map[string]gen.TicketWaiting
+	// Plans maps "prID|ticket" to the merge plan of that ticket on that row.
+	Plans map[string]gen.TicketMergePlan
 }
 
 func ptr[T comparable](v T) *T {
@@ -180,7 +184,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		row.Stack = info
 	}
 	for _, link := range l.res.Links {
-		row.Tickets = append(row.Tickets, ticketOf(link, in))
+		row.Tickets = append(row.Tickets, ticketOf(link, pr.ID, in))
 	}
 	row.TicketLookup = lookupState(len(row.Tickets), l.res.Unverified, in.Jira.State)
 	return row
@@ -206,11 +210,17 @@ func lookupState(tickets int, unverified bool, jira gen.SourceState) gen.TicketL
 	return "ok"
 }
 
-func ticketOf(link linking.Link, in buildInput) gen.SnapshotTicket {
+func ticketOf(link linking.Link, prID string, in buildInput) gen.SnapshotTicket {
 	t := gen.SnapshotTicket{Key: link.Key, Source: gen.TicketSource(link.Source), Project: linking.ProjectOf(link.Key)}
 	if in.Site.URL != "" {
 		u := strings.TrimRight(in.Site.URL, "/") + "/browse/" + link.Key
 		t.Url = &u
+	}
+	if w, ok := in.Waiting[link.Key]; ok {
+		t.Waiting = &w
+	}
+	if plan, ok := in.Plans[prID+"|"+link.Key]; ok {
+		t.MergePlan = &plan
 	}
 	if issue, ok := in.Issues[link.Key]; ok {
 		t.Found = true

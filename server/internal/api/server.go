@@ -15,6 +15,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
@@ -24,6 +25,9 @@ type Poller interface {
 	PR(id string) (gen.SnapshotPr, bool)
 	Trigger() gen.SyncStatus
 	Relink(ctx context.Context) error
+	Reevaluate(ctx context.Context) error
+	Preview(ctx context.Context, r rules.Rule) (poller.RulePreview, error)
+	Baseline(ctx context.Context, rs []rules.Rule) ([]store.Firing, error)
 	Reschedule()
 }
 

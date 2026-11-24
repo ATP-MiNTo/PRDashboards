@@ -11,6 +11,9 @@ import {
   dismissRetry,
   getActivity,
   getRepos,
+  getRules,
+  previewRule,
+  putRules,
   getRetries,
   getTransitions,
   mergePr,
@@ -32,6 +35,8 @@ import {
   type ClientCredentials,
   type MergeRequest,
   type MergeResult,
+  type RulesUpdate,
+  type SyncRule,
   type RepoUpdate,
   type Provider,
   type Snapshot,
@@ -54,6 +59,7 @@ export const keys = {
   activity: ['activity'],
   transitions: ['transitions'],
   merges: ['merges'],
+  rules: ['rules'],
 } as const;
 
 export const useSyncStatus = () =>
@@ -98,13 +104,8 @@ export const useSnapshotPr = (id: string) =>
 export const useAssignedTickets = (enabled: boolean) =>
   useQuery({ queryKey: keys.assigned, queryFn: getAssignedTickets, enabled, staleTime: 60_000 });
 
-export function useSyncNow() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: syncNow,
-    onSuccess: (status) => client.setQueryData(keys.syncStatus, status),
-  });
-}
+/** The status follows the event stream, which reports both the start and the end of a refresh. The response is not stored, because a fast refresh can finish before it arrives. */
+export const useSyncNow = () => useMutation({ mutationFn: syncNow });
 
 export function useSaveTickets() {
   const client = useQueryClient();
@@ -228,3 +229,25 @@ export function useDismissRetry() {
     onSuccess: () => client.invalidateQueries({ queryKey: keys.retries }),
   });
 }
+
+export const useRules = (enabled = true) =>
+  useQuery({ queryKey: keys.rules, queryFn: getRules, enabled });
+
+/** Saves the whole ordered list. The server evaluates the rules again, so the snapshot and the log follow. */
+export function useSaveRules() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (update: RulesUpdate) => putRules(update),
+    onSuccess: (saved) => {
+      client.setQueryData(keys.rules, saved);
+      return Promise.all([
+        client.invalidateQueries({ queryKey: keys.snapshot }),
+        client.invalidateQueries({ queryKey: keys.activity }),
+        client.invalidateQueries({ queryKey: keys.retries }),
+      ]);
+    },
+  });
+}
+
+export const usePreviewRule = () =>
+  useMutation({ mutationFn: (rule: SyncRule) => previewRule(rule) });

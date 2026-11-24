@@ -765,3 +765,48 @@ func TestRunWaitsWhenJiraIsNotConnected(t *testing.T) {
 		t.Fatalf("one refresh, got version %d", v)
 	}
 }
+
+func TestSecondaryRateLimitBacksOffExponentiallyAndRecovers(t *testing.T) {
+	r := newRig(t, pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a"))
+	r.gh.set(func(f *fakeGitHub) { f.err = &github.RateLimitedError{} })
+	var waits []time.Duration
+	for range 4 {
+		r.sync()
+		s := r.snapshot().Sources.Github
+		if s.State != "rate_limited" || s.ResetAt == nil {
+			t.Fatalf("%+v", s)
+		}
+		waits = append(waits, s.ResetAt.Sub(r.clock.Now()))
+	}
+	// Jitter is pinned to 0, so each wait is half of base*2^n.
+	if want := []time.Duration{time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second}; !slices.Equal(waits, want) {
+		t.Fatalf("waits %v, want %v", waits, want)
+	}
+	r.gh.set(func(f *fakeGitHub) { f.err = nil })
+	r.sync()
+	r.gh.set(func(f *fakeGitHub) { f.err = &github.RateLimitedError{} })
+	r.sync()
+	if s := r.snapshot().Sources.Github; s.ResetAt.Sub(r.clock.Now()) != time.Second {
+		t.Fatalf("the backoff did not start over after a success: %+v", s)
+	}
+	if len(r.snapshot().Prs) != 1 {
+		t.Fatal("the last good data was dropped")
+	}
+}
+
+func TestJiraRateLimitHonoursRetryAfterAndKeepsTickets(t *testing.T) {
+	r := newRig(t, pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a"))
+	r.sync()
+	r.jira.set(func(f *fakeJira) { f.err = &jira.StatusError{Status: 429, RetryAfter: 90 * time.Second} })
+	r.clock.Advance(6 * time.Minute)
+	r.sync()
+	snap := r.snapshot()
+	if snap.Sources.Jira.State != "unreachable" || snap.Prs[0].TicketLookup != "unreachable" || snap.Prs[0].Tickets[0].Summary == nil {
+		t.Fatalf("%+v", snap.Sources.Jira)
+	}
+	r.jira.set(func(f *fakeJira) { f.err = nil })
+	r.sync()
+	if r.snapshot().Sources.Jira.State != "ok" {
+		t.Fatal("did not recover")
+	}
+}

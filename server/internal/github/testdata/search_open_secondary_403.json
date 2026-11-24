@@ -1,0 +1,7 @@
+{
+  "status": 403,
+  "headers": {},
+  "body": {
+    "message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again."
+  }
+}

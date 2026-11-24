@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   expect,
   type APIRequestContext,
+  type Browser,
   type BrowserContext,
   type Page,
 } from "@playwright/test";
@@ -96,4 +97,35 @@ export async function saveClient(
   await section.getByLabel("Client secret").fill(secret);
   await section.getByRole("button", { name: "Save credentials" }).click();
   await expect(section.getByText("Saved")).toBeVisible();
+}
+
+// Connects a token to GitHub and OAuth to Jira once for a named session, so the tests of a spec
+// only reset the fakes and sync.
+export async function connectAccounts(
+  browser: Browser,
+  request: APIRequestContext,
+  session: string,
+) {
+  const page = await (await browser.newContext()).newPage();
+  await resetFakes(request);
+  await signIn(page, session);
+  await disconnectAll(page);
+  await page.goto(APP + "/setup/");
+  await page.getByLabel("Personal access token").fill("ghp_classic_ok");
+  await page.getByRole("button", { name: "Validate and save" }).click();
+  await expect(page.getByText("Connected as octocat")).toBeVisible();
+  await page.goto(APP + "/accounts/");
+  await page.getByRole("link", { name: "Connect Jira" }).click();
+  await expect(page.getByRole("status")).toHaveText("Jira is connected.");
+  await page.context().close();
+}
+
+// Presses Sync until a row with the text shows, because the first refresh can still be running.
+export async function syncUntil(page: Page, text: string) {
+  await expect(async () => {
+    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await expect(
+      page.locator("tr[data-pr]").filter({ hasText: text }).first(),
+    ).toBeVisible({ timeout: 3000 });
+  }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
 }

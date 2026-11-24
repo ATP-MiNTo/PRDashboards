@@ -51,6 +51,8 @@ func webFS() fs.FS {
 		"404.html":                {Data: []byte("<html>missing</html>")},
 		"csp.json":                {Data: []byte(`{"scriptHashes":["'sha256-abc='"]}`)},
 		"_next/static/a.js":       {Data: []byte("x")},
+		"manifest.webmanifest":    {Data: []byte(`{"name":"PR Dashboards"}`)},
+		"sw.js":                   {Data: []byte("self.addEventListener('fetch', () => {});")},
 	}
 }
 

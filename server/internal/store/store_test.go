@@ -83,7 +83,7 @@ func TestMigrationsAreRecordedOnceAndReopenIsIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 	var n int
-	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 2 {
+	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 3 {
 		t.Fatalf("migrations recorded %d, %v", n, err)
 	}
 }

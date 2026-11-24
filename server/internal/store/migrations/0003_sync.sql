@@ -1,0 +1,1 @@
+ALTER TABLE prs ADD COLUMN ready_sha TEXT;

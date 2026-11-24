@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { SnapshotPr, SnapshotTicket } from '@/api/client';
 import { useAssignedTickets, useSaveTickets, useSyncNow } from '@/api/queries';
+import { waitingText } from '@/lib/rules';
 import { safeLink } from '@/lib/snapshot';
 import styles from './CommandTable.module.css';
 import { Pill, type Tone } from './Pill';
@@ -68,6 +69,11 @@ function Ticket({
             : lookup === 'unverified'
               ? 'Not checked in Jira'
               : 'Not loaded'}
+        </div>
+      )}
+      {ticket.waiting && (
+        <div className={styles.waiting} role="status">
+          {waitingText(ticket.waiting)}
         </div>
       )}
       <div className={styles.source}>{SOURCE[ticket.source]}</div>

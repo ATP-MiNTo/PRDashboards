@@ -221,6 +221,15 @@ func TestSearchOpenFirstPageErrors(t *testing.T) {
 			return errors.As(err, &rl) && rl.RetryAfter == 900*time.Second &&
 				rl.ResetAt.Equal(time.Date(2026, 11, 24, 9, 15, 0, 0, time.UTC))
 		}},
+		{"search_open_reset_403", func(err error) bool {
+			var rl *github.RateLimitedError
+			return errors.As(err, &rl) && rl.RetryAfter == 10*time.Minute &&
+				rl.ResetAt.Equal(time.Date(2026, 11, 24, 9, 10, 0, 0, time.UTC))
+		}},
+		{"search_open_secondary_403", func(err error) bool {
+			var rl *github.RateLimitedError
+			return errors.As(err, &rl) && rl.RetryAfter == 0 && rl.ResetAt.IsZero()
+		}},
 		{"search_open_graphql_rate_limited", func(err error) bool {
 			var rl *github.RateLimitedError
 			return errors.As(err, &rl) && rl.RetryAfter == 0

@@ -19,6 +19,7 @@ var jiraIssues = []fakeIssue{
 	{"INP-102", "Single sign-on", "To Do", "new", "INP", "Story"},
 	{"INP-103", "Account menu", "In Progress", "indeterminate", "INP", "Task"},
 	{"INP-104", "Invoice export", "Done", "done", "INP", "Story"},
+	{"INP-105", "Multi-repo feature", "In Review", "indeterminate", "INP", "Story"},
 	{"OPS-12", "Rotate signing keys", "In Progress", "indeterminate", "OPS", "Task"},
 	{"OPS-20", "Review firewall rules", "To Do", "new", "OPS", "Task"},
 }
@@ -47,9 +48,9 @@ func (a *atlassian) issues() []fakeIssue {
 }
 
 // transitionTargets maps the status each fake transition leads to onto its category.
-var transitionTargets = map[string]string{"Done": "done", "In Progress": "indeterminate"}
+var transitionTargets = map[string]string{"Done": "done", "In Progress": "indeterminate", "Ready to Merge": "indeterminate"}
 
-var transitionStatus = map[string]string{"31": "Done", "21": "In Progress"}
+var transitionStatus = map[string]string{"31": "Done", "21": "In Progress", "41": "Ready to Merge"}
 
 var keyList = regexp.MustCompile(`^key in \((.*)\)$`)
 
@@ -157,6 +158,8 @@ func (a *atlassian) jiraRoutes(mux *http.ServeMux, calls *jiraCalls) {
 							"allowedValues": []map[string]string{{"id": "10000", "name": "Done"}, {"id": "10001", "name": "Won't Do"}},
 						}}},
 					{"id": "21", "name": "In Progress", "to": map[string]any{"name": "In Progress", "statusCategory": map[string]any{"key": "indeterminate"}},
+						"fields": map[string]any{}},
+					{"id": "41", "name": "Ready to Merge", "to": map[string]any{"name": "Ready to Merge", "statusCategory": map[string]any{"key": "indeterminate"}},
 						"fields": map[string]any{}},
 				}})
 				return

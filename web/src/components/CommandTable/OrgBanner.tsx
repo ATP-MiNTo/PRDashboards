@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { Snapshot } from '@/api/client';
 import { orgSsoUrl } from '@/lib/snapshot';
+import { RelativeTime } from './RelativeTime';
 import styles from './CommandTable.module.css';
 
 export function OrgBanner({ snapshot }: { snapshot: Snapshot }) {
@@ -27,12 +28,14 @@ export function OrgBanner({ snapshot }: { snapshot: Snapshot }) {
       })}
       {github.state === 'rate_limited' && (
         <div className={styles.banner} role="status">
-          GitHub rate limit reached. Showing the last data until it resets.
+          GitHub rate limit reached. Showing data from <RelativeTime iso={github.syncedAt} /> until
+          it resets.
         </div>
       )}
       {github.state === 'error' && (
         <div className={styles.banner} role="status">
-          {github.error ?? 'GitHub could not be reached'}. Showing the last data.
+          {github.error ?? 'GitHub could not be reached'}. Showing data from{' '}
+          <RelativeTime iso={github.syncedAt} />.
         </div>
       )}
       {jira.state === 'unreachable' && (

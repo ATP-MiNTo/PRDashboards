@@ -3,10 +3,10 @@
 All notable changes to PR Dashboards are listed here, newest first.
 
 Versioning: [semver](https://semver.org/). The version lives in the `VERSION` file at the repo
-root and stays `0.x` until v1 is complete. Every merged change bumps `VERSION` and adds a dated
+root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
-## [0.1.0] - 2026-11-24
+## [1.0.0] - 2026-11-24
 
 ### Added
 
@@ -61,10 +61,25 @@ entry for that version. There is no "Unreleased" section.
   log (`GET /api/activity`). The merge panel lists every linked ticket with required fields and
   confirmation.
 - Settings drawer with accounts, repositories and their branch rules, delete-branch default,
-  polling intervals, theme and the activity log. Status sync rules and Multi-PR tickets are
-  placeholders until a later release.
+  polling intervals, theme, status sync rules, Multi-PR tickets, sessions and the activity log.
 - Fake GitHub and Jira support for merge flows, and Playwright specs for merge with a transition,
   a failed move that is retried and a head that moved.
+- Status sync rules: a pure engine with nine triggers, filters, modes All and Any and a
+  fingerprint per firing, evaluated after every refresh and after a rules change. At most one
+  transition per ticket, transitions fetched only for tickets that fire, a move recorded with its
+  activity, firings and retries in one transaction, "needs input" for transitions with required
+  fields. `GET/PUT /api/rules` and `POST /api/rules/preview`.
+- Settings: an ordered rules editor (add, edit, enable, delete, drag or keyboard reorder, preview
+  with "Don't move existing tickets"), the Multi-PR tickets section with its hint and an All/Any
+  chip per rule, a "Sign out all browsers" action, and rule moves in the activity list.
+- Ticket cells show "Waiting on 2 of 3 PRs: ..." and the merge panel preselects the transition of
+  the matching `merged` rule or says "Won't move yet".
+- Hardening: GitHub secondary rate limits without headers, source status in the top bar, last good
+  data marked with its age on the banner and on every row, and the 1,000 result warning.
+- Installable app: web app manifest, generated icons and a service worker that precaches the static
+  app, shows an offline page that says to run `scripts/start.sh` and never touches `/api/*`.
+- Playwright specs for a rate limit (`403` with a reset time and `429`) and for a ticket with
+  three pull requests that moves after the third approval.
 
 ## [0.0.1] - 2026-11-24
 

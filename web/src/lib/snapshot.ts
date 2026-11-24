@@ -1,4 +1,4 @@
-import type { Check, Snapshot, SnapshotPr } from '@/api/client';
+import type { Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
 
 export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -193,4 +193,27 @@ export function checkDuration(c: Check, now: number): string | null {
   if (sec < 60) return `${sec}s`;
   const min = Math.floor(sec / 60);
   return min < 60 ? `${min}m ${sec % 60}s` : `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
+const SOURCE_TEXT: Record<SourceStatus['state'], string> = {
+  pending: 'waiting',
+  ok: 'ok',
+  rate_limited: 'rate limited',
+  error: 'error',
+  unreachable: 'unreachable',
+  disconnected: 'not connected',
+};
+
+/** The short state of a source for the top bar. A rate limit shows when it resets. */
+export function sourceLabel(s: SourceStatus, now: number): string {
+  const base = SOURCE_TEXT[s.state];
+  if (s.state !== 'rate_limited') return base;
+  const left = countdown(s.resetAt, now);
+  return left ? `${base}, resets in ${left}` : base;
+}
+
+/** Set while GitHub fails, so every row can say its data is the last good copy and how old it is. */
+export function lastGoodGithub(s: Snapshot): { syncedAt: string | null } | null {
+  const g = s.sources.github;
+  return g.state === 'rate_limited' || g.state === 'error' ? { syncedAt: g.syncedAt } : null;
 }

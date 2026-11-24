@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build && node scripts/csp-hashes.mjs",
+    "build": "node scripts/pwa-assets.mjs && next build && node scripts/csp-hashes.mjs && node scripts/service-worker.mjs",
     "gen": "openapi-typescript ../api/openapi.yaml -o src/api/schema.d.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",

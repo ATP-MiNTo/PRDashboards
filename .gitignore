@@ -12,3 +12,5 @@ next-env.d.ts
 *.tsbuildinfo
 .e2e-data/
 test-results/
+web/public/icons/
+web/public/manifest.webmanifest

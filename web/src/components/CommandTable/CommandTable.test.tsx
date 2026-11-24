@@ -202,6 +202,15 @@ describe('CommandTable', () => {
     await screen.findByText('Add login');
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
     await waitFor(() => expect(api.syncNow).toHaveBeenCalledTimes(1));
+    act(() => {
+      FakeEventSource.last!.emit('sync-status', {
+        running: true,
+        githubAt: null,
+        jiraAt: null,
+        nextGithubAt: null,
+        nextJiraAt: null,
+      });
+    });
     await screen.findByRole('button', { name: 'Syncing' });
     act(() => {
       FakeEventSource.last!.emit('sync-status', {

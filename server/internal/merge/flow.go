@@ -197,9 +197,13 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	for i, t := range req.Tickets {
 		keys[i] = t.Key
 	}
+	firings, err := s.cfg.Snapshot.MergedFirings(ctx, req.PRID, keys)
+	if err != nil {
+		s.cfg.Log.ErrorContext(ctx, "merged rule fingerprints", "pr", req.PRID, "err", err)
+	}
 	err = s.cfg.Store.RecordMerge(ctx, store.Merged{
 		Now: s.cfg.Clock(), PRID: req.PRID, Key: req.IdempotencyKey, Activity: acts, Retries: retries,
-		Tickets: keys, Fingerprint: req.PRID,
+		Firings: firings,
 		Encode: func(ids map[string]int64) ([]byte, error) {
 			for i := range res.Steps {
 				if res.Steps[i].State == StateFailed && res.Steps[i].Kind == StepTransition {
@@ -420,15 +424,15 @@ func (s *Service) move(ctx context.Context, prID string, m move, by string) outc
 		return o
 	}
 	s.cfg.Log.WarnContext(ctx, "jira transition failed", "ticket", m.ticket, "err", err)
-	msg := describeJira(err)
+	msg := DescribeJira(err)
 	o.step.State, o.step.Message = StateFailed, msg
 	o.act.Result, o.act.Error, o.act.Summary = StateFailed, msg, m.ticket+" could not be moved to "+m.tr.ToStatus
 	o.retry = store.RetryRow{PRID: prID, TicketKey: m.ticket, TransitionID: m.tr.ID, ToStatus: m.tr.ToStatus, Fields: m.raw, LastError: msg}
 	return o
 }
 
-// describeJira turns a failed Jira call into text for the person. It never includes a token.
-func describeJira(err error) string {
+// DescribeJira turns a failed Jira call into text for the person. It never includes a token.
+func DescribeJira(err error) string {
 	var se *jira.StatusError
 	switch {
 	case notConnected(err):

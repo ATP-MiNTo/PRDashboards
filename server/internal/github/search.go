@@ -387,8 +387,26 @@ func (c *Client) send(ctx context.Context, token, method, target string, payload
 		now := c.now()
 		wait, _ := backoff.Hint(resp.Header, now)
 		return nil, resp.StatusCode, resp.Header, &RateLimitedError{RetryAfter: wait, ResetAt: now.Add(wait)}
+	case resp.StatusCode == http.StatusForbidden && secondaryLimit(resp.Header, body):
+		// No wait hint: the caller backs off exponentially (TECH_SPEC 10.4).
+		return nil, resp.StatusCode, resp.Header, &RateLimitedError{}
 	}
 	return body, resp.StatusCode, resp.Header, nil
+}
+
+// secondaryLimit recognizes the 403 GitHub sends for a secondary rate limit without Retry-After.
+func secondaryLimit(h http.Header, body []byte) bool {
+	if h.Get("X-GitHub-SSO") != "" {
+		return false
+	}
+	var parsed struct {
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &parsed) != nil {
+		return false
+	}
+	m := strings.ToLower(parsed.Message)
+	return strings.Contains(m, "secondary rate limit") || strings.Contains(m, "abuse detection")
 }
 
 // searchPage posts one search page. A GraphQL rate limit error becomes *RateLimitedError. A blocked

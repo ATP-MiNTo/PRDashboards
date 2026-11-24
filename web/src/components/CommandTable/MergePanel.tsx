@@ -1,6 +1,13 @@
 import { useId, useState } from 'react';
-import { ApiError, type MergeMethodName, type SnapshotPr, type SnapshotTicket } from '@/api/client';
+import {
+  ApiError,
+  type MergeMethodName,
+  type SnapshotPr,
+  type SnapshotTicket,
+  type Transition,
+} from '@/api/client';
 import { useMerge, useRecentMerges, useSettings, useTicketTransitions } from '@/api/queries';
+import { refText } from '@/lib/rules';
 import { mergeBlock, mergeLabel, METHOD_NAMES, type TicketChoice } from '@/lib/merge';
 import { describeProblem } from '@/lib/problems';
 import { blockOf } from '@/lib/snapshot';
@@ -10,29 +17,41 @@ import { MergeSteps } from './MergeSteps';
 
 interface Draft {
   open: boolean;
-  transitionId: string;
+  /** Null follows the default of the status sync rule, if any. */
+  transitionId: string | null;
   fields: Record<string, string>;
   confirmed: boolean;
 }
 
-const UNTOUCHED: Draft = { open: false, transitionId: '', fields: {}, confirmed: false };
+const UNTOUCHED: Draft = { open: false, transitionId: null, fields: {}, confirmed: false };
 const MAX_TICKETS = 20;
 const NONE = '';
+
+/** The transition the first matching merged rule would make, when the rule is not waiting on other PRs. */
+function ruleDefault(ticket: SnapshotTicket, list: Transition[]): string {
+  const plan = ticket.mergePlan;
+  if (!plan || plan.waitingOn.length > 0) return NONE;
+  const target = plan.target.toLowerCase();
+  return list.find((t) => t.toStatus.toLowerCase() === target)?.id ?? NONE;
+}
 
 function TicketMove({
   ticket,
   draft,
+  transitionId,
   choice,
   transitions,
   onDraft,
 }: {
   ticket: SnapshotTicket;
   draft: Draft;
+  transitionId: string;
   choice: TicketChoice;
   transitions: ReturnType<typeof useTicketTransitions>[number];
   onDraft: (d: Draft) => void;
 }) {
   const id = useId();
+  const plan = ticket.mergePlan;
   const list = transitions.data?.transitions ?? [];
   const options = [
     { value: NONE, label: "Don't move" },
@@ -45,9 +64,14 @@ function TicketMove({
         <span className={styles.muted}>{ticket.summary ?? ''}</span>
         {ticket.status && <span className={styles.muted}> ({ticket.status})</span>}
       </div>
+      {plan && plan.waitingOn.length > 0 && (
+        <span className={styles.muted}>
+          Won&apos;t move yet: waiting on {plan.waitingOn.map(refText).join(', ')}
+        </span>
+      )}
       {!ticket.found ? (
         <span className={styles.muted}>Not found in Jira, it will not be moved</span>
-      ) : !draft.open ? (
+      ) : !draft.open && !plan ? (
         <div className={styles.moveChoice}>
           <span>Don&apos;t move</span>
           <button
@@ -69,7 +93,7 @@ function TicketMove({
         <div className={styles.moveChoice}>
           <Dropdown
             label={`Move ${ticket.key}`}
-            value={draft.transitionId}
+            value={transitionId}
             options={options}
             onChange={(transitionId) =>
               onDraft({ ...draft, transitionId, fields: {}, confirmed: false })
@@ -148,11 +172,18 @@ export function MergePanel({
 
   const tickets = pr.tickets;
   const queries = useTicketTransitions(
-    tickets.map((t) => ({ key: t.key, enabled: drafts[t.key]?.open === true })),
+    tickets.map((t) => ({
+      key: t.key,
+      enabled: drafts[t.key]?.open === true || t.mergePlan !== null,
+    })),
   );
+  const picked = tickets.map((t, i) => {
+    const d = drafts[t.key] ?? UNTOUCHED;
+    return d.transitionId ?? ruleDefault(t, queries[i]?.data?.transitions ?? []);
+  });
   const choices: TicketChoice[] = tickets.map((t, i) => {
     const d = drafts[t.key] ?? UNTOUCHED;
-    const transition = queries[i]?.data?.transitions.find((x) => x.id === d.transitionId) ?? null;
+    const transition = queries[i]?.data?.transitions.find((x) => x.id === picked[i]) ?? null;
     return { key: t.key, transition, fields: d.fields, confirmed: d.confirmed };
   });
 
@@ -232,6 +263,7 @@ export function MergePanel({
                 key={t.key}
                 ticket={t}
                 draft={drafts[t.key] ?? UNTOUCHED}
+                transitionId={picked[i] ?? NONE}
                 choice={choice}
                 transitions={query}
                 onDraft={(d) => setDrafts((all) => ({ ...all, [t.key]: d }))}

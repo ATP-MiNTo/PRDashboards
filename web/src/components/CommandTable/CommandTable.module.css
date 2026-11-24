@@ -633,3 +633,21 @@
   margin: 0;
   font-size: 14px;
 }
+
+.waiting {
+  color: var(--warn);
+  font-size: 12px;
+}
+
+.sources {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.sources [data-state='rate_limited'],
+.sources [data-state='error'],
+.sources [data-state='unreachable'],
+.sources [data-state='disconnected'] {
+  color: var(--warn);
+}

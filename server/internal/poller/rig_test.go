@@ -25,6 +25,7 @@ type countingStore struct {
 	mu           sync.Mutex
 	refreshes    int
 	snapshotOnly int
+	syncWrites   int
 }
 
 func (s *countingStore) SaveRefresh(ctx context.Context, r store.Refresh) error {
@@ -39,6 +40,13 @@ func (s *countingStore) SaveSnapshot(ctx context.Context, v int64, d []byte, now
 	s.snapshotOnly++
 	s.mu.Unlock()
 	return s.Store.SaveSnapshot(ctx, v, d, now)
+}
+
+func (s *countingStore) SaveSync(ctx context.Context, v int64, d []byte, now time.Time, w store.SyncWrite) error {
+	s.mu.Lock()
+	s.syncWrites++
+	s.mu.Unlock()
+	return s.Store.SaveSync(ctx, v, d, now, w)
 }
 
 func (s *countingStore) counts() (refreshes, snapshotOnly int) {
@@ -109,6 +117,14 @@ type fakeJira struct {
 	projectsErr error
 	searches    [][]string
 	projectCall int
+
+	transitions     map[string][]jira.Transition
+	transitionsErr  map[string]error
+	moveErr         map[string]error
+	transitionCalls []string
+	moves           []string
+	inflight        int
+	maxInflight     int
 }
 
 func (f *fakeJira) Search(_ context.Context, _ string, keys []string) (jira.SearchResult, error) {
@@ -134,6 +150,47 @@ func (f *fakeJira) Projects(context.Context, string) ([]string, error) {
 	defer f.mu.Unlock()
 	f.projectCall++
 	return f.projects, f.projectsErr
+}
+
+func (f *fakeJira) Transitions(_ context.Context, _, key string) ([]jira.Transition, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.transitionCalls = append(f.transitionCalls, key)
+	if err := f.transitionsErr[key]; err != nil {
+		return nil, err
+	}
+	return f.transitions[key], nil
+}
+
+func (f *fakeJira) Transition(_ context.Context, _, key, id string, _ map[string]any) error {
+	f.mu.Lock()
+	f.inflight++
+	f.maxInflight = max(f.maxInflight, f.inflight)
+	f.mu.Unlock()
+	time.Sleep(20 * time.Millisecond)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.inflight--
+	f.moves = append(f.moves, key+":"+id)
+	return f.moveErr[key]
+}
+
+func (f *fakeJira) peak() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.maxInflight
+}
+
+func (f *fakeJira) moveLog() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.moves...)
+}
+
+func (f *fakeJira) transitionLog() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.transitionCalls...)
 }
 
 func (f *fakeJira) set(fn func(f *fakeJira)) {

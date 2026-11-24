@@ -177,4 +177,17 @@ describe('TicketCell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Unlink INP-1' }));
     expect(await screen.findByText('Could not save the change.')).toBeInTheDocument();
   });
+
+  it('shows what a ticket with an All rule still waits on', () => {
+    const waiting = {
+      rule: 'r1',
+      total: 3,
+      waitingOn: [
+        { prId: 'a', number: 34, repo: 'acme/FE' },
+        { prId: 'b', number: 56, repo: 'acme/proxy' },
+      ],
+    };
+    renderWithClient(<TicketCell pr={pr('a', 1, { tickets: [ticket('INP-1', { waiting })] })} />);
+    expect(screen.getByText('Waiting on 2 of 3 PRs: FE #34, proxy #56')).toBeInTheDocument();
+  });
 });

@@ -23,6 +23,7 @@ type PRRow struct {
 	HeadBranch string `json:"head"`
 	BaseBranch string `json:"base"`
 	HeadSHA    string `json:"sha"`
+	Draft      bool   `json:"draft"`
 }
 
 // LinkRow is an automatically found ticket link. Manual links and hidden keys are written by
@@ -51,6 +52,8 @@ type Refresh struct {
 	Resolved      []Resolution
 	Version       int64
 	Snapshot      []byte
+	// Sync is the result of the rule evaluation of this refresh, written in the same transaction.
+	Sync SyncWrite
 }
 
 // BranchRule sends the pull requests that target a matching base branch to a merge method.
@@ -105,14 +108,18 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 			  SELECT j.value, s.key, json_extract(s.value, '$.pattern'), json_extract(s.value, '$.method')
 			  FROM json_each(?) j CROSS JOIN json_each(?) s`,
 				[]any{marshal(fresh), marshal(SeedRules)}},
-			{`INSERT INTO prs (id, repo_id, number, title, head_branch, base_branch, head_sha, state, merged_at, last_seen_at)
+			{`INSERT INTO prs (id, repo_id, number, title, head_branch, base_branch, head_sha, state, merged_at, last_seen_at, ready_sha)
 			  SELECT json_extract(value, '$.id'), json_extract(value, '$.repo'), json_extract(value, '$.number'),
 			         json_extract(value, '$.title'), json_extract(value, '$.head'), json_extract(value, '$.base'),
-			         json_extract(value, '$.sha'), 'open', NULL, ?
+			         json_extract(value, '$.sha'), 'open', NULL, ?,
+			         CASE WHEN json_extract(value, '$.draft') THEN NULL ELSE json_extract(value, '$.sha') END
 			  FROM json_each(?) WHERE true
 			  ON CONFLICT (id) DO UPDATE SET repo_id = excluded.repo_id, number = excluded.number, title = excluded.title,
 			    head_branch = excluded.head_branch, base_branch = excluded.base_branch, head_sha = excluded.head_sha,
-			    state = 'open', merged_at = NULL, last_seen_at = excluded.last_seen_at`,
+			    state = 'open', merged_at = NULL, last_seen_at = excluded.last_seen_at,
+			    ready_sha = CASE WHEN excluded.ready_sha IS NULL THEN NULL
+			                     WHEN prs.state = 'open' AND prs.ready_sha IS NOT NULL THEN prs.ready_sha
+			                     ELSE excluded.ready_sha END`,
 				[]any{now, marshal(r.PRs)}},
 			{`UPDATE prs SET state = j.state, merged_at = j.merged_at
 			  FROM (SELECT json_extract(value, '$.id') AS id, json_extract(value, '$.state') AS state,
@@ -135,7 +142,7 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 				return err
 			}
 		}
-		return nil
+		return writeSync(ctx, tx, r.Now, r.Sync)
 	})
 }
 

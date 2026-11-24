@@ -63,11 +63,10 @@ type Merged struct {
 	Key      string
 	Activity []ActivityRow
 	Retries  []RetryRow
-	// Tickets are the tickets handled by this merge. Every enabled rule that triggers on a merge gets
-	// a firing for each of them, so the sync engine does not move them again.
-	Tickets     []string
-	Fingerprint string
-	Encode      func(retryIDs map[string]int64) ([]byte, error)
+	// Firings are the fingerprints of the rules that hold for the tickets this merge handled, so the
+	// sync engine does not move them again.
+	Firings []Firing
+	Encode  func(retryIDs map[string]int64) ([]byte, error)
 }
 
 func insertActivity(ctx context.Context, tx *sql.Tx, now time.Time, rows []ActivityRow) error {
@@ -87,6 +86,38 @@ func insertActivity(ctx context.Context, tx *sql.Tx, now time.Time, rows []Activ
 	return err
 }
 
+func insertRetries(ctx context.Context, tx *sql.Tx, now time.Time, retries []RetryRow) (map[string]int64, error) {
+	ids := map[string]int64{}
+	if len(retries) == 0 {
+		return ids, nil
+	}
+	items := make([]retryJSON, len(retries))
+	for i, r := range retries {
+		if r.Fields == nil {
+			r.Fields = map[string]string{}
+		}
+		items[i] = retryJSON{r.PRID, r.TicketKey, r.TransitionID, r.ToStatus, r.Fields, r.LastError}
+	}
+	rows, err := tx.QueryContext(ctx,
+		`INSERT INTO pending_retries (pr_id, ticket_key, transition_id, to_status, fields, last_error, created_at)
+		 SELECT json_extract(value, '$.pr'), json_extract(value, '$.ticket'), json_extract(value, '$.transition'),
+		        json_extract(value, '$.toStatus'), json_extract(value, '$.fields'), json_extract(value, '$.error'), ?
+		 FROM json_each(?) ORDER BY key RETURNING id, ticket_key`, unix(now), marshal(items))
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id int64
+		var key string
+		if err := rows.Scan(&id, &key); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		ids[key] = id
+	}
+	return ids, errors.Join(rows.Err(), rows.Close())
+}
+
 // RecordMerge writes the activity rows, the pending retries, the merged rule firings and the
 // idempotency record of a merge in one transaction, and removes expired idempotency records.
 func (s *Store) RecordMerge(ctx context.Context, m Merged) error {
@@ -94,45 +125,12 @@ func (s *Store) RecordMerge(ctx context.Context, m Merged) error {
 		if err := insertActivity(ctx, tx, m.Now, m.Activity); err != nil {
 			return err
 		}
-		ids := map[string]int64{}
-		if len(m.Retries) > 0 {
-			items := make([]retryJSON, len(m.Retries))
-			for i, r := range m.Retries {
-				if r.Fields == nil {
-					r.Fields = map[string]string{}
-				}
-				items[i] = retryJSON{r.PRID, r.TicketKey, r.TransitionID, r.ToStatus, r.Fields, r.LastError}
-			}
-			rows, err := tx.QueryContext(ctx,
-				`INSERT INTO pending_retries (pr_id, ticket_key, transition_id, to_status, fields, last_error, created_at)
-				 SELECT json_extract(value, '$.pr'), json_extract(value, '$.ticket'), json_extract(value, '$.transition'),
-				        json_extract(value, '$.toStatus'), json_extract(value, '$.fields'), json_extract(value, '$.error'), ?
-				 FROM json_each(?) ORDER BY key RETURNING id, ticket_key`, unix(m.Now), marshal(items))
-			if err != nil {
-				return err
-			}
-			for rows.Next() {
-				var id int64
-				var key string
-				if err := rows.Scan(&id, &key); err != nil {
-					_ = rows.Close()
-					return err
-				}
-				ids[key] = id
-			}
-			if err := errors.Join(rows.Err(), rows.Close()); err != nil {
-				return err
-			}
+		ids, err := insertRetries(ctx, tx, m.Now, m.Retries)
+		if err != nil {
+			return err
 		}
-		if len(m.Tickets) > 0 {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO rule_firings (rule_id, ticket_key, fingerprint, fired_at)
-				 SELECT r.id, t.value, ?, ? FROM sync_rules r CROSS JOIN json_each(?) t
-				 WHERE r.enabled = 1 AND json_extract(r.trigger, '$.type') = 'merged'
-				 ON CONFLICT (rule_id, ticket_key) DO UPDATE SET fingerprint = excluded.fingerprint, fired_at = excluded.fired_at`,
-				m.Fingerprint, unix(m.Now), marshal(m.Tickets)); err != nil {
-				return err
-			}
+		if err := insertFirings(ctx, tx, m.Now, m.Firings); err != nil {
+			return err
 		}
 		result, err := m.Encode(ids)
 		if err != nil {

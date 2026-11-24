@@ -86,8 +86,13 @@ func TestMergeMovesEveryTicketAndRecordsOnceInOneTransaction(t *testing.T) {
 	}
 }
 
-func TestMergeFiringsAreRecordedForMergedRulesOnly(t *testing.T) {
+func TestMergeRecordsTheFingerprintsTheSyncEngineReports(t *testing.T) {
 	r := newRig(t, "INP-1", "INP-2")
+	r.snapshot.firings = []store.Firing{
+		{Rule: "merged-on", Ticket: "INP-1", Fingerprint: "PR_1=PR_1"},
+		{Rule: "merged-on", Ticket: "INP-2", Fingerprint: "PR_1=PR_1"},
+		{Rule: "deleted", Ticket: "INP-1", Fingerprint: "PR_1=PR_1"},
+	}
 	db, err := sql.Open("sqlite", "file:"+r.path)
 	if err != nil {
 		t.Fatal(err)
@@ -116,9 +121,12 @@ func TestMergeFiringsAreRecordedForMergedRulesOnly(t *testing.T) {
 		_ = rows.Scan(&rule, &ticket, &fp)
 		got = append(got, rule+"|"+ticket+"|"+fp)
 	}
-	want := []string{"merged-on|INP-1|PR_1", "merged-on|INP-2|PR_1"}
+	want := []string{"merged-on|INP-1|PR_1=PR_1", "merged-on|INP-2|PR_1=PR_1"}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Fatalf("firings %v", got)
+	}
+	if r.snapshot.askedPR != prID || len(r.snapshot.askedTK) != 2 {
+		t.Fatalf("asked %q %v", r.snapshot.askedPR, r.snapshot.askedTK)
 	}
 }
 

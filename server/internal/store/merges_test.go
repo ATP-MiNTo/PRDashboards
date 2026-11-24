@@ -17,10 +17,9 @@ func TestRecordMergeWritesEverythingInOneTransaction(t *testing.T) {
 	}
 	err := s.RecordMerge(ctx, store.Merged{
 		Now: clock.Now(), PRID: "P1", Key: "k1",
-		Activity:    []store.ActivityRow{{Kind: "merge", PRID: "P1", TriggeredBy: "manual", Result: "ok", Summary: "Merged"}, {Kind: "transition", TicketKey: "INP-1", PRID: "P1", TriggeredBy: "manual", Result: "failed", Summary: "x", Error: "boom"}},
-		Retries:     []store.RetryRow{{PRID: "P1", TicketKey: "INP-1", TransitionID: "31", ToStatus: "Done", LastError: "boom"}},
-		Tickets:     []string{"INP-1", "INP-2"},
-		Fingerprint: "P1",
+		Activity: []store.ActivityRow{{Kind: "merge", PRID: "P1", TriggeredBy: "manual", Result: "ok", Summary: "Merged"}, {Kind: "transition", TicketKey: "INP-1", PRID: "P1", TriggeredBy: "manual", Result: "failed", Summary: "x", Error: "boom"}},
+		Retries:  []store.RetryRow{{PRID: "P1", TicketKey: "INP-1", TransitionID: "31", ToStatus: "Done", LastError: "boom"}},
+		Firings:  []store.Firing{{Rule: "r1", Ticket: "INP-1", Fingerprint: "P1=P1"}, {Rule: "r1", Ticket: "INP-2", Fingerprint: "P1=P1"}, {Rule: "gone", Ticket: "INP-3", Fingerprint: "x"}},
 		Encode: func(ids map[string]int64) ([]byte, error) {
 			if ids["INP-1"] == 0 {
 				t.Error("retry id missing")

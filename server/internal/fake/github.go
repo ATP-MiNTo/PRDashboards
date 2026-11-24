@@ -27,6 +27,13 @@ type githubConfig struct {
 	HeadMoved bool `json:"headMoved"`
 	// DeleteFails makes the branch delete answer 500.
 	DeleteFails bool `json:"deleteFails"`
+	// RateLimit makes the search answer like a used up limit: "reset" is a 403 with x-ratelimit-reset
+	// ten minutes ahead, "retry_after" is a 429 with Retry-After.
+	RateLimit string `json:"rateLimit"`
+	// MultiPR adds three pull requests of three repositories that all link to INP-105.
+	MultiPR bool `json:"multiPr"`
+	// Approved lists the numbers of pull requests that GitHub reports as approved.
+	Approved []int `json:"approved"`
 }
 
 type githubState struct {
@@ -182,7 +189,10 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.st.Searches++
 		g.mu.Unlock()
-		header, body := searchBody(q, sso, cfg.HeadMoved, merged, time.Now())
+		if limited(w, cfg.RateLimit, time.Now()) {
+			return
+		}
+		header, body := searchBody(q, cfg, merged, time.Now())
 		for k, v := range header {
 			w.Header().Set(k, v)
 		}
@@ -193,7 +203,7 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.st.NodeQueries++
 		g.mu.Unlock()
-		writeJSON(w, http.StatusOK, nodeBody(id, cfg.HeadMoved, merged, time.Now()))
+		writeJSON(w, http.StatusOK, nodeBody(id, cfg, merged, time.Now()))
 		return
 	}
 	if sso {
@@ -213,6 +223,29 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]string{"login": "octocat"}}})
 }
 
+func (g *github) config() githubConfig {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.st.Config
+}
+
+// limited answers a search with a rate limit response when the config asks for one.
+func limited(w http.ResponseWriter, mode string, now time.Time) bool {
+	switch mode {
+	case "reset":
+		w.Header().Set("X-RateLimit-Limit", "5000")
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(now.Add(10*time.Minute).Unix(), 10))
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "API rate limit exceeded"})
+	case "retry_after":
+		w.Header().Set("Retry-After", "900")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"message": "Too many requests"})
+	default:
+		return false
+	}
+	return true
+}
+
 func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 	if _, ok := g.authed(w, r); !ok {
 		return
@@ -224,7 +257,7 @@ func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 	}
 	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
 	number, _ := strconv.Atoi(r.PathValue("number"))
-	p, ok := findFixture(repo, number)
+	p, ok := findFixture(repo, number, g.config())
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 		return

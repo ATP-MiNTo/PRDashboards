@@ -162,10 +162,10 @@ sequenceDiagram
 | Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |
 | Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
-| Status sync rules and Multi-PR tickets | `features/status-sync-rules.md` | Not built |
-| Settings drawer | [features/settings.md](features/settings.md) | Partial |
+| Status sync rules and Multi-PR tickets | [features/status-sync-rules.md](features/status-sync-rules.md) | Built |
+| Settings drawer | [features/settings.md](features/settings.md) | Built |
 | Theme | [features/theme.md](features/theme.md) | Built |
-| Installable app (PWA) | `features/installable-app.md` | Not built |
+| Installable app (PWA) | [features/installable-app.md](features/installable-app.md) | Built |
 
 Each doc is added, from the template in [features/README.md](features/README.md), in the PR that
-builds the feature.
+builds the feature. Every feature of v1 is built.
