@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -32,20 +34,34 @@ func (r *recorder) all() []sent {
 	return append([]sent(nil), r.reqs...)
 }
 
+// serveSearch answers every search with the fixtures in names, in order, separately for each
+// query: the assigned and the authored search both walk the same list (so the union is the same
+// pull requests, found twice).
 func serveSearch(t *testing.T, names ...string) (*github.Client, *recorder) {
 	t.Helper()
+	return serveRouted(t, func(string) []string { return names })
+}
+
+// serveRouted answers a search with the next fixture of the list route returns for its query.
+// Each query has its own position in its list, so concurrent searches do not disturb each other.
+func serveRouted(t *testing.T, route func(q string) []string) (*github.Client, *recorder) {
+	t.Helper()
 	rec := &recorder{}
+	pos := map[string]int{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var s sent
 		if err := json.Unmarshal(body, &s); err != nil {
 			t.Errorf("request body: %v", err)
 		}
+		q, _ := s.Variables["q"].(string)
 		rec.mu.Lock()
 		rec.reqs = append(rec.reqs, s)
-		n := len(rec.reqs)
+		n := pos[q]
+		pos[q]++
 		rec.mu.Unlock()
-		load(t, names[min(n, len(names))-1]).write(w)
+		names := route(q)
+		load(t, names[min(n, len(names)-1)]).write(w)
 	}))
 	t.Cleanup(srv.Close)
 	clock := time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC)
@@ -57,6 +73,60 @@ func serveSearch(t *testing.T, names ...string) (*github.Client, *recorder) {
 	}, rec
 }
 
+// queries returns the q variable of every recorded request, sorted.
+func (r *recorder) queries() []string {
+	var out []string
+	for _, s := range r.all() {
+		out = append(out, s.Variables["q"].(string))
+	}
+	slices.Sort(out)
+	return out
+}
+
+// page builds a one-page search answer with the given pull request ids.
+func page(ids []string, issueCount, remaining, cost int, extra map[string]any) fixtureBody {
+	nodes := []any{}
+	for _, id := range ids {
+		nodes = append(nodes, map[string]any{"__typename": "PullRequest", "id": id, "number": 1, "mergedAt": "2026-11-24T08:00:00Z",
+			"repository": map[string]any{"nameWithOwner": "acme/web"}})
+	}
+	body := map[string]any{"data": map[string]any{
+		"rateLimit": map[string]any{"limit": 5000, "cost": cost, "remaining": remaining, "resetAt": "2026-11-24T10:00:00Z"},
+		"search":    map[string]any{"issueCount": issueCount, "pageInfo": map[string]any{"hasNextPage": false, "endCursor": nil}, "nodes": nodes},
+	}}
+	maps.Copy(body, extra)
+	return fixtureBody{status: 200, body: body}
+}
+
+type fixtureBody struct {
+	status  int
+	headers map[string]string
+	body    map[string]any
+}
+
+// serveBodies answers each search with the body route returns for its query and counts requests.
+func serveBodies(t *testing.T, route func(q string) fixtureBody) *github.Client {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var s sent
+		_ = json.NewDecoder(r.Body).Decode(&s)
+		f := route(s.Variables["q"].(string))
+		for k, v := range f.headers {
+			w.Header().Set(k, v)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(f.status)
+		_ = json.NewEncoder(w).Encode(f.body)
+	}))
+	t.Cleanup(srv.Close)
+	return &github.Client{
+		HTTP:    srv.Client(),
+		APIBase: srv.URL,
+		Clock:   func() time.Time { return time.Date(2026, 11, 24, 9, 0, 0, 0, time.UTC) },
+		Backoff: backoff.Policy{Sleep: func(context.Context, time.Duration) error { return nil }, Attempts: 1},
+	}
+}
+
 func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	c, rec := serveSearch(t, "search_open_page1", "search_open_page2_partial")
 	res, err := c.SearchOpen(context.Background(), "tok")
@@ -64,11 +134,20 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 		t.Fatal(err)
 	}
 	reqs := rec.all()
-	if len(reqs) != 2 || res.Requests != 2 {
+	if len(reqs) != 4 || res.Requests != 4 {
 		t.Fatalf("requests %d", len(reqs))
 	}
-	if reqs[0].Variables["q"] != github.OpenQuery || reqs[0].Variables["cursor"] != nil || reqs[1].Variables["cursor"] != "CURSOR1" {
-		t.Fatalf("variables %v / %v", reqs[0].Variables, reqs[1].Variables)
+	if want := []string{github.OpenAssignedQuery, github.OpenAssignedQuery, github.OpenAuthoredQuery, github.OpenAuthoredQuery}; !slices.Equal(rec.queries(), want) {
+		t.Fatalf("queries %v", rec.queries())
+	}
+	cursors := 0
+	for _, r := range reqs {
+		if r.Variables["cursor"] == "CURSOR1" {
+			cursors++
+		}
+	}
+	if cursors != 2 {
+		t.Fatalf("each search follows its cursor once, got %d", cursors)
 	}
 	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {"} {
 		if !strings.Contains(reqs[0].Query, want) {
@@ -78,7 +157,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	if len(res.PRs) != 3 {
 		t.Fatalf("prs %d", len(res.PRs))
 	}
-	if res.RateLimit.Limit != 5000 || res.RateLimit.Remaining != 4989 || res.RateLimit.Cost != 2 ||
+	if res.RateLimit.Limit != 5000 || res.RateLimit.Remaining != 4989 || res.RateLimit.Cost != 4 ||
 		!res.RateLimit.ResetAt.Equal(time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)) || res.RateLimit.Low() {
 		t.Fatalf("rate limit %+v", res.RateLimit)
 	}
@@ -177,7 +256,7 @@ func TestSearchOpenPartialResultWithBlockedOrg(t *testing.T) {
 func TestSearchOpenKeepsPRsWhenOtherErrorsCome(t *testing.T) {
 	c, _ := serveSearch(t, "search_open_other_error")
 	res, err := c.SearchOpen(context.Background(), "tok")
-	if err != nil || len(res.PRs) != 1 || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "INTERNAL") || len(res.Blocked) != 0 {
+	if err != nil || len(res.PRs) != 1 || len(res.Errors) != 2 || !strings.Contains(res.Errors[0], "INTERNAL") || len(res.Blocked) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
@@ -204,7 +283,7 @@ func TestSearchOpenCapWarning(t *testing.T) {
 func TestSearchOpenLaterPageFailureKeepsEarlierPRs(t *testing.T) {
 	c, rec := serveSearch(t, "search_open_page1", "search_open_server_error")
 	res, err := c.SearchOpen(context.Background(), "tok")
-	if err != nil || !res.Incomplete || len(res.PRs) != 2 || len(rec.all()) != 2 {
+	if err != nil || !res.Incomplete || len(res.PRs) != 2 || len(rec.all()) != 4 {
 		t.Fatalf("%+v %v requests %d", res, err, len(rec.all()))
 	}
 }
@@ -251,10 +330,11 @@ func TestSearchMerged(t *testing.T) {
 		t.Fatal(err)
 	}
 	reqs := rec.all()
-	if len(reqs) != 1 || reqs[0].Variables["q"] != "is:pr assignee:@me is:merged updated:>=2026-11-24T06:30:00Z" {
+	want := []string{"is:pr assignee:@me is:merged updated:>=2026-11-24T06:30:00Z", "is:pr author:@me is:merged updated:>=2026-11-24T06:30:00Z"}
+	if len(reqs) != 2 || !slices.Equal(rec.queries(), want) {
 		t.Fatalf("%+v", reqs)
 	}
-	if len(res.Merged) != 1 || !res.Merged["PR_9"].Equal(time.Date(2026, 11, 24, 8, 45, 0, 0, time.UTC)) || res.Requests != 1 {
+	if len(res.Merged) != 1 || !res.Merged["PR_9"].Equal(time.Date(2026, 11, 24, 8, 45, 0, 0, time.UTC)) || res.Requests != 2 {
 		t.Fatalf("%+v", res)
 	}
 }
@@ -277,6 +357,178 @@ func TestRateLimitLow(t *testing.T) {
 	} {
 		if got := tc.r.Low(); got != tc.want {
 			t.Errorf("%+v: %v", tc.r, got)
+		}
+	}
+}
+
+func ids(prs []github.PR) []string {
+	var out []string
+	for _, p := range prs {
+		out = append(out, p.ID)
+	}
+	return out
+}
+
+func TestSearchOpenSendsBothQueriesAndMergesByID(t *testing.T) {
+	var mu sync.Mutex
+	var sentQueries []string
+	c := serveBodies(t, func(q string) fixtureBody {
+		mu.Lock()
+		sentQueries = append(sentQueries, q)
+		mu.Unlock()
+		if q == github.OpenAssignedQuery {
+			return page([]string{"A", "B", "C"}, 3, 4000, 1, nil)
+		}
+		return page([]string{"C", "D", "A", "E"}, 4, 4500, 1, nil)
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(sentQueries)
+	if !slices.Equal(sentQueries, []string{"is:pr is:open assignee:@me archived:false", "is:pr is:open author:@me archived:false"}) {
+		t.Fatalf("queries %v", sentQueries)
+	}
+	if got := ids(res.PRs); !slices.Equal(got, []string{"A", "B", "C", "D", "E"}) {
+		t.Fatalf("assigned first, then authored ones not yet seen: %v", got)
+	}
+	if res.Total != 5 || res.Capped || res.Incomplete || res.Requests != 2 || len(res.Errors) != 0 || len(res.Blocked) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	if res.RateLimit.Cost != 2 || res.RateLimit.Remaining != 4000 || res.RateLimit.Limit != 5000 {
+		t.Fatalf("rate limit takes the lowest remaining and sums cost: %+v", res.RateLimit)
+	}
+}
+
+func TestSearchOpenMergesCapIncompleteBlockedAndErrors(t *testing.T) {
+	sso := map[string]string{"X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=X"}
+	forbidden := map[string]any{"errors": []map[string]string{{"type": "FORBIDDEN", "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to the `acme-corp` organization."}}}
+	other := map[string]any{"errors": []map[string]string{{"type": "INTERNAL", "message": "boom"}}}
+	c := serveBodies(t, func(q string) fixtureBody {
+		if q == github.OpenAssignedQuery {
+			f := page([]string{"A"}, 1500, 4900, 1, forbidden)
+			f.headers = sso
+			return f
+		}
+		f := page([]string{"B"}, 1, 100, 3, other)
+		return f
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Capped || res.Total != 1500 || len(res.PRs) != 2 {
+		t.Fatalf("capped by either search: %+v", res)
+	}
+	if len(res.Blocked) != 1 || res.Blocked[0].Org != "acme-corp" || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "INTERNAL") {
+		t.Fatalf("blocked %+v errors %v", res.Blocked, res.Errors)
+	}
+	if res.RateLimit.Remaining != 100 || res.RateLimit.Cost != 4 || !res.RateLimit.Low() {
+		t.Fatalf("rate limit %+v", res.RateLimit)
+	}
+}
+
+func TestSearchOpenBlockedOrgIsListedOnce(t *testing.T) {
+	sso := map[string]string{"X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=X"}
+	forbidden := map[string]any{"errors": []map[string]string{{"type": "FORBIDDEN", "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to the `acme-corp` organization."}}}
+	c := serveBodies(t, func(string) fixtureBody {
+		f := page(nil, 0, 4000, 1, forbidden)
+		f.headers = sso
+		return f
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil || len(res.Blocked) != 1 || len(res.PRs) != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+func TestSearchOpenIncompleteWhenEitherSearchLosesAPage(t *testing.T) {
+	c, _ := serveRouted(t, func(q string) []string {
+		if q == github.OpenAuthoredQuery {
+			return []string{"search_open_page1", "search_open_server_error"}
+		}
+		return []string{"search_open_capped"}
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil || !res.Incomplete || !res.Capped {
+		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+func TestSearchOpenOneSearchFailingReturnsTheError(t *testing.T) {
+	cases := []struct {
+		name     string
+		assigned string
+		authored string
+		check    func(error) bool
+	}{
+		{"authored fails", "search_open_page2_partial", "search_open_server_error", func(err error) bool { return err != nil && strings.Contains(err.Error(), "502") }},
+		{"assigned fails", "search_open_server_error", "search_open_page2_partial", func(err error) bool { return err != nil && strings.Contains(err.Error(), "502") }},
+		{"bad credentials beats a rate limit", "search_open_http_rate_limited", "viewer_bad_credentials", func(err error) bool { return errors.Is(err, github.ErrBadCredentials) }},
+		{"bad credentials beats a rate limit, other order", "viewer_bad_credentials", "search_open_http_rate_limited", func(err error) bool { return errors.Is(err, github.ErrBadCredentials) }},
+		{"rate limit beats a plain error", "search_open_server_error", "search_open_http_rate_limited", func(err error) bool {
+			var rl *github.RateLimitedError
+			return errors.As(err, &rl)
+		}},
+		{"rate limit beats a plain error, other order", "search_open_http_rate_limited", "search_open_server_error", func(err error) bool {
+			var rl *github.RateLimitedError
+			return errors.As(err, &rl)
+		}},
+	}
+	for _, tc := range cases {
+		c, _ := serveRouted(t, func(q string) []string {
+			if q == github.OpenAssignedQuery {
+				return []string{tc.assigned}
+			}
+			return []string{tc.authored}
+		})
+		res, err := c.SearchOpen(context.Background(), "tok")
+		if !tc.check(err) || len(res.PRs) != 0 {
+			t.Errorf("%s: %v (%d prs)", tc.name, err, len(res.PRs))
+		}
+	}
+}
+
+func TestSearchOpenStopsOnCancelledContext(t *testing.T) {
+	c, _ := serveSearch(t, "search_open_page1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := c.SearchOpen(ctx, "tok"); err == nil {
+		t.Fatal("a cancelled context must fail the search")
+	}
+}
+
+func TestSearchMergedUnionsBothSearches(t *testing.T) {
+	c := serveBodies(t, func(q string) fixtureBody {
+		if strings.HasPrefix(q, "is:pr assignee:@me") {
+			return page([]string{"M1", "M2"}, 2, 4000, 1, nil)
+		}
+		return page([]string{"M2", "M3"}, 2, 3000, 1, nil)
+	})
+	res, err := c.SearchMerged(context.Background(), "tok", time.Date(2026, 11, 24, 7, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Merged) != 3 || res.Requests != 2 || res.RateLimit.Remaining != 3000 || res.RateLimit.Cost != 2 {
+		t.Fatalf("%+v", res)
+	}
+	for _, id := range []string{"M1", "M2", "M3"} {
+		if _, ok := res.Merged[id]; !ok {
+			t.Errorf("missing %s", id)
+		}
+	}
+}
+
+func TestSearchMergedEitherSearchFailingIsAnError(t *testing.T) {
+	for _, failing := range []string{"is:pr assignee:@me", "is:pr author:@me"} {
+		c := serveBodies(t, func(q string) fixtureBody {
+			if strings.HasPrefix(q, failing) {
+				return fixtureBody{status: 500, body: map[string]any{"message": "boom"}}
+			}
+			return page([]string{"M1"}, 1, 4000, 1, nil)
+		})
+		if res, err := c.SearchMerged(context.Background(), "tok", time.Now()); err == nil || len(res.Merged) != 0 {
+			t.Errorf("%s: %v %+v", failing, err, res)
 		}
 	}
 }

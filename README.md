@@ -1,6 +1,6 @@
 # PR Dashboards
 
-A local dashboard that lists every open pull request assigned to you across GitHub, shows review
+A local dashboard that lists every open pull request assigned to you or opened by you across GitHub, shows review
 and CI status, links each pull request to its Jira tickets, and merges and moves those tickets in
 one action. Status sync rules keep tickets in the right Jira status while their pull requests move
 through review.
@@ -127,7 +127,7 @@ with a link to authorize. The rest of the list still loads.
 
 ### The dashboard
 
-Each row is one open pull request assigned to you. The columns, from left to right:
+Each row is one open pull request assigned to you or opened by you. The columns, from left to right:
 
 | Column | What it shows |
 | --- | --- |

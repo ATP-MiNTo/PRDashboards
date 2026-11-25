@@ -6,6 +6,15 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.0.3] - 2026-11-25
+
+### Changed
+
+- The dashboard lists the open pull requests you opened as well as the ones assigned to you. GitHub
+  never assigns the author of a pull request, so the list was empty for your own pull requests.
+  A refresh runs two searches (assigned and opened by you) at the same time and shows a pull
+  request found by both once. Merged pull requests are found the same way.
+
 ## [1.0.2] - 2026-11-25
 
 ### Fixed

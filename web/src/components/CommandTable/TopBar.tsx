@@ -51,7 +51,7 @@ export function TopBar({
       <div className={styles.topbarIn}>
         <div className={styles.brand}>
           <b>PR Dashboards</b>
-          <span>assigned to you</span>
+          <span>assigned or opened by you</span>
         </div>
         <div className={styles.tbRight}>
           <div className={styles.seg} role="group" aria-label="Theme">
