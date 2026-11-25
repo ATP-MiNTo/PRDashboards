@@ -171,7 +171,7 @@ func prRows(prs []github.PR) []store.PRRow {
 // fetchGitHub runs the search, and the merged search when pull requests left the list. It returns
 // the resolutions to store and whether the list was replaced by fresh data.
 func (p *Poller) fetchGitHub(ctx context.Context, now time.Time) ([]store.Resolution, bool) {
-	token, err := p.cfg.Accounts.GitHubToken()
+	token, err := p.cfg.Accounts.GitHubToken(ctx)
 	if err != nil {
 		if errors.Is(err, auth.ErrNotConnected) {
 			p.mu.Lock()
@@ -240,6 +240,9 @@ func (p *Poller) failGitHub(now time.Time, err error) {
 		src.ResetAt = tptr(p.ghBackoff)
 	case errors.Is(err, github.ErrBadCredentials):
 		src.State, src.Error = "disconnected", sptr("GitHub rejected the token")
+		p.gh = ghData{loaded: true}
+	case errors.Is(err, auth.ErrNeedsReconnect):
+		src.State, src.Error = "disconnected", sptr("Reconnect GitHub")
 		p.gh = ghData{loaded: true}
 	default:
 		wait, _ := p.cfg.Backoff.Delay(http.Header(nil), p.ghFails)

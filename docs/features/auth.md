@@ -4,8 +4,11 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 ## Purpose
 
-Connects the app to GitHub (OAuth App, or a pasted personal access token) and to Jira (Atlassian
-OAuth 2.0 3LO), keeps the Jira token fresh, and shows the state in a "Connected accounts" panel.
+Connects the app to GitHub (a GitHub App with user access tokens, or a pasted personal access token)
+and to Jira (Atlassian OAuth 2.0 3LO), keeps the Jira and GitHub App tokens fresh, and shows the state
+in a "Connected accounts" panel. A GitHub App is used because an org admin can install it on selected
+repositories only, which an OAuth App with the `repo` scope cannot do. The token only sees the
+repositories where the App is installed and the person has access.
 PR and ticket data are fetched by the poller ([poller.md](poller.md)).
 
 Differences from the spec:
@@ -14,19 +17,27 @@ Differences from the spec:
   with a same-origin `POST`. The spec's "only when the request carries the session cookie" cannot
   work because `SameSite=Strict` cookies are not sent on the cross-site redirect from the provider.
   See Key flows 4 and Rules.
-- The "disconnected" state after a failed Jira refresh is `needsReconnect` on the stored token. The
-  access token is dropped, the site list is kept.
+- The "disconnected" state after a failed Jira or GitHub App refresh is `needsReconnect` on the stored
+  token. The Jira site list is kept. A GitHub token that needs a reconnect is kept until the person
+  signs in again.
+- No private key, app ID or JWT: only user access tokens are used. GitHub ignores `scope` for a
+  GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup).
 - Setup is under `/setup`. The PAT form is on the same page. The Connected accounts panel is also
   in the settings drawer ([settings.md](settings.md)).
 
 ## Data model
 
-- Secrets: `github.oauth.client`, `atlassian.oauth.client`, `github.token`, `atlassian.token` (see
+- Secrets: `github.oauth.client` (client id, secret and the optional `appSlug`), `atlassian.oauth.client`, `github.token`, `atlassian.token` (see
   [storage.md](storage.md)). They live in the encrypted vault `vault.enc`, not in the OS keychain: the
   Atlassian token is too big for the macOS keychain, which holds only the vault key.
 - SQLite: `oauth_states` (pending flows) and the setting `jiraSiteId`.
-- API schemas: `SetupState`, `ClientCredentials`, `PatRequest`, `Accounts` (`github`: connected,
-  login, method, warning; `jira`: connected, needsReconnect, sites, selectedSiteId),
+- `github.token` holds `token`, `method` (`app` for a new sign-in, `pat`, or the legacy `oauth`, which
+  keeps working as stored), `login`, `warning`, `refreshToken`, `expiresAt` (zero or absent means the
+  token does not expire: PATs, legacy tokens, Apps with expiry off) and `needsReconnect`.
+- API schemas: `Setup` and `ProviderSetup` (`configured`, `callbackUrl`, and `installUrl` for GitHub
+  when a slug is saved), `ClientCredentials` (with the optional `appSlug`, pattern
+  `^[a-z0-9][a-z0-9-]{0,99}$`), `PatRequest`, `Accounts` (`github`: connected,
+  login, method (`app`, `oauth`, `pat`), warning, needsReconnect; `jira`: connected, needsReconnect, sites, selectedSiteId),
   `OAuthCompleteRequest`. Secrets and tokens appear in none of them.
 - Problem codes added: `unknown_site`, `invalid_token`, `insufficient_scopes`, `org_blocked`,
   `upstream_error`, `not_connected`, `provider_not_configured`, `invalid_oauth_state`,
@@ -34,12 +45,12 @@ Differences from the spec:
 
 | Method and path | Purpose |
 | --- | --- |
-| `GET /api/setup` | Which providers have client credentials, and the callback URLs |
-| `PUT /api/setup/{github\|atlassian}` | Save client id and secret (write only) |
+| `GET /api/setup` | Which providers have client credentials, the callback URLs, and the GitHub install link |
+| `PUT /api/setup/{github\|atlassian}` | Save client id, secret and the optional GitHub App slug (write only) |
 | `PUT /api/github/pat` | Validate and store a personal access token |
 | `GET /api/accounts` | Connection state of both providers |
 | `DELETE /api/accounts/{provider}` | Remove the stored token |
-| `POST /api/accounts/{provider}/check` | Check the connection now (Viewer, or a Jira token refresh if due) |
+| `POST /api/accounts/{provider}/check` | Check the connection now (a GitHub token refresh if due, then Viewer, or a Jira token refresh if due) |
 | `GET /oauth/{provider}/start` | Protected. `302` to the provider, or `303` to `/auth/done/` with `not_configured` |
 | `GET /oauth/{provider}/callback` | Cookie-less. `303` to `/oauth/finish/` |
 | `POST /api/oauth/complete` | Protected. Finish the flow with `{provider, code, state}` |
@@ -48,10 +59,10 @@ Differences from the spec:
 
 Server:
 
-- [server/internal/auth/oauth.go](../../server/internal/auth/oauth.go): `OAuth`, `Endpoints`, `Start`, `Complete`, `Disconnect`, HTTP helpers, `accessibleSites`.
-- [server/internal/auth/github.go](../../server/internal/auth/github.go): `completeGitHub`, `SetPAT`, `ScopeError`, `FineGrainedWarning`, `GitHubAccount`, `CheckGitHub`.
+- [server/internal/auth/oauth.go](../../server/internal/auth/oauth.go): `OAuth`, `Endpoints`, `Start`, `Complete`, `Disconnect`, `SetClient` (slug check), `InstallURL`, HTTP helpers, `accessibleSites`.
+- [server/internal/auth/github.go](../../server/internal/auth/github.go): `completeGitHub`, `GitHubAccess`, `refreshGitHub`, `SetPAT`, `ScopeError`, `FineGrainedWarning`, `GitHubAccount`, `CheckGitHub`.
 - [server/internal/auth/atlassian.go](../../server/internal/auth/atlassian.go): `completeAtlassian`, `AtlassianAccess`, `refresh`, `AtlassianAccount`, `CheckAtlassian`.
-- [server/internal/auth/tokens.go](../../server/internal/auth/tokens.go): token blob types, `validSite`, errors.
+- [server/internal/auth/tokens.go](../../server/internal/auth/tokens.go): token blob types, method constants, `ValidSlug`, `validSite`, errors.
 - [server/internal/github/github.go](../../server/internal/github/github.go): `Client.Viewer`, `HasScope`, `OrgBlocked`, `Classify`, SSO header parsing.
 - [server/internal/netguard/netguard.go](../../server/internal/netguard/netguard.go): `Guard`, the only HTTP client the providers use. [allow_e2e.go](../../server/internal/netguard/allow_e2e.go) adds loopback hosts in the e2e build only.
 - [server/internal/backoff/backoff.go](../../server/internal/backoff/backoff.go): `Policy`, `Do`, `Retryable`, `Hint`, `Delay`.
@@ -63,7 +74,8 @@ Server:
 
 Web:
 
-- [web/src/app/setup/page.tsx](../../web/src/app/setup/page.tsx): `/setup`, with [ClientForm](../../web/src/components/ClientForm.tsx) and [PatForm](../../web/src/components/PatForm.tsx).
+- [web/src/app/setup/page.tsx](../../web/src/app/setup/page.tsx): `/setup`, with [ClientForm](../../web/src/components/ClientForm.tsx) (the "GitHub App" card has the slug field and the install link) and [PatForm](../../web/src/components/PatForm.tsx).
+- [web/src/lib/githubApp.ts](../../web/src/lib/githubApp.ts): `isAppSlug`, `appInstallUrl` (the install link is rebuilt from the validated slug in the server URL, otherwise none).
 - [web/src/app/oauth/finish/page.tsx](../../web/src/app/oauth/finish/page.tsx) and [web/src/lib/oauthFinish.ts](../../web/src/lib/oauthFinish.ts): clear the query, post to `/api/oauth/complete`, go to `/auth/done/`.
 - [web/src/app/auth/done/page.tsx](../../web/src/app/auth/done/page.tsx): result message and a link back to `/accounts/`.
 - [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts on `/accounts/`.
@@ -93,7 +105,9 @@ E2e:
 6. `OAuth.Complete`: `ConsumeOAuthState` (one `DELETE ... RETURNING`, must match the provider and
    the calling session and be unexpired). Then the code exchange:
    - GitHub: `POST` to the token endpoint with the verifier, then `Viewer` to learn the login,
-     stored as `github.token` with method `oauth`.
+     stored under `tokenMu` as `github.token` with method `app`, the refresh token and
+     `expiresAt = now + expires_in`. Without `expires_in` and `refresh_token` (expiry turned off in
+     the App) the token never expires. The authorize URL has no `scope`.
    - Atlassian: token exchange, then `accessible-resources`. Sites that are not `https://*.atlassian.net`
      are dropped. With one site it is selected, with several the person picks in the panel, which
      saves `jiraSiteId` through `PUT /api/settings`.
@@ -106,17 +120,31 @@ E2e:
    and the new expiry, then return the access token. On a `400` or `401`, or a `403` `invalid_grant`,
    set `needsReconnect`, drop the access token and return `ErrNeedsReconnect`. Other failures keep
    the stored token and return an upstream error.
-9. `POST /api/accounts/{provider}/check` runs `CheckGitHub` (`Viewer`) or `CheckAtlassian`
-   (`AtlassianAccess`), so the panel can show a broken connection now.
-10. `DELETE /api/accounts/{provider}` removes the token item. Client credentials stay.
+9. GitHub refresh (`GitHubAccess`, used by the poller, the merge flow and `CheckGitHub`): mirrors
+   `AtlassianAccess`. Fast path without the lock when the token has no expiry (PAT, legacy `oauth`,
+   Apps with expiry off) or more than `RefreshSkew` left. Otherwise take `tokenMu`, reload, check
+   again, then `POST` `grant_type=refresh_token` to the token endpoint with the client id and secret.
+   The rotated refresh token and the new expiry are stored before the access token is returned. GitHub
+   answers a bad refresh token with status `200` and `{"error":"bad_refresh_token"}`: that, or a `400`
+   or `401`, sets `needsReconnect` and returns `ErrNeedsReconnect`. Network errors, `5xx` and other
+   error bodies keep the stored token and return an error. A flagged token returns `ErrNeedsReconnect`
+   without calling GitHub. Signing in again replaces the token and clears the flag. The poller maps
+   `ErrNeedsReconnect` to the GitHub source state `disconnected` with the text "Reconnect GitHub".
+   The panel shows a "Reconnect GitHub" link to `/oauth/github/start`.
+10. `POST /api/accounts/{provider}/check` runs `CheckGitHub` (`GitHubAccess`, then `Viewer`) or
+    `CheckAtlassian` (`AtlassianAccess`), so the panel can show a broken connection now. A token that
+    needs a reconnect answers with the accounts instead of an error.
+11. `DELETE /api/accounts/{provider}` removes the token item. Client credentials stay.
 
 ## Outside calls
 
 Only on a person's action, never in the background. All go through `netguard` (HTTPS, TLS 1.2
 minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlassian.com`).
 
-- GitHub: token exchange (once per sign-in), GraphQL `viewer { login }` (once per sign-in, PAT
-  entry or Check).
+- GitHub: token exchange (once per sign-in), token refresh (only when an expiring App token is
+  within a minute of expiry, at most once per 8 hours of use, one at a time, so concurrent callers
+  share one), GraphQL `viewer { login }` (once per sign-in, PAT entry or Check). The install link is
+  only a link in the UI, the server never calls it.
 - Atlassian: token exchange and `accessible-resources` (once per sign-in), token refresh (at most
   once per hour of use, one at a time).
 - Rate limits and `5xx` use `backoff.Do`: `Retry-After` first, else exponential backoff with
@@ -137,27 +165,35 @@ minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlass
 - Tokens, client secrets, codes and verifiers are never logged, stored in SQLite (except the
   pending verifier), returned by the API or sent to the browser. `GET /api/accounts` returns
   logins, methods, warnings and site names only.
-- Every refresh of the Atlassian token runs under `tokenMu`, and the rotated refresh token is
-  stored before the new access token is used. Two parallel callers never spend one refresh token
-  twice.
+- Every refresh of the Atlassian token and of a GitHub App token runs under `tokenMu`, and the
+  rotated refresh token is stored before the new access token is used. Two parallel callers never
+  spend one refresh token twice. Writes of `github.token` (sign-in, PAT, check, disconnect) take
+  the same lock.
+- The install link is built on the server only from a slug that matches `^[a-z0-9][a-z0-9-]{0,99}$`,
+  and the web accepts only a link of exactly that shape on `github.com`.
 - Only `internal/github` and `internal/auth` make outbound calls, only through `netguard`.
   Redirects are not followed to hosts outside the allowlist. Site URLs from `accessible-resources`
   are validated before they are stored.
 - The fakes and `--fake` exist only with the `e2e` build tag. In fake mode secrets are in memory,
   client credentials are pre-filled, and the guard allows `127.0.0.1:4411` and `127.0.0.1:4412`.
 - Test hooks of the fakes: `GET /__admin/state`, `POST /__admin/config` and `POST /__admin/reset` on
-  each fake. GitHub config: `deny`, `tamperState`, `sso`. Atlassian config: `deny`, `tamperState`,
+  each fake. GitHub config: `deny`, `tamperState`, `sso`, `expiresIn` (lifetime in seconds of user tokens,
+  default 28800, 1 makes every use refresh), `refreshFail` (every refresh answers `bad_refresh_token`).
+  The fake GitHub authorize endpoint rejects a request that carries `scope`, its token endpoint returns
+  `refresh_token` and `expires_in` and supports `grant_type=refresh_token` with rotation (an unknown or
+  used refresh token gets `bad_refresh_token`), and its user tokens carry no `X-OAuth-Scopes` header
+  (fake PATs still do). Atlassian config: `deny`, `tamperState`,
   `expiresIn`, `refreshFail`, `sites` (1 or 2). Fake PATs: `ghp_classic_ok`, `ghp_classic_no_org`,
   `github_pat_finegrained`.
 
 ## Tests
 
-- [server/internal/auth/oauth_test.go](../../server/internal/auth/oauth_test.go): start, state binding, expiry and replay, PKCE, both exchanges, site filtering, refresh rotation under concurrency, `needsReconnect`, disconnect.
+- [server/internal/auth/oauth_test.go](../../server/internal/auth/oauth_test.go): start, state binding, expiry and replay, PKCE, both exchanges (no scope on the GitHub authorize URL), site filtering, Jira and GitHub refresh rotation under concurrency (one refresh call for 25 callers), `needsReconnect`, transient failures that keep the token, non-expiring and legacy `oauth` tokens, slug validation and `InstallURL`, disconnect.
 - [server/internal/auth/persist_test.go](../../server/internal/auth/persist_test.go): token blobs in the secrets store.
 - [server/internal/github/github_test.go](../../server/internal/github/github_test.go): `Viewer`, scopes, `OrgBlocked` and `Classify` against fixtures in [testdata/](../../server/internal/github/testdata).
 - [server/internal/netguard/netguard_test.go](../../server/internal/netguard/netguard_test.go) and [allow_e2e_test.go](../../server/internal/netguard/allow_e2e_test.go): allowlist, TLS minimum, concurrency cap, timeouts, loopback only in the e2e build.
 - [server/internal/backoff/backoff_test.go](../../server/internal/backoff/backoff_test.go): delays, `Retry-After`, jitter bounds, attempts.
-- [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go), [oauth_api_test.go](../../server/internal/api/oauth_api_test.go), [providers_test.go](../../server/internal/api/providers_test.go): setup, PAT, accounts, the callback and complete flow over HTTP, with fake providers.
+- [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go), [oauth_api_test.go](../../server/internal/api/oauth_api_test.go), [providers_test.go](../../server/internal/api/providers_test.go): setup (including the slug and `installUrl`), PAT, accounts (including GitHub `needsReconnect`), the callback and complete flow over HTTP, with fake providers.
 - [server/cmd/prdash/fake_e2e_test.go](../../server/cmd/prdash/fake_e2e_test.go) and [fake_prod_test.go](../../server/cmd/prdash/fake_prod_test.go): `--fake` exists only with the e2e tag.
-- Web: [AccountsPanel.test.tsx](../../web/src/components/AccountsPanel.test.tsx), [setup/page.test.tsx](../../web/src/app/setup/page.test.tsx), [auth/done/page.test.tsx](../../web/src/app/auth/done/page.test.tsx), [oauth/finish/page.test.tsx](../../web/src/app/oauth/finish/page.test.tsx), [oauthFinish.test.ts](../../web/src/lib/oauthFinish.test.ts), [problems.test.ts](../../web/src/lib/problems.test.ts).
-- Playwright (`pnpm e2e`): [e2e/github.spec.ts](../../e2e/github.spec.ts) (cross-site OAuth sign-in, tampered state, replay, denial, PAT classic, missing scope, fine-grained, rejected) and [e2e/atlassian.spec.ts](../../e2e/atlassian.spec.ts), plus [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts) for the SSO-blocked dashboard (sign-in, two-site pick, refresh with rotation, refresh failure and reconnect, denial).
+- Web: [AccountsPanel.test.tsx](../../web/src/components/AccountsPanel.test.tsx), [setup/page.test.tsx](../../web/src/app/setup/page.test.tsx), [auth/done/page.test.tsx](../../web/src/app/auth/done/page.test.tsx), [oauth/finish/page.test.tsx](../../web/src/app/oauth/finish/page.test.tsx), [oauthFinish.test.ts](../../web/src/lib/oauthFinish.test.ts), [problems.test.ts](../../web/src/lib/problems.test.ts), [githubApp.test.ts](../../web/src/lib/githubApp.test.ts) (slug and install link shape). The poller maps `ErrNeedsReconnect` in [poller_test.go](../../server/internal/poller/poller_test.go).
+- Playwright (`pnpm e2e`): [e2e/github.spec.ts](../../e2e/github.spec.ts) (cross-site GitHub App sign-in, refresh with rotation, tampered state, replay, denial, PAT classic, missing scope, fine-grained, rejected) and [e2e/atlassian.spec.ts](../../e2e/atlassian.spec.ts), plus [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts) for the SSO-blocked dashboard (sign-in, two-site pick, refresh with rotation, refresh failure and reconnect, denial).

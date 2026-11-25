@@ -141,7 +141,7 @@ type fakeAccounts struct {
 	tokenErr, siteErr error
 }
 
-func (a fakeAccounts) GitHubToken() (string, error) { return "tok", a.tokenErr }
+func (a fakeAccounts) GitHubToken(context.Context) (string, error) { return "tok", a.tokenErr }
 func (a fakeAccounts) JiraSite(context.Context) (jira.Site, error) {
 	return jira.Site{ID: "cloud-1"}, a.siteErr
 }

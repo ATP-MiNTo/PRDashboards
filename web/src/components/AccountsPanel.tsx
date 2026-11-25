@@ -15,6 +15,8 @@ import {
 import type { Provider } from '@/api/client';
 import { describeProblem } from '@/lib/problems';
 
+const METHODS = { app: 'GitHub App', oauth: 'OAuth', pat: 'access token' } as const;
+
 function problemText(error: unknown): string {
   return describeProblem(error instanceof ApiError ? error.code : undefined);
 }
@@ -34,7 +36,7 @@ function Connect({ provider, label, configured, primary }: ConnectProps) {
     </a>
   ) : (
     <a className={styles.link} href="/setup/">
-      Set up the OAuth app
+      Set up
     </a>
   );
 }
@@ -77,14 +79,27 @@ export function AccountsPanel() {
           <strong>GitHub</strong>
           {github.connected ? (
             <span className={styles.ok}>
-              Connected as {github.login} ({github.method === 'pat' ? 'access token' : 'OAuth'})
+              Connected as {github.login} ({METHODS[github.method ?? 'app']})
             </span>
           ) : (
             <span className={styles.muted}>Not connected</span>
           )}
+          {github.needsReconnect && (
+            <span className={styles.warn}>
+              The GitHub authorization expired. Reconnect to continue.
+            </span>
+          )}
           {github.warning && <span className={styles.warn}>{github.warning}</span>}
         </div>
         <div className={styles.actions}>
+          {github.needsReconnect && (
+            <Connect
+              provider="github"
+              label="Reconnect GitHub"
+              configured={configured.github}
+              primary
+            />
+          )}
           {github.connected ? (
             <>
               <button className={styles.button} onClick={() => check.mutate('github')}>

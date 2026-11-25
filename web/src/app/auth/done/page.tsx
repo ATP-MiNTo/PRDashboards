@@ -39,7 +39,7 @@ function message({ result, name }: Outcome): string {
     case 'invalid_state':
       return 'The sign-in link expired or was already used. Start again.';
     case 'not_configured':
-      return `Set up the ${name} OAuth app first.`;
+      return `Set up the ${name} app first.`;
     case 'signed_out':
       return 'Your session ended. Open the app with scripts/start.sh';
     default:

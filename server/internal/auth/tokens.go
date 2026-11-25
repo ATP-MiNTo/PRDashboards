@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -50,21 +51,42 @@ var (
 	ErrNotConnected      = errors.New("not connected")
 	ErrNeedsReconnect    = errors.New("the connection needs to be authorized again")
 	ErrInsufficientScope = errors.New("token lacks required scopes")
+	ErrInvalidSlug       = errors.New("invalid GitHub App slug")
 )
 
-// ClientCredentials are the OAuth app's client id and secret.
+// ClientCredentials are the client id and secret of the GitHub App or the Atlassian OAuth app.
+// AppSlug is the GitHub App's URL name, used only to build the install link.
 type ClientCredentials struct {
 	ClientID     string `json:"clientId"`
 	ClientSecret string `json:"clientSecret"`
+	AppSlug      string `json:"appSlug,omitempty"`
 }
 
-// GitHubToken is the item github.token.
+// Methods of a stored GitHub token.
+const (
+	// MethodApp is a user access token of a GitHub App.
+	MethodApp = "app"
+	// MethodOAuth is a token of the former OAuth App sign-in. It keeps working and never expires.
+	MethodOAuth = "oauth"
+	// MethodPAT is a pasted personal access token.
+	MethodPAT = "pat"
+)
+
+// GitHubToken is the item github.token. A zero ExpiresAt means the token does not expire.
 type GitHubToken struct {
-	Token   string `json:"token"`
-	Method  string `json:"method"` // "oauth" or "pat"
-	Login   string `json:"login"`
-	Warning string `json:"warning,omitempty"`
+	Token          string    `json:"token"`
+	Method         string    `json:"method"` // MethodApp, MethodOAuth or MethodPAT
+	Login          string    `json:"login"`
+	Warning        string    `json:"warning,omitempty"`
+	RefreshToken   string    `json:"refreshToken,omitempty"`
+	ExpiresAt      time.Time `json:"expiresAt,omitzero"`
+	NeedsReconnect bool      `json:"needsReconnect,omitempty"`
 }
+
+var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}$`)
+
+// ValidSlug reports whether s is a GitHub App URL name.
+func ValidSlug(s string) bool { return slugPattern.MatchString(s) }
 
 // Site is a Jira site the Atlassian token can reach.
 type Site struct {

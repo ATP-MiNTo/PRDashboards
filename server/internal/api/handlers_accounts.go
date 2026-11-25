@@ -23,8 +23,12 @@ func (h *handlers) RevokeAllSessions(ctx context.Context, _ gen.RevokeAllSession
 
 func (h *handlers) GetSetup(_ context.Context, _ gen.GetSetupRequestObject) (gen.GetSetupResponseObject, error) {
 	o := h.cfg.OAuth
+	gh := gen.ProviderSetup{Configured: o.ClientConfigured(auth.GitHub), CallbackUrl: o.CallbackURL(auth.GitHub)}
+	if u := o.InstallURL(); u != "" {
+		gh.InstallUrl = &u
+	}
 	return gen.GetSetup200JSONResponse{
-		Github:    gen.ProviderSetup{Configured: o.ClientConfigured(auth.GitHub), CallbackUrl: o.CallbackURL(auth.GitHub)},
+		Github:    gh,
 		Atlassian: gen.ProviderSetup{Configured: o.ClientConfigured(auth.Atlassian), CallbackUrl: o.CallbackURL(auth.Atlassian)},
 	}, nil
 }
@@ -38,7 +42,14 @@ func (h *handlers) PutSetupClient(_ context.Context, req gen.PutSetupClientReque
 		return nil, problem(http.StatusUnprocessableEntity, mw.CodeInvalidBody, "client id and secret must not be blank")
 	}
 	p, _ := auth.ParseProvider(string(req.Provider))
-	if err := h.cfg.OAuth.SetClient(p, auth.ClientCredentials{ClientID: id, ClientSecret: secret}); err != nil {
+	cred := auth.ClientCredentials{ClientID: id, ClientSecret: secret}
+	if req.Body.AppSlug != nil {
+		cred.AppSlug = strings.TrimSpace(*req.Body.AppSlug)
+	}
+	if err := h.cfg.OAuth.SetClient(p, cred); err != nil {
+		if errors.Is(err, auth.ErrInvalidSlug) {
+			return nil, problem(http.StatusUnprocessableEntity, mw.CodeInvalidBody, "the app slug is the lowercase name in the app's public link")
+		}
 		return nil, err
 	}
 	return gen.PutSetupClient204Response{}, nil
@@ -87,6 +98,9 @@ func githubAccount(t auth.GitHubToken, connected bool) gen.GithubAccount {
 	}
 	if t.Warning != "" {
 		out.Warning = &t.Warning
+	}
+	if t.NeedsReconnect {
+		out.NeedsReconnect = &t.NeedsReconnect
 	}
 	return out
 }
@@ -166,7 +180,7 @@ func (h *handlers) CheckAccount(ctx context.Context, req gen.CheckAccountRequest
 	var err error
 	if p, _ := auth.ParseProvider(string(req.Provider)); p == auth.GitHub {
 		_, err = h.cfg.OAuth.CheckGitHub(ctx)
-		if err != nil {
+		if err != nil && !errors.Is(err, auth.ErrNeedsReconnect) {
 			return nil, githubProblem(err)
 		}
 	} else if _, err = h.cfg.OAuth.CheckAtlassian(ctx); err != nil && !errors.Is(err, auth.ErrNeedsReconnect) {
