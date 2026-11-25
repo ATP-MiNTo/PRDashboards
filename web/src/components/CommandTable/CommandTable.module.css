@@ -504,6 +504,10 @@
 }
 
 .mergeButton {
+  /* Aura colour of an enabled Merge button. The only value to edit to change it. */
+  --merge-aura: #007fff;
+  --merge-aura-ring: 45%;
+  --merge-aura-glow: 40%;
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -511,6 +515,17 @@
   color: var(--accent-fg);
   font: inherit;
   cursor: pointer;
+}
+
+.mergeButton:not(:disabled) {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--merge-aura) var(--merge-aura-ring), transparent),
+    0 0 12px 2px color-mix(in srgb, var(--merge-aura) var(--merge-aura-glow), transparent);
+}
+
+:global(:root[data-mode='dark']) .mergeButton:not(:disabled) {
+  --merge-aura-ring: 60%;
+  --merge-aura-glow: 55%;
 }
 
 .mergeButton:disabled {

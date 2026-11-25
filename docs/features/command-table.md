@@ -47,6 +47,7 @@ None from the browser to a provider. It calls only `/api/*` and `/events` on its
 
 ## Rules and invariants
 
+- An enabled Merge button shows a coloured aura (box-shadow) from the `--merge-aura` custom property in `CommandTable.module.css`; disabled buttons show none.
 - The Merge button is enabled only for a ready row. The panel never sends a head SHA other than the one the row had when the panel opened.
 - Columns, in order: Repo / PR, Ticket, Last commit, Review, CI, Method, Merge.
 - Links come from `safeLink` or the URL builders: https only, no credentials, github.com links rebuilt from the path alone, external hosts shown as host text, `target="_blank"` with `rel="noopener noreferrer"`. The Authorize link is built from a validated organization name (`https://github.com/orgs/<org>/sso`), never from a server URL.
