@@ -55,6 +55,7 @@ const settings = {
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
   jiraSiteId: null,
+  excludedStatuses: ['Done'],
 };
 
 const rows = () => [
@@ -249,22 +250,13 @@ describe('CommandTable', () => {
     expect(source.closed).toBe(true);
   });
 
-  it('applies the stored theme and saves a new choice', async () => {
-    let stored = { ...settings, theme: 'dark' };
-    api.getSettings.mockImplementation(() => Promise.resolve(stored));
-    api.putSettings.mockImplementation((s: typeof stored) => {
-      stored = s;
-      return Promise.resolve(s);
-    });
+  it('applies the stored theme and has no theme control in the top bar', async () => {
+    api.getSettings.mockResolvedValue({ ...settings, theme: 'dark' });
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
     await waitFor(() => expect(document.documentElement.dataset.mode).toBe('dark'));
-    expect(screen.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
-    await waitFor(() =>
-      expect(api.putSettings).toHaveBeenCalledWith({ ...settings, theme: 'light' }),
-    );
-    await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
+    expect(screen.queryByRole('group', { name: 'Theme' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
   });
 
   it('re-renders only the row whose pull request changed', async () => {
@@ -329,5 +321,29 @@ describe('CommandTable', () => {
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('opens the account panel from the Account button, one panel at a time', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const account = screen.getByRole('button', { name: 'Account' });
+    account.focus();
+    fireEvent.click(account);
+    const dialog = screen.getByRole('dialog', { name: 'Account' });
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Connected accounts' }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close account' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(account).toHaveFocus();
+
+    fireEvent.click(account);
+    fireEvent.click(screen.getByTestId('side-panel-scrim'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
   });
 });

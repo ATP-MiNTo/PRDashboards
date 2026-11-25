@@ -74,3 +74,63 @@ func TestPutRepoRollsBackWhenARuleIsInvalid(t *testing.T) {
 		t.Fatalf("the failed replacement left changes: %+v", got)
 	}
 }
+
+func TestPutReposUpdatesEveryRepoInOneTransaction(t *testing.T) {
+	s, _, clock := open(t)
+	ctx := context.Background()
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	err := s.PutRepos(ctx, []store.RepoUpdate{
+		{ID: "R1", Method: "squash", Rules: []store.BranchRule{{Pattern: "release/*", Method: "rebase"}, {Pattern: "main", Method: "merge"}}, ClearNew: true},
+		{ID: "R2", Method: "merge"},
+		{ID: "R2", Method: "rebase", Rules: nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r1, _ := s.Repo(ctx, "R1")
+	if r1.IsNew || r1.DefaultMethod != "squash" || len(r1.Rules) != 2 || r1.Rules[0].Pattern != "release/*" || r1.Rules[1].Pattern != "main" {
+		t.Fatalf("%+v", r1)
+	}
+	r2, _ := s.Repo(ctx, "R2")
+	if r2.DefaultMethod != "rebase" || len(r2.Rules) != 0 {
+		t.Fatalf("a repeated id takes its last update: %+v", r2)
+	}
+}
+
+func TestPutReposWithAnUnknownIDChangesNothing(t *testing.T) {
+	s, _, clock := open(t)
+	ctx := context.Background()
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	err := s.PutRepos(ctx, []store.RepoUpdate{{ID: "R1", Method: "merge", ClearNew: true}, {ID: "R404", Method: "merge"}})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+	r1, _ := s.Repo(ctx, "R1")
+	if !r1.IsNew || r1.DefaultMethod != "rebase" || len(r1.Rules) != 2 {
+		t.Fatalf("the known repo was changed: %+v", r1)
+	}
+}
+
+func TestPutReposRollsBackWhenARuleIsInvalid(t *testing.T) {
+	s, _, clock := open(t)
+	ctx := context.Background()
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	err := s.PutRepos(ctx, []store.RepoUpdate{
+		{ID: "R2", Method: "merge", ClearNew: true},
+		{ID: "R1", Method: "squash", Rules: []store.BranchRule{{Pattern: "a", Method: "octopus"}}},
+	})
+	if err == nil {
+		t.Fatal("an invalid method was stored")
+	}
+	r2, _ := s.Repo(ctx, "R2")
+	r1, _ := s.Repo(ctx, "R1")
+	if r2.DefaultMethod != "rebase" || r1.DefaultMethod != "rebase" || len(r1.Rules) != 2 {
+		t.Fatalf("the failed call left changes: %+v %+v", r1, r2)
+	}
+}

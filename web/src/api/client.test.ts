@@ -123,6 +123,22 @@ describe('api client operations', () => {
   it.each([
     ['getSettings', [], 'GET', '/api/settings', undefined],
     ['getSetup', [], 'GET', '/api/setup', undefined],
+    ['getJiraOptions', [], 'GET', '/api/jira/options', undefined],
+    [
+      'putRepos',
+      [
+        {
+          repos: [
+            { id: 'R1', update: { defaultMethod: 'merge', branchRules: [], clearNew: true } },
+          ],
+        },
+      ],
+      'PUT',
+      '/api/repos',
+      {
+        repos: [{ id: 'R1', update: { defaultMethod: 'merge', branchRules: [], clearNew: true } }],
+      },
+    ],
     ['getAccounts', [], 'GET', '/api/accounts', undefined],
     ['putGithubPat', ['ghp_x'], 'PUT', '/api/github/pat', { token: 'ghp_x' }],
     ['disconnectAccount', ['atlassian'], 'DELETE', '/api/accounts/atlassian', undefined],
@@ -146,7 +162,7 @@ describe('api client operations', () => {
     fetchMock.mockResolvedValueOnce(json(session));
     await getSession();
     fetchMock.mockImplementationOnce(async () =>
-      method === 'GET' || name === 'putGithubPat' || name === 'checkAccount'
+      method === 'GET' || name === 'putGithubPat' || name === 'checkAccount' || name === 'putRepos'
         ? json({})
         : new Response(null, { status: 204 }),
     );
@@ -166,6 +182,7 @@ describe('api client operations', () => {
       defaultMethodForNewRepos: 'squash',
       deleteBranchAfterMerge: false,
       jiraSiteId: null,
+      excludedStatuses: ['Done'] as string[],
     } as const;
     fetchMock.mockResolvedValueOnce(json(session));
     await getSession();

@@ -25,6 +25,7 @@ const settings: Settings = {
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
   jiraSiteId: null,
+  excludedStatuses: ['Done'],
 };
 const setup = (g: boolean, a: boolean): Setup => ({
   github: { configured: g, callbackUrl: 'http://127.0.0.1:4317/oauth/github/callback' },

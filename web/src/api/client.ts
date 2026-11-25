@@ -154,6 +154,8 @@ export type MethodResolution = Schemas['MethodResolution'];
 export type BranchRule = Schemas['BranchRule'];
 export type RepoSettings = Schemas['RepoSettings'];
 export type RepoUpdate = Schemas['RepoUpdate'];
+export type ReposUpdate = Schemas['ReposUpdate'];
+export type JiraOptions = Schemas['JiraOptions'];
 export type Transition = Schemas['Transition'];
 export type MergeRequest = Schemas['MergeRequest'];
 export type MergeResult = Schemas['MergeResult'];
@@ -166,6 +168,9 @@ export type ActivityPage = Schemas['ActivityPage'];
 export const getRepos = () => json<Schemas['Repos']>('GET', '/api/repos');
 export const putRepo = (id: string, update: RepoUpdate) =>
   json<RepoSettings>('PUT', `/api/repos/${encodeURIComponent(id)}`, update);
+export const putRepos = (update: ReposUpdate) =>
+  json<Schemas['Repos']>('PUT', '/api/repos', update);
+export const getJiraOptions = () => json<JiraOptions>('GET', '/api/jira/options');
 
 export async function mergePr(
   id: string,

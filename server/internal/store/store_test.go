@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"testing"
@@ -158,11 +159,11 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := open(t)
 	got, err := s.GetSettings(ctx)
-	if err != nil || got != store.DefaultSettings() {
+	if err != nil || !reflect.DeepEqual(got, store.DefaultSettings()) {
 		t.Fatalf("defaults: %+v %v", got, err)
 	}
 	site := "cloud-1"
-	want := store.Settings{GitHubSec: 120, JiraSec: 900, Theme: "dark", DefaultMethod: "rebase", DeleteBranchAfterMerge: true, JiraSiteID: &site}
+	want := store.Settings{GitHubSec: 120, JiraSec: 900, Theme: "dark", DefaultMethod: "rebase", DeleteBranchAfterMerge: true, JiraSiteID: &site, ExcludedStatuses: []string{"Done", "Closed"}}
 	if err := s.PutSettings(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -172,15 +173,19 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	}
 	got.JiraSiteID = nil
 	want.JiraSiteID = nil
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
 	want.JiraSiteID = nil
+	want.ExcludedStatuses = []string{}
 	if err := s.PutSettings(ctx, want); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ = s.GetSettings(ctx); got.JiraSiteID != nil {
 		t.Fatal("null site not stored")
+	}
+	if len(got.ExcludedStatuses) != 0 {
+		t.Fatalf("an empty list must stay empty, not fall back to the default: %v", got.ExcludedStatuses)
 	}
 }
 

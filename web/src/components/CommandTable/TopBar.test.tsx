@@ -1,27 +1,20 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { snapshot } from '@/test-fixtures';
 import { renderWithClient } from '@/test-utils';
 import { TopBar } from './TopBar';
 
-vi.mock('next/link', () => ({
-  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
-}));
-
 const base = snapshot([]);
+const onAccount = vi.fn();
+const onSettings = vi.fn();
 
 function bar(over: Partial<typeof base.sources>) {
   renderWithClient(
     <TopBar
       snapshot={{ ...base, sources: { ...base.sources, ...over } }}
       status={null}
-      theme="auto"
-      onTheme={vi.fn()}
-      onSettings={vi.fn()}
+      onAccount={onAccount}
+      onSettings={onSettings}
     />,
   );
 }
@@ -47,5 +40,24 @@ describe('TopBar sources', () => {
     const status = screen.getByRole('status', { name: 'Source status' });
     expect(status).toHaveTextContent(/GitHub rate limited, resets in 1m \d\ds/);
     expect(status).toHaveTextContent('Jira unreachable');
+  });
+});
+
+describe('TopBar buttons', () => {
+  it('has no theme control and no Accounts link', () => {
+    bar({});
+    expect(screen.queryByRole('group', { name: 'Theme' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Light' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
+  });
+
+  it('opens the account panel and the settings from their buttons', () => {
+    bar({});
+    const account = screen.getByRole('button', { name: 'Account' });
+    expect(account).toHaveAttribute('aria-haspopup', 'dialog');
+    fireEvent.click(account);
+    expect(onAccount).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(onSettings).toHaveBeenCalledTimes(1);
   });
 });

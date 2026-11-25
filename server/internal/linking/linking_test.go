@@ -2,6 +2,7 @@ package linking_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
@@ -133,6 +134,25 @@ func TestProjects(t *testing.T) {
 	}
 	if e := linking.NewProjects(nil); !e.Known() || e.Has("INP") {
 		t.Fatal("empty set is known")
+	}
+}
+
+func TestProjectsKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   linking.Projects
+		want []string
+	}{
+		{"unknown", linking.Projects{}, nil},
+		{"empty", linking.NewProjects(nil), []string{}},
+		{"sorted and distinct", linking.NewProjects([]string{"OPS", "INP", "OPS", "ABC"}), []string{"ABC", "INP", "OPS"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.in.Keys()
+			if (got == nil) != (tc.want == nil) || strings.Join(got, ",") != strings.Join(tc.want, ",") {
+				t.Fatalf("Keys() = %#v, want %#v", got, tc.want)
+			}
+		})
 	}
 }
 

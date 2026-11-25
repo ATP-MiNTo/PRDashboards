@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"slices"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
@@ -16,6 +17,7 @@ func toGenSettings(s store.Settings) gen.Settings {
 	out.DefaultMethodForNewRepos = gen.SettingsDefaultMethodForNewRepos(s.DefaultMethod)
 	out.DeleteBranchAfterMerge = s.DeleteBranchAfterMerge
 	out.JiraSiteId = s.JiraSiteID
+	out.ExcludedStatuses = append([]string{}, s.ExcludedStatuses...)
 	return out
 }
 
@@ -27,6 +29,7 @@ func fromGenSettings(s gen.Settings) store.Settings {
 		DefaultMethod:          string(s.DefaultMethodForNewRepos),
 		DeleteBranchAfterMerge: s.DeleteBranchAfterMerge,
 		JiraSiteID:             s.JiraSiteId,
+		ExcludedStatuses:       s.ExcludedStatuses,
 	}
 }
 
@@ -67,6 +70,12 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 		h.reschedule()
 	} else {
 		h.kick()
+	}
+	if !slices.Equal(prev.ExcludedStatuses, saved.ExcludedStatuses) && h.cfg.Poller != nil {
+		// The hints and plans on the dashboard depend on the excluded statuses, so evaluate again from cached data.
+		if err := h.cfg.Poller.Reevaluate(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return gen.PutSettings200JSONResponse(toGenSettings(saved)), nil
 }

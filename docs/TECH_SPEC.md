@@ -259,7 +259,7 @@ against the database. `data.db` is created with mode 0600 before it is opened.
 | Table | Key | Purpose |
 | --- | --- | --- |
 | `schema_migrations` | `version` | Applied migrations |
-| `settings` | `key` | Global settings as typed JSON values (polling intervals, theme, default method for new repos, delete branch after merge, Jira site) |
+| `settings` | `key` | Global settings as typed JSON values (polling intervals, theme, default method for new repos, delete branch after merge, Jira site, excluded statuses) |
 | `repos` | `id` (GitHub node id) | Repos the dashboard has seen: `name_with_owner`, `first_seen_at`, `default_method`, `is_new` (opens its settings on first sight) |
 | `repo_branch_rules` | `repo_id, position` | Ordered `pattern` (exact or glob, `release/*`) to merge method |
 | `prs` | `id` (node id) | Every PR ever shown: repo, number, title, head/base branch, head SHA, state (`open`, `merged`, `closed`), `merged_at`, last seen |
@@ -539,10 +539,11 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/setup`, `PUT /api/setup/{github\|atlassian}` | OAuth client credentials (write only) |
 | `GET /api/accounts`, `DELETE /api/accounts/{provider}`, `POST /api/accounts/{provider}/check` | Connection state, disconnect, check now |
 | `POST /api/oauth/complete` | Finish an OAuth flow from the finish page (5.4) |
-| `GET /api/repos` | Repos with their default and branch rules |
+| `GET/PUT /api/repos` | Repos with their default and branch rules. PUT saves several repos in one transaction (`{repos: [{id, update}]}`, 1 to 500) |
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
+| `GET /api/jira/options` | Jira status names (one call, cached 10 minutes) and project keys (from memory) for the rule form |
 | `GET /api/activity` | Activity log, paginated |
 | `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |
 | `PUT /api/github/pat` | Store a PAT |
@@ -627,7 +628,7 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
 - `merge.Resolve` is pure. A branch pattern is an exact name or a glob where `*` matches any run of
   characters, `/` included. Patterns are 1 to 200 characters of letters, digits and `. _ / * -`,
   and a repo has at most 50 rules. `PUT /api/repos/{id}` replaces the default and the rules in one
-  transaction and rebuilds the snapshot from cached data, without an outside call.
+  transaction and rebuilds the snapshot from cached data, without a GitHub call (the rebuild asks Jira only about tickets it has not seen). `PUT /api/repos` does the same for several repos in one transaction and one rebuild, and an unknown id is a 404 that changes nothing.
 - `SnapshotPr.mergeMethod` is `{method, default, source, allowed, warning}`. The seeded rules are
   `main` and `production` to merge commit.
 - The merge request carries at most 20 tickets. `Idempotency-Key` must be a UUID. A key that was
@@ -682,8 +683,8 @@ good data is kept and marked with its age.
 
 Based on the Command Table prototype:
 
-- Top bar: brand, theme switch (Light, Dark, Auto), last sync times, next sync countdown, Sync
-  button, settings button. Org-blocked banner below it.
+- Top bar: brand, last sync times, next sync countdown, Sync button, Account button and
+  Settings button. Both buttons open a side panel, one at a time. Org-blocked banner below it.
 - Stat strip (open, ready, blocked, draft, stale) and filter chips.
 - Table columns, in this order: **Repo/PR, Ticket, Last commit, Review, CI, Method, Merge**.
   Stacks are grouped rows with a connector line. Each ticket shows key, status, title, matched rule
@@ -693,16 +694,18 @@ Based on the Command Table prototype:
   a check from an external CI shows the host of its link. A PR with more than 50 checks ends the
   list with "+N more".
 - Merge panel (7.7) opens inline under the row.
-- Settings drawer on the right with sections: Connected accounts, Repositories (search, default
-  for new repos, per-repo default and branch rules, delete branch after merge), Status sync rules
-  (ordered list, add, edit, drag to reorder, enable, preview), Multi-PR tickets (7.5), Polling,
-  Activity, Sessions.
+- Account panel on the right: the Connected accounts.
+- Settings drawer on the right with sections, in order: Repositories (foldable; search, default
+  for new repos, per-repo default and branch rules, Save all), Preferences (delete branch after
+  merge, polling intervals on one line), Status sync rules (ordered list, add, edit, drag to
+  reorder, enable, preview, Jira dropdowns for statuses and project, excluded statuses),
+  Multi-PR tickets (7.5), Sessions, Theme, Activity.
 
 ### 11.2 Behaviour
 
 - Dropdowns open on hover and on click, with full keyboard support (arrow keys, Home, End, Enter,
   Escape), as in the prototype.
-- Theme: Auto picks light from 07:00 to 19:00 local time and dark otherwise. The choice is stored
+- Theme (in the Settings drawer): Auto picks light from 07:00 to 19:00 local time and dark otherwise. The choice is stored
   in settings on the server. Tokens are CSS custom properties, using the prototype's pastel palette.
 - Per-row components subscribe to their own PR in the snapshot, so a change re-renders only that
   row.

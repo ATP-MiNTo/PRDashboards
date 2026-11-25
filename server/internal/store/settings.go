@@ -15,11 +15,13 @@ type Settings struct {
 	DefaultMethod          string
 	DeleteBranchAfterMerge bool
 	JiraSiteID             *string
+	// ExcludedStatuses are the Jira statuses whose tickets no sync rule moves.
+	ExcludedStatuses []string
 }
 
 // DefaultSettings returns the settings of a fresh install.
 func DefaultSettings() Settings {
-	return Settings{GitHubSec: 60, JiraSec: 300, Theme: "auto", DefaultMethod: "squash"}
+	return Settings{GitHubSec: 60, JiraSec: 300, Theme: "auto", DefaultMethod: "squash", ExcludedStatuses: []string{"Done"}}
 }
 
 const (
@@ -29,6 +31,7 @@ const (
 	keyDefaultMethod = "defaultMethodForNewRepos"
 	keyDeleteBranch  = "deleteBranchAfterMerge"
 	keyJiraSite      = "jiraSiteId"
+	keyExcluded      = "excludedStatuses"
 )
 
 // GetSettings reads every settings row in one query.
@@ -58,6 +61,9 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 			dst = &out.DeleteBranchAfterMerge
 		case keyJiraSite:
 			dst = &out.JiraSiteID
+		case keyExcluded:
+			out.ExcludedStatuses = nil
+			dst = &out.ExcludedStatuses
 		default:
 			continue
 		}
@@ -80,6 +86,7 @@ func (s *Store) PutSettings(ctx context.Context, v Settings) error {
 		{keyDefaultMethod, v.DefaultMethod},
 		{keyDeleteBranch, v.DeleteBranchAfterMerge},
 		{keyJiraSite, v.JiraSiteID},
+		{keyExcluded, v.ExcludedStatuses},
 	}
 	return s.Write(ctx, func(tx *sql.Tx) error {
 		stmt, err := tx.PrepareContext(ctx,

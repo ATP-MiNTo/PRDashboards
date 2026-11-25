@@ -10,7 +10,9 @@ import {
   checkAccount,
   dismissRetry,
   getActivity,
+  getJiraOptions,
   getRepos,
+  putRepos,
   getRules,
   previewRule,
   putRules,
@@ -38,6 +40,7 @@ import {
   type RulesUpdate,
   type SyncRule,
   type RepoUpdate,
+  type ReposUpdate,
   type Provider,
   type Snapshot,
   type SnapshotPr,
@@ -60,6 +63,7 @@ export const keys = {
   transitions: ['transitions'],
   merges: ['merges'],
   rules: ['rules'],
+  jiraOptions: ['jiraOptions'],
 } as const;
 
 export const useSyncStatus = () =>
@@ -78,7 +82,10 @@ function useAction<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (vars: TVars) => fn(vars),
-    onSuccess: () => client.invalidateQueries({ predicate: (q) => q.queryKey[0] !== 'session' }),
+    onSuccess: () =>
+      client.invalidateQueries({
+        predicate: (q) => q.queryKey[0] !== 'session' && q.queryKey[0] !== keys.jiraOptions[0],
+      }),
   });
 }
 
@@ -118,10 +125,10 @@ export function useSaveTickets() {
 export const useRepos = (enabled = true) =>
   useQuery({ queryKey: keys.repos, queryFn: getRepos, enabled });
 
-export function useSaveRepo() {
+function useSaveReposWith<TVars>(fn: (vars: TVars) => Promise<unknown>) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update),
+    mutationFn: fn,
     onSuccess: () =>
       Promise.all([
         client.invalidateQueries({ queryKey: keys.repos }),
@@ -129,6 +136,12 @@ export function useSaveRepo() {
       ]),
   });
 }
+
+export const useSaveRepo = () =>
+  useSaveReposWith(({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update));
+
+/** Saves several repositories in one request. */
+export const useSaveRepos = () => useSaveReposWith((update: ReposUpdate) => putRepos(update));
 
 /** The transitions of the tickets that are being moved. Other tickets cost no outside call. */
 export const useTicketTransitions = (ticketKeys: { key: string; enabled: boolean }[]) =>
@@ -251,3 +264,17 @@ export function useSaveRules() {
 
 export const usePreviewRule = () =>
   useMutation({ mutationFn: (rule: SyncRule) => previewRule(rule) });
+
+/**
+ * The Jira statuses and project keys for the rule form. It is read on demand and kept for a few
+ * minutes, never refetched on a timer or on focus.
+ */
+export const useJiraOptions = (enabled: boolean) =>
+  useQuery({
+    queryKey: keys.jiraOptions,
+    queryFn: getJiraOptions,
+    enabled,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });

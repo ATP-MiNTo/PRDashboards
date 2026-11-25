@@ -5,22 +5,22 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 ## Purpose
 
 The dashboard at `/`: one row per open pull request assigned to the user or opened by the user, with the merge method,
-the merge panel under the row and the settings drawer.
+the merge panel under the row, the Account panel and the settings drawer.
 
 Differences from the spec:
 
 - The Merge column shows why a PR cannot be merged, computed in the browser from the snapshot (`blockOf`). The server checks the same things again when merging ([merge-and-transition.md](merge-and-transition.md)).
-- The Accounts page (`/accounts/`) still holds the Connected accounts panel, which the settings drawer also shows.
+- The Account button opens a side panel with the Connected accounts content. The Accounts page (`/accounts/`) stays for OAuth returns and shows the same content.
 
 ## Data model
 
-Reads `Snapshot` from `GET /api/snapshot` ([poller.md](poller.md)) and `Settings.theme`. Writes `Settings.theme` and, through the ticket cell, `TicketLinks`. The Method column reads `SnapshotPr.mergeMethod` ([merge-method.md](merge-method.md)); the merge panel calls the merge API ([merge-and-transition.md](merge-and-transition.md)). Filter, expanded, chosen method and open panel state are component state only; the outcome of merges made in the tab is in the query cache under `merges`.
+Reads `Snapshot` from `GET /api/snapshot` ([poller.md](poller.md)) and `Settings.theme` (applied by `useTheme`; the theme is changed in Settings, [theme.md](theme.md)). Writes, through the ticket cell, `TicketLinks`. The Method column reads `SnapshotPr.mergeMethod` ([merge-method.md](merge-method.md)); the merge panel calls the merge API ([merge-and-transition.md](merge-and-transition.md)). Filter, expanded, chosen method and open panel state are component state only; the outcome of merges made in the tab is in the query cache under `merges`.
 
 ## Code map
 
 - [web/src/app/page.tsx](../../web/src/app/page.tsx): `/`, session check, then `CommandTable`.
-- [web/src/components/CommandTable/CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx): page layout, snapshot and status queries, filter state.
-- [TopBar.tsx](../../web/src/components/CommandTable/TopBar.tsx): brand, theme switch, source status of GitHub and Jira (`sourceLabel`, with the time left of a rate limit), sync times, countdown, Sync button, Accounts link, Settings button ([settings.md](settings.md)).
+- [web/src/components/CommandTable/CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx): page layout, snapshot and status queries, filter state, which side panel is open (Account, Settings or none), and the `SidePanel` of the Account panel ([SidePanel.tsx](../../web/src/components/SidePanel/SidePanel.tsx)).
+- [TopBar.tsx](../../web/src/components/CommandTable/TopBar.tsx): brand, source status of GitHub and Jira (`sourceLabel`, with the time left of a rate limit), sync times, countdown, Sync button, Account button (opens the Account panel, `aria-haspopup="dialog"`) and Settings button ([settings.md](settings.md)). There is no theme control in the bar.
 - [MethodCell.tsx](../../web/src/components/CommandTable/MethodCell.tsx), [MergePanel.tsx](../../web/src/components/CommandTable/MergePanel.tsx), [MergeSteps.tsx](../../web/src/components/CommandTable/MergeSteps.tsx), [RecentMerges.tsx](../../web/src/components/CommandTable/RecentMerges.tsx): see [merge-method.md](merge-method.md) and [merge-and-transition.md](merge-and-transition.md).
 - [OrgBanner.tsx](../../web/src/components/CommandTable/OrgBanner.tsx): blocked organizations with an Authorize link, rate limit and error banners that say how old the shown data is, the warnings (for example the 1,000 result cap) and the disconnected notice.
 - [StatStrip.tsx](../../web/src/components/CommandTable/StatStrip.tsx): `StatStrip` and `Filters`.
@@ -57,9 +57,9 @@ None from the browser to a provider. It calls only `/api/*` and `/events` on its
 
 ## Tests
 
-- [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): columns and rows, stats and filters, org banner, source banners, sync and events, theme, row isolation, method cell, merge panel toggle, settings button.
+- [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): columns and rows, stats and filters, org banner, source banners, sync and events, theme applied, Account panel, row isolation, method cell, merge panel toggle, settings button.
 - [CiCell.test.tsx](../../web/src/components/CommandTable/CiCell.test.tsx): checks list, links, https only, "+N more".
 - [web/src/lib/snapshot.test.ts](../../web/src/lib/snapshot.test.ts).
-- [TopBar.test.tsx](../../web/src/components/CommandTable/TopBar.test.tsx): source status and the rate limit countdown.
+- [TopBar.test.tsx](../../web/src/components/CommandTable/TopBar.test.tsx): source status, the rate limit countdown, the Account and Settings buttons, no theme control.
 - [MethodCell.test.tsx](../../web/src/components/CommandTable/MethodCell.test.tsx), [MergePanel.test.tsx](../../web/src/components/CommandTable/MergePanel.test.tsx).
 - [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts): SSO-blocked organization. [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge flows. [e2e/ratelimit.spec.ts](../../e2e/ratelimit.spec.ts): rate limit waiting state and recovery.

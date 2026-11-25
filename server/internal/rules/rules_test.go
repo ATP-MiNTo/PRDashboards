@@ -329,7 +329,7 @@ func TestDisabledRulesAndEmptyInput(t *testing.T) {
 func TestPreviewIgnoresWhatFiredBeforeAndTheEnabledFlag(t *testing.T) {
 	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
 	r := rule("r", rules.Merged, func(r *rules.Rule) { r.Enabled = false })
-	pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", merged), ticket("INP-2", pr("B"), merged)})
+	pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", merged), ticket("INP-2", pr("B"), merged)}, nil)
 	if len(pv.Moves) != 1 || pv.Moves[0].Ticket != "INP-1" || len(pv.Waiting) != 1 || pv.Waiting[0].Ticket != "INP-2" {
 		t.Fatalf("%+v", pv)
 	}
@@ -387,15 +387,15 @@ func TestAfterMerge(t *testing.T) {
 	toDone := rule("done", rules.Merged, func(r *rules.Rule) { r.Filters.Repo = "acme/*" })
 	toQA := rule("qa", rules.Merged, func(r *rules.Rule) { r.Target = "QA"; r.Mode = rules.Any })
 
-	plan, ok := rules.AfterMerge([]rules.Rule{approved, toDone, toQA}, ticket("INP-1", fe, be, merged, closed), "FE", now)
+	plan, ok := rules.AfterMerge([]rules.Rule{approved, toDone, toQA}, ticket("INP-1", fe, be, merged, closed), "FE", now, nil)
 	if !ok || plan.Rule != "done" || plan.Target != "Done" || plan.Total != 3 || len(plan.WaitingOn) != 1 || plan.WaitingOn[0].Number != 12 {
 		t.Fatalf("first applicable rule waits for the backend PR: %+v", plan)
 	}
-	plan, ok = rules.AfterMerge([]rules.Rule{toDone}, ticket("INP-1", fe, merged), "FE", now)
+	plan, ok = rules.AfterMerge([]rules.Rule{toDone}, ticket("INP-1", fe, merged), "FE", now, nil)
 	if !ok || len(plan.WaitingOn) != 0 || plan.Total != 2 {
 		t.Fatalf("the last open PR does not wait: %+v", plan)
 	}
-	plan, ok = rules.AfterMerge([]rules.Rule{toQA}, ticket("INP-1", fe, be), "FE", now)
+	plan, ok = rules.AfterMerge([]rules.Rule{toQA}, ticket("INP-1", fe, be), "FE", now, nil)
 	if !ok || plan.Target != "QA" || len(plan.WaitingOn) != 0 {
 		t.Fatalf("mode any never waits: %+v", plan)
 	}
@@ -419,8 +419,50 @@ func TestAfterMerge(t *testing.T) {
 		"closed pr":          {[]rules.Rule{toDone}, ticket("INP-1", closed), "GONE"},
 		"unavailable ticket": {[]rules.Rule{toDone}, func() rules.Ticket { t := ticket("INP-1", fe); t.Available = false; return t }(), "FE"},
 	} {
-		if _, ok := rules.AfterMerge(tc.rs, tc.t, tc.prID, now); ok {
+		if _, ok := rules.AfterMerge(tc.rs, tc.t, tc.prID, now, nil); ok {
 			t.Errorf("%s: a plan was made", name)
 		}
+	}
+}
+
+func TestExcludedStatusesAreNeverMovedFiredOrListedAsWaiting(t *testing.T) {
+	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
+	inReview := ticket("INP-1", merged)
+	done := ticket("INP-2", merged)
+	done.Status = "done"
+	waiting := ticket("INP-3", merged, pr("B"))
+	waiting.Status = "DONE"
+	rs := []rules.Rule{rule("r", rules.Merged, func(r *rules.Rule) { r.Target = "QA" })}
+	in := rules.Input{Now: now, Rules: rs, Tickets: []rules.Ticket{inReview, done, waiting}, Exclude: []string{"Done", "Closed"}}
+	res := rules.Evaluate(in)
+	if len(res.Firings) != 1 || res.Firings[0].Ticket != "INP-1" || len(res.Holds) != 1 || len(res.Waiting) != 0 {
+		t.Fatalf("only the ticket outside the excluded statuses counts: %+v", res)
+	}
+	in.Exclude = nil
+	if res := rules.Evaluate(in); len(res.Firings) != 2 || len(res.Waiting) != 1 {
+		t.Fatalf("without exclusions every ticket counts: %+v", res)
+	}
+	in.Exclude = []string{""}
+	if res := rules.Evaluate(in); len(res.Firings) != 2 {
+		t.Fatalf("an empty exclusion matches no ticket: %+v", res)
+	}
+}
+
+func TestPreviewAndAfterMergeSkipExcludedStatuses(t *testing.T) {
+	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
+	tk := ticket("INP-1", merged, pr("B"))
+	tk.Status = "Done"
+	r := rule("r", rules.Merged, func(r *rules.Rule) { r.Target = "QA" })
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, []string{"done"}); len(pv.Moves)+len(pv.Waiting) != 0 {
+		t.Fatalf("%+v", pv)
+	}
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, nil); len(pv.Waiting) != 1 {
+		t.Fatalf("%+v", pv)
+	}
+	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"Done"}); ok {
+		t.Fatal("an excluded ticket has no merge plan")
+	}
+	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"QA"}); !ok {
+		t.Fatal("another status does not exclude it")
 	}
 }

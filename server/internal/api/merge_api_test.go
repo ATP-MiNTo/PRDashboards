@@ -335,3 +335,41 @@ func TestReposListGetAndPut(t *testing.T) {
 		t.Fatalf("allowed characters: %d %s", w.Code, w.Body)
 	}
 }
+
+func TestPutReposSavesEveryRepoWithOneRelink(t *testing.T) {
+	g := newMergeRig(t)
+	seedRepo(t, g)
+	put := func(body string) *httptest.ResponseRecorder {
+		return g.do(http.MethodPut, "/api/repos", body, g.l.write()...)
+	}
+	w := put(`{"repos":[{"id":"R1","update":{"defaultMethod":"rebase","branchRules":[{"pattern":"release/*","method":"merge"}],"clearNew":true}}]}`)
+	var list gen.Repos
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || len(list.Repos) != 1 || list.Repos[0].IsNew ||
+		list.Repos[0].DefaultMethod != "rebase" || len(list.Repos[0].BranchRules) != 1 {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if _, relinks, _ := g.p.counts(); relinks != 1 {
+		t.Fatalf("one rebuild for the whole save: %d", relinks)
+	}
+	wantProblem(t, put(`{"repos":[{"id":"R404","update":{"defaultMethod":"merge","branchRules":[],"clearNew":false}}]}`), 404, "not_found")
+	if _, relinks, _ := g.p.counts(); relinks != 1 {
+		t.Fatalf("a refused save rebuilds nothing: %d", relinks)
+	}
+	g.p.relinkErr = errors.New("boom")
+	wantProblem(t, put(`{"repos":[{"id":"R1","update":{"defaultMethod":"merge","branchRules":[],"clearNew":false}}]}`), 500, "internal_error")
+	g.p.relinkErr = nil
+
+	item := `{"id":"R1","update":{"defaultMethod":"merge","branchRules":[],"clearNew":false}}`
+	for name, body := range map[string]string{
+		"empty list":  `{"repos":[]}`,
+		"501 repos":   `{"repos":[` + strings.TrimSuffix(strings.Repeat(item+",", 501), ",") + `]}`,
+		"no update":   `{"repos":[{"id":"R1"}]}`,
+		"bad pattern": `{"repos":[{"id":"R1","update":{"defaultMethod":"merge","branchRules":[{"pattern":"","method":"merge"}],"clearNew":false}}]}`,
+		"extra field": `{"repos":[` + item + `],"x":1}`,
+	} {
+		if w := put(body); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	wantProblem(t, g.do(http.MethodPut, "/api/repos", `{"repos":[`+item+`]}`, cookie(g.l.cookie)), http.StatusForbidden, "bad_csrf")
+}

@@ -32,6 +32,8 @@ const (
 	AssignedLimit = 100
 	// TransitionsTTL is how long the transitions of a ticket are cached.
 	TransitionsTTL = 60 * time.Second
+	// StatusesTTL is how long the status names of a site are cached.
+	StatusesTTL = 10 * time.Minute
 
 	// AssignedJQL lists the open tickets of the connected user.
 	AssignedJQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
@@ -128,6 +130,12 @@ type Client struct {
 	mu          sync.Mutex
 	assigned    map[string]cachedIssues
 	transitions map[string]cachedTransitions
+	statuses    map[string]cachedStatuses
+}
+
+type cachedStatuses struct {
+	at    time.Time
+	names []string
 }
 
 type cachedIssues struct {
@@ -480,6 +488,54 @@ func (c *Client) Transitions(ctx context.Context, site, key string) ([]Transitio
 		c.transitions = map[string]cachedTransitions{}
 	}
 	c.transitions[cacheKey] = cachedTransitions{at: c.now(), transitions: out}
+	c.mu.Unlock()
+	return slices.Clone(out), nil
+}
+
+// Statuses lists the distinct status names of the site, sorted, from one GET /status. Names that
+// differ only in case count once. The answer is cached per site for StatusesTTL.
+func (c *Client) Statuses(ctx context.Context, site string) ([]string, error) {
+	c.mu.Lock()
+	hit, ok := c.statuses[site]
+	c.mu.Unlock()
+	if ok && c.now().Sub(hit.at) < StatusesTTL {
+		return slices.Clone(hit.names), nil
+	}
+	status, raw, err := c.call(ctx, http.MethodGet, site, "/status", nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := statusErr(status); err != nil {
+		return nil, err
+	}
+	var parsed []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, fmt.Errorf("jira statuses: bad response: %w", err)
+	}
+	seen := make(map[string]struct{}, len(parsed))
+	out := make([]string, 0, len(parsed))
+	for _, s := range parsed {
+		name := strings.TrimSpace(s.Name)
+		folded := strings.ToLower(name)
+		if _, dup := seen[folded]; name == "" || dup {
+			continue
+		}
+		seen[folded] = struct{}{}
+		out = append(out, name)
+	}
+	slices.SortFunc(out, func(a, b string) int {
+		if d := strings.Compare(strings.ToLower(a), strings.ToLower(b)); d != 0 {
+			return d
+		}
+		return strings.Compare(a, b)
+	})
+	c.mu.Lock()
+	if c.statuses == nil {
+		c.statuses = map[string]cachedStatuses{}
+	}
+	c.statuses[site] = cachedStatuses{at: c.now(), names: out}
 	c.mu.Unlock()
 	return slices.Clone(out), nil
 }

@@ -53,7 +53,8 @@ All tables are `STRICT`. Times are Unix seconds.
 
 Settings (`GET/PUT /api/settings`, schema `Settings` in [api/openapi.yaml](../../api/openapi.yaml)):
 `polling {githubSec, jiraSec}` (each one of 60, 120, 300, 900, 3600), `theme`,
-`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `jiraSiteId` (nullable). Stored as typed JSON
+`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `jiraSiteId` (nullable), `excludedStatuses`
+(array of up to 50 status names, default `["Done"]`, also for installs that never wrote it). Stored as typed JSON
 values per key in one transaction.
 
 ## Code map

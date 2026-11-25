@@ -104,7 +104,6 @@
   }
 }
 
-.seg,
 .chips {
   display: inline-flex;
   overflow: hidden;
@@ -113,7 +112,6 @@
   background: var(--tb-ctl);
 }
 
-.seg button,
 .chips button {
   padding: 5px 10px;
   border: 0;
@@ -123,12 +121,10 @@
   cursor: pointer;
 }
 
-.seg button + button,
 .chips button + button {
   border-left: 1px solid var(--tb-line);
 }
 
-.seg button[aria-pressed='true'],
 .chips button[aria-pressed='true'] {
   background: var(--tb-fg);
   color: var(--tb-bg);

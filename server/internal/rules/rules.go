@@ -130,6 +130,9 @@ type Input struct {
 	Tickets []Ticket
 	// Fired is the fingerprint stored for each rule and ticket that fired before.
 	Fired map[Key]string
+	// Exclude lists the statuses whose tickets no rule moves, fires or lists as waiting. They are
+	// compared without regard to case.
+	Exclude []string
 }
 
 // Firing is a rule whose condition holds with a fingerprint that is not stored yet.
@@ -188,7 +191,7 @@ func Evaluate(in Input) Result {
 		return out
 	}
 	for _, t := range in.Tickets {
-		if !t.Available {
+		if !t.Available || excluded(in.Exclude, t.Status) {
 			continue
 		}
 		counted := make([]PR, 0, len(t.PRs))
@@ -307,6 +310,11 @@ func meets(r Rule, p PR, now time.Time) (string, bool) {
 	return "", false
 }
 
+// excluded reports whether status is one of the excluded statuses.
+func excluded(exclude []string, status string) bool {
+	return slices.ContainsFunc(exclude, func(e string) bool { return strings.EqualFold(e, status) })
+}
+
 func prPasses(f Filters, p PR) bool {
 	return (f.Repo == "" || Match(f.Repo, p.Repo)) && (f.Branch == "" || Match(f.Branch, p.Base))
 }
@@ -345,10 +353,11 @@ type Preview struct {
 	Waiting []Waiting
 }
 
-// PreviewRule evaluates one rule as if it had never fired, enabled and in isolation.
-func PreviewRule(r Rule, now time.Time, tickets []Ticket) Preview {
+// PreviewRule evaluates one rule as if it had never fired, enabled and in isolation. Tickets in an
+// excluded status are left out.
+func PreviewRule(r Rule, now time.Time, tickets []Ticket, exclude []string) Preview {
 	r.Enabled = true
-	res := Evaluate(Input{Now: now, Rules: []Rule{r}, Tickets: tickets})
+	res := Evaluate(Input{Now: now, Rules: []Rule{r}, Tickets: tickets, Exclude: exclude})
 	return Preview{Moves: res.Firings, Waiting: res.Waiting}
 }
 
@@ -381,9 +390,10 @@ type MergePlan struct {
 
 // AfterMerge evaluates the enabled merged rules in order for a ticket as if the pull request prID
 // were merged, ignoring what fired before. The first rule whose filters accept the ticket and that
-// pull request is the plan, whether or not it has to wait. It reports false when no rule applies.
-func AfterMerge(rs []Rule, t Ticket, prID string, now time.Time) (MergePlan, bool) {
-	if !t.Available {
+// pull request is the plan, whether or not it has to wait. It reports false when no rule applies,
+// or when the ticket is in an excluded status.
+func AfterMerge(rs []Rule, t Ticket, prID string, now time.Time, exclude []string) (MergePlan, bool) {
+	if !t.Available || excluded(exclude, t.Status) {
 		return MergePlan{}, false
 	}
 	prs := make([]PR, 0, len(t.PRs))

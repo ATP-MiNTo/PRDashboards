@@ -254,6 +254,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jira/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The status names and project keys of the connected Jira site, for the rule form
+         * @description statuses come from one Jira call, cached for 10 minutes, distinct without regard to case and sorted. projects are the keys the last full Jira refresh stored in memory, sorted, with no Jira call. When the statuses call fails for a reason other than the connection, the answer is still 200 with statuses empty, so the form falls back to the statuses it knows. A Jira that is not connected is a 409. No GitHub call.
+         */
+        get: operations["getJiraOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tickets/{key}/transitions": {
         parameters: {
             query?: never;
@@ -306,7 +326,11 @@ export interface paths {
          * @description Reads stored state only. Open pull request counts come from the stored pull requests.
          */
         get: operations["listRepos"];
-        put?: never;
+        /**
+         * Set the default method and replace the branch rules of several repositories
+         * @description Applies every update in one transaction (at most 500), so either all of them are saved or, when an id is unknown, none is. Then one rebuild of the snapshot from the data already fetched. No GitHub call. The rebuild asks Jira only about tickets it has not seen yet. clearNew marks a repository as seen. Returns every repository, as the list does.
+         */
+        put: operations["putRepos"];
         post?: never;
         delete?: never;
         options?: never;
@@ -325,7 +349,7 @@ export interface paths {
         get: operations["getRepo"];
         /**
          * Set the default method and replace the branch rules of a repository
-         * @description Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data already fetched. No GitHub or Jira call. clearNew marks the repository as seen.
+         * @description Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data already fetched. No GitHub call. The rebuild asks Jira only about tickets it has not seen yet. clearNew marks the repository as seen.
          */
         put: operations["putRepo"];
         post?: never;
@@ -479,6 +503,8 @@ export interface components {
             defaultMethodForNewRepos: "squash" | "merge" | "rebase";
             deleteBranchAfterMerge: boolean;
             jiraSiteId: string | null;
+            /** @description Jira statuses whose tickets no status sync rule ever moves. Compared without regard to case. Defaults to ["Done"]. */
+            excludedStatuses: string[];
         };
         ClientCredentials: {
             clientId: string;
@@ -728,6 +754,16 @@ export interface components {
             defaultMethod: components["schemas"]["MergeMethodName"];
             branchRules: components["schemas"]["BranchRule"][];
             clearNew: boolean;
+        };
+        ReposUpdate: {
+            repos: {
+                id: string;
+                update: components["schemas"]["RepoUpdate"];
+            }[];
+        };
+        JiraOptions: {
+            statuses: string[];
+            projects: string[];
         };
         /** @enum {string} */
         RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged";
@@ -1321,6 +1357,27 @@ export interface operations {
             502: components["responses"]["BadGateway"];
         };
     };
+    getJiraOptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The status names and project keys. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JiraOptions"];
+                };
+            };
+            409: components["responses"]["Conflict"];
+        };
+    };
     getTransitions: {
         parameters: {
             query?: never;
@@ -1389,6 +1446,31 @@ export interface operations {
                     "application/json": components["schemas"]["Repos"];
                 };
             };
+        };
+    };
+    putRepos: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReposUpdate"];
+            };
+        };
+        responses: {
+            /** @description Every repository after the update, ordered by name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repos"];
+                };
+            };
+            404: components["responses"]["NotFound"];
         };
     };
     getRepo: {
