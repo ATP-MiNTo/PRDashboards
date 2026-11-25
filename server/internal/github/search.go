@@ -576,7 +576,7 @@ func blockedOf(h http.Header, errs []graphQLError) []OrgBlocked {
 		if e.Type != "FORBIDDEN" {
 			continue
 		}
-		if b, ok := classifyForbidden(h, e.Message).(*OrgBlocked); ok {
+		if b, ok := classifyForbidden(h, e.Message, e.Extensions).(*OrgBlocked); ok {
 			out = append(out, *b)
 		}
 	}
@@ -597,7 +597,8 @@ func otherErrors(errs []graphQLError) []string {
 	for _, e := range errs {
 		if e.Type != "FORBIDDEN" {
 			out = append(out, strings.TrimSpace(e.Type+" "+e.Message))
-		} else if p, ok := classifyForbidden(nil, e.Message).(*PermissionError); ok {
+		} else if p, ok := classifyForbidden(nil, e.Message, e.Extensions).(*PermissionError); ok && !slices.Contains(out, "FORBIDDEN "+p.Message) {
+			// One line per message: a token that cannot read check runs repeats it once per check.
 			out = append(out, "FORBIDDEN "+p.Message)
 		}
 	}

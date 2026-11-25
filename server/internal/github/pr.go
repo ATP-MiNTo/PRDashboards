@@ -82,7 +82,7 @@ func (c *Client) PullRequest(ctx context.Context, token, id string) (PR, error) 
 	if p.Data.Node == nil {
 		for _, e := range p.Errors {
 			if e.Type == "FORBIDDEN" {
-				return PR{}, classifyForbidden(h, e.Message)
+				return PR{}, classifyForbidden(h, e.Message, e.Extensions)
 			}
 		}
 	}

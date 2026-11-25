@@ -204,7 +204,18 @@ type graphQLError struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
 	Path    []any  `json:"path"`
+	// Extensions says why GitHub refused, when it says so.
+	Extensions errorExtensions `json:"extensions"`
 }
+
+// errorExtensions are the flags GitHub adds to a FORBIDDEN error. A nil flag was not sent.
+type errorExtensions struct {
+	SAMLFailure        *bool `json:"saml_failure"`
+	IPAllowListFailure *bool `json:"ip_allow_list_failure"`
+}
+
+// explicit reports that GitHub sent both flags, so the message needs no guessing.
+func (x errorExtensions) explicit() bool { return x.SAMLFailure != nil && x.IPAllowListFailure != nil }
 
 var (
 	orgName    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]{0,38}$`)
@@ -229,7 +240,7 @@ func Classify(status int, h http.Header, body []byte) *OrgBlocked {
 		if e.Type != "FORBIDDEN" {
 			continue
 		}
-		if b, ok := classifyForbidden(h, e.Message).(*OrgBlocked); ok {
+		if b, ok := classifyForbidden(h, e.Message, e.Extensions).(*OrgBlocked); ok {
 			return b
 		}
 	}
@@ -271,14 +282,22 @@ func matchesPolicy(lower string) bool {
 
 // classifyForbidden decides why GitHub refused (a GraphQL FORBIDDEN error or a REST 403) and
 // returns *OrgBlocked for SAML SSO and organization policies, or *PermissionError for anything
-// else. An SSO header always means SSO. The message is GitHub's text.
-func classifyForbidden(h http.Header, message string) error {
+// else. An SSO header always means SSO, and so do the saml_failure and ip_allow_list_failure
+// flags of the error when GitHub sends them (both false means a missing permission). Without
+// flags the message wording decides. The message is GitHub's text.
+func classifyForbidden(h http.Header, message string, x errorExtensions) error {
 	if b := ssoHeader(h); b != nil {
 		return b
 	}
 	lower := strings.ToLower(message)
 	reason := ReasonSSO
 	switch {
+	case x.SAMLFailure != nil && *x.SAMLFailure:
+	case x.IPAllowListFailure != nil && *x.IPAllowListFailure:
+		reason = ReasonPolicy
+	case x.explicit():
+		// GitHub said it is neither SAML nor an IP allow list: do not guess from the wording.
+		return &PermissionError{Message: truncate(message, 200), Accepted: acceptedPermissions(h)}
 	case strings.Contains(lower, "saml"):
 	case matchesPolicy(lower):
 		reason = ReasonPolicy
@@ -354,7 +373,7 @@ func forbiddenError(h http.Header, body []byte) error {
 		Message string `json:"message"`
 	}
 	_ = json.Unmarshal(body, &m)
-	return classifyForbidden(h, m.Message)
+	return classifyForbidden(h, m.Message, errorExtensions{})
 }
 
 // parseSSOHeader reads `required; url=https://github.com/orgs/acme/sso?authorization_request=...`.

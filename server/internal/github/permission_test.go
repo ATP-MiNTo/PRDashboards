@@ -2,6 +2,7 @@ package github_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -234,5 +235,65 @@ func TestRefusalsAreLoggedWithoutSecrets(t *testing.T) {
 	}
 	if strings.Contains(out, "secret-token") || strings.Contains(out, "sha1") {
 		t.Errorf("secret in log: %s", out)
+	}
+}
+
+// hiddenChecks is what GitHub answers when a fine-grained token cannot read check runs: the rollup
+// is there, its three context nodes are null and each has a FORBIDDEN error with explicit flags.
+func hiddenChecks() string {
+	var errs []string
+	for i := range 3 {
+		errs = append(errs, `{"type":"FORBIDDEN","path":["node","commits","nodes",0,"commit","statusCheckRollup","contexts","nodes",`+
+			string(rune('0'+i))+`],"extensions":{"saml_failure":false,"ip_allow_list_failure":false},`+
+			`"locations":[{"line":1,"column":160}],"message":"Resource not accessible by personal access token"}`)
+	}
+	return `"errors":[` + strings.Join(errs, ",") + `]`
+}
+
+func TestPullRequestWithHiddenCheckRuns(t *testing.T) {
+	body := `{"data":{"node":{"__typename":"PullRequest","id":"PR_1","number":3,"headRefOid":"abc","state":"OPEN",` +
+		`"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"SUCCESS","contexts":{"totalCount":3,"nodes":[null,null,null]}}}}]}}},` + hiddenChecks() + `}`
+	pr, err := refusal(t, 200, nil, body).PullRequest(context.Background(), "tok", "PR_1")
+	if err != nil || pr.ID != "PR_1" || pr.HeadSHA != "abc" {
+		t.Fatalf("%+v %v", pr, err)
+	}
+	if pr.CI.State != github.CIPassing || pr.CI.Total != 3 || len(pr.CI.Checks) != 0 {
+		t.Fatalf("ci %+v", pr.CI)
+	}
+}
+
+func TestSearchWithHiddenCheckRunsHasNoBanner(t *testing.T) {
+	c := serveBodies(t, func(string) fixtureBody {
+		var extra map[string]any
+		_ = json.Unmarshal([]byte(`{`+hiddenChecks()+`}`), &extra)
+		return page([]string{"A"}, 1, 4900, 1, extra)
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil || len(res.PRs) != 1 || len(res.Blocked) != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	// One line per search (the assigned and the authored one), not one per hidden check.
+	if len(res.Errors) != 2 || !strings.Contains(res.Errors[0], "Resource not accessible by personal access token") {
+		t.Fatalf("errors %v", res.Errors)
+	}
+}
+
+func TestForbiddenExtensionsDecide(t *testing.T) {
+	cases := []struct {
+		name   string
+		ext    string
+		msg    string
+		reason string
+	}{
+		{"saml flag", `{"saml_failure":true,"ip_allow_list_failure":false}`, "Resource not accessible by personal access token", "sso"},
+		{"ip flag", `{"saml_failure":false,"ip_allow_list_failure":true}`, "whatever", "policy"},
+		{"both false ignores wording", `{"saml_failure":false,"ip_allow_list_failure":false}`, "SAML enforcement; IP allow list; forbids access via", ""},
+		{"no flags falls back to wording", `{}`, "SAML enforcement", "sso"},
+		{"one flag only falls back to wording", `{"saml_failure":false}`, "SAML enforcement", "sso"},
+	}
+	for _, tc := range cases {
+		body := `{"data":{"node":null},"errors":[{"type":"FORBIDDEN","extensions":` + tc.ext + `,"message":` + quote(tc.msg) + `}]}`
+		_, err := refusal(t, 200, nil, body).PullRequest(context.Background(), "tok", "PR_1")
+		checkRefusal(t, tc.name, err, tc.reason, "", nil)
 	}
 }

@@ -83,6 +83,16 @@ describe('CiCell', () => {
     expect(screen.queryByText(/more/)).toBeNull();
   });
 
+  it('shows the overall state and the count when the check list is hidden', () => {
+    render(<CiCell pr={pr('a', 7, { ci: { state: 'passing', total: 3, checks: [] } })} />);
+    expect(screen.getByText('Passing')).toBeInTheDocument();
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByRole('link', { name: '3 checks' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/web/pull/7/checks',
+    );
+  });
+
   it('shows a plain "+N more" when the repository name cannot form a link', () => {
     const row = pr('a', 1, { ci: { state: 'passing', total: 3, checks: [check({})] } });
     render(<CiCell pr={{ ...row, repo: { ...row.repo, nameWithOwner: 'bad name' } }} />);
