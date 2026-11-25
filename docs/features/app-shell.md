@@ -11,8 +11,8 @@ in with a one-time launch URL. `/` is the dashboard ([command-table.md](command-
 
 Differences from the spec:
 
-- `GET /events` streams server-sent events ([poller.md](poller.md)). There is no web app manifest
-  or service worker. The PWA part of TECH_SPEC 4.3 is milestone 9.
+- `GET /events` streams server-sent events ([poller.md](poller.md)). The web app manifest and
+  service worker are described in [installable-app.md](installable-app.md).
 - The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
 

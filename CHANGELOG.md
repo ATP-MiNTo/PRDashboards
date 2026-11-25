@@ -6,6 +6,17 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.0.1] - 2026-11-25
+
+### Added
+
+- README with requirements, how to run the app, first-time OAuth setup and a user manual.
+
+### Fixed
+
+- Feature docs for the app shell and auth no longer describe the installable app and the settings
+  drawer as not built.
+
 ## [1.0.0] - 2026-11-24
 
 ### Added
