@@ -33,7 +33,7 @@ A local web dashboard that lists every open pull request assigned to me or opene
 
 ### 5.1 Authentication
 
-- GitHub: OAuth App with `repo` and `read:org` scopes, with a personal access token as fallback when an org blocks OAuth apps. A GitHub App is not used because it only sees repos where it is installed, and the dashboard must cover all repos.
+- GitHub: a GitHub App with user access tokens (user-to-server), with a personal access token as fallback. Org admins will not approve an OAuth App with the full `repo` scope but do approve a GitHub App installed on selected repositories, so a GitHub App is used. It only sees the repositories where it is installed and the person has access, so the dashboard covers the repos the App is installed on. A personal access token (fine-grained ones can be limited to selected repositories) covers the rest.
 - Jira: Atlassian OAuth 2.0 (3LO) with `read:jira-work`, `write:jira-work` and `offline_access`.
 - Both callbacks use `localhost` redirect URLs.
 - Org-level restrictions (third-party app approval, SAML SSO authorization) are surfaced in the UI as "access blocked, authorize org" instead of failing silently.
@@ -158,7 +158,7 @@ Matching:
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Orgs restrict third-party OAuth apps or require SAML SSO | Some PRs are not visible | Surface blocked orgs in the UI, document the approval steps |
+| Org admins restrict third-party apps, require per-repo installs or require SAML SSO | Some PRs are not visible | Use a GitHub App that an org owner installs on selected repos, surface blocked orgs in the UI, document the install and approval steps, keep the personal access token fallback |
 | Atlassian OAuth requires a registered app and client secret | Setup effort | One-time setup, local configuration |
 | Jira workflows differ per project and transitions may require fields | Transition failures | Fetch transitions per ticket, show required-field form, retry on failure |
 | Repos disallow certain merge methods | Merge rejected | Check allowed methods, fall back with warning |

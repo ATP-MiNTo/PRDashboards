@@ -600,6 +600,11 @@ components:
           type: string
           minLength: 1
           maxLength: 512
+        appSlug:
+          type: string
+          description: The GitHub App's URL name, used for the install link. Ignored for Atlassian.
+          pattern: '^[a-z0-9][a-z0-9-]{0,99}$'
+          maxLength: 100
     ProviderSetup:
       type: object
       additionalProperties: false
@@ -609,6 +614,9 @@ components:
           type: boolean
         callbackUrl:
           type: string
+        installUrl:
+          type: string
+          description: Where an org owner installs the GitHub App on selected repositories. Present only for GitHub, when an app slug is saved.
     Setup:
       type: object
       additionalProperties: false
@@ -653,9 +661,12 @@ components:
           type: string
         method:
           type: string
-          enum: [oauth, pat]
+          enum: [app, oauth, pat]
         warning:
           type: string
+        needsReconnect:
+          type: boolean
+          description: GitHub refused to refresh the token, so the person must sign in again.
     JiraSite:
       type: object
       additionalProperties: false

@@ -49,13 +49,18 @@ type provider struct {
 	exchangeStatus    atomic.Int32
 	githubScopes      atomic.Value // string; empty means no header
 	githubTokenAnswer atomic.Value // string
+	ghRefreshCalls    atomic.Int32
+	ghRefreshStatus   atomic.Int32
+	ghRefreshAnswer   atomic.Value // string
+	ghRefreshForms    chan url.Values
 	sites             atomic.Value // string JSON
 }
 
 func newProvider(t *testing.T) *provider {
-	p := &provider{atlassianBodies: make(chan map[string]string, 64)}
+	p := &provider{atlassianBodies: make(chan map[string]string, 64), ghRefreshForms: make(chan url.Values, 64)}
 	p.githubScopes.Store("repo, read:org")
-	p.githubTokenAnswer.Store(`{"access_token":"gho_abc","token_type":"bearer","scope":"repo,read:org"}`)
+	p.githubTokenAnswer.Store(`{"access_token":"ghu_1","token_type":"bearer","refresh_token":"ghr_1","expires_in":28800,"refresh_token_expires_in":15811200}`)
+	p.ghRefreshAnswer.Store(`{"access_token":"ghu_2","token_type":"bearer","refresh_token":"ghr_2","expires_in":28800}`)
 	p.refreshError.Store("")
 	p.sites.Store(`[
 		{"id":"cloud-1","name":"Acme","url":"https://acme.atlassian.net","scopes":["read:jira-work","write:jira-work"]},
@@ -65,6 +70,17 @@ func newProvider(t *testing.T) *provider {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /gh/token", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
+		if r.PostForm.Get("grant_type") == "refresh_token" {
+			p.ghRefreshCalls.Add(1)
+			p.ghRefreshForms <- r.PostForm
+			time.Sleep(p.refreshDelay)
+			if st := int(p.ghRefreshStatus.Load()); st != 0 {
+				w.WriteHeader(st)
+				return
+			}
+			_, _ = io.WriteString(w, p.ghRefreshAnswer.Load().(string))
+			return
+		}
 		p.githubTokenForm.Store(r.PostForm)
 		if st := int(p.exchangeStatus.Load()); st != 0 {
 			w.WriteHeader(st)
@@ -74,7 +90,7 @@ func newProvider(t *testing.T) *provider {
 	})
 	mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Header.Get("Authorization") {
-		case "Bearer gho_abc", "Bearer ghp_pat", "Bearer github_pat_x":
+		case "Bearer ghu_1", "Bearer ghu_2", "Bearer gho_legacy", "Bearer ghp_pat", "Bearer github_pat_x":
 		default:
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -212,7 +228,7 @@ func TestStartGitHubBuildsPKCEAuthorizeURL(t *testing.T) {
 	}
 	q := u.Query()
 	if q.Get("client_id") != "cid-github" || q.Get("redirect_uri") != "http://127.0.0.1:4317/oauth/github/callback" ||
-		q.Get("scope") != "repo read:org" || q.Get("code_challenge_method") != "S256" {
+		q.Has("scope") || q.Get("code_challenge_method") != "S256" {
 		t.Fatalf("query %v", q)
 	}
 	if len(state) != 43 {
@@ -291,7 +307,8 @@ func TestCompleteGitHubSendsVerifierAndStoresToken(t *testing.T) {
 	}
 	var tok auth.GitHubToken
 	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
-	if tok.Token != "gho_abc" || tok.Method != "oauth" || tok.Login != "octocat" {
+	if tok.Token != "ghu_1" || tok.Method != "app" || tok.Login != "octocat" || tok.RefreshToken != "ghr_1" ||
+		!tok.ExpiresAt.Equal(r.clock.Now().Add(8*time.Hour)) || tok.NeedsReconnect {
 		t.Fatalf("%+v", tok)
 	}
 	acc, ok, err := r.o.GitHubAccount()
@@ -629,6 +646,253 @@ func TestCheckAtlassianSurfacesResourceErrors(t *testing.T) {
 	tok, _, _ := r.o.AtlassianAccount()
 	if len(tok.Sites) != 1 {
 		t.Fatal("sites lost after a failed reload")
+	}
+}
+
+func connectGitHub(t *testing.T, r *oauthRig) {
+	t.Helper()
+	_, state := r.start(t, auth.GitHub, "s")
+	if err := r.o.Complete(ctx, auth.GitHub, "c", state, "s"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCompleteGitHubWithoutExpiryStoresANonExpiringToken(t *testing.T) {
+	r := newOAuthRig(t)
+	r.prov.githubTokenAnswer.Store(`{"access_token":"ghu_1","token_type":"bearer"}`)
+	connectGitHub(t, r)
+	var tok auth.GitHubToken
+	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+	if !tok.ExpiresAt.IsZero() || tok.RefreshToken != "" {
+		t.Fatalf("%+v", tok)
+	}
+	r.clock.Advance(1000 * time.Hour)
+	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_1" || r.prov.ghRefreshCalls.Load() != 0 {
+		t.Fatalf("%q %v", got, err)
+	}
+}
+
+func TestGitHubAccessDoesNotRefreshWhileValid(t *testing.T) {
+	r := newOAuthRig(t)
+	connectGitHub(t, r)
+	r.clock.Advance(8*time.Hour - 2*time.Minute)
+	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_1" {
+		t.Fatalf("%q %v", got, err)
+	}
+	if r.prov.ghRefreshCalls.Load() != 0 {
+		t.Fatal("refreshed while the token was valid")
+	}
+	r.clock.Advance(90 * time.Second) // inside the skew window
+	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_2" {
+		t.Fatalf("%q %v", got, err)
+	}
+	form := <-r.prov.ghRefreshForms
+	if form.Get("client_id") != "cid-github" || form.Get("client_secret") != "csecret-github" ||
+		form.Get("refresh_token") != "ghr_1" || form.Get("grant_type") != "refresh_token" {
+		t.Fatalf("form %v", form)
+	}
+	var tok auth.GitHubToken
+	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+	if tok.Token != "ghu_2" || tok.RefreshToken != "ghr_2" || tok.Login != "octocat" || tok.Method != "app" ||
+		!tok.ExpiresAt.Equal(r.clock.Now().Add(8*time.Hour)) {
+		t.Fatalf("rotated token not stored: %+v", tok)
+	}
+}
+
+func TestGitHubRefreshOnceForConcurrentCallers(t *testing.T) {
+	r := newOAuthRig(t)
+	r.prov.refreshDelay = 50 * time.Millisecond
+	connectGitHub(t, r)
+	r.clock.Advance(9 * time.Hour)
+	var wg sync.WaitGroup
+	got := make(chan string, 25)
+	errs := make(chan error, 25)
+	for range 25 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tok, err := r.o.GitHubAccess(ctx)
+			got <- tok
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(got)
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for tok := range got {
+		if tok != "ghu_2" {
+			t.Fatalf("caller got %q", tok)
+		}
+	}
+	if n := r.prov.ghRefreshCalls.Load(); n != 1 {
+		t.Fatalf("%d refresh calls, want exactly 1", n)
+	}
+}
+
+func TestGitHubRefreshRejection(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		answer string
+	}{
+		{"bad_refresh_token in a 200 body", 0, `{"error":"bad_refresh_token","error_description":"The refresh token passed is incorrect or expired."}`},
+		{"400", 400, ""},
+		{"401", 401, ""},
+	} {
+		r := newOAuthRig(t)
+		connectGitHub(t, r)
+		r.prov.ghRefreshStatus.Store(int32(tc.status))
+		r.prov.ghRefreshAnswer.Store(tc.answer)
+		r.clock.Advance(9 * time.Hour)
+		if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNeedsReconnect) {
+			t.Fatalf("%s: got %v", tc.name, err)
+		}
+		acc, ok, _ := r.o.GitHubAccount()
+		if !ok || !acc.NeedsReconnect {
+			t.Fatalf("%s: %+v", tc.name, acc)
+		}
+		if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNeedsReconnect) || r.prov.ghRefreshCalls.Load() != 1 {
+			t.Fatalf("%s: a flagged token must not call GitHub again", tc.name)
+		}
+		if _, err := r.o.CheckGitHub(ctx); !errors.Is(err, auth.ErrNeedsReconnect) {
+			t.Fatalf("%s: check: %v", tc.name, err)
+		}
+		connectGitHub(t, r) // signing in again clears the flag
+		if acc, _, _ := r.o.GitHubAccount(); acc.NeedsReconnect {
+			t.Fatalf("%s: flag kept after reconnect", tc.name)
+		}
+	}
+}
+
+func TestGitHubTransientRefreshFailureKeepsTheToken(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		answer string
+	}{
+		{"500", 500, ""},
+		{"503", 503, ""},
+		{"error body", 0, `{"error":"incorrect_client_credentials"}`},
+		{"empty token", 0, `{}`},
+	} {
+		r := newOAuthRig(t)
+		connectGitHub(t, r)
+		r.prov.ghRefreshStatus.Store(int32(tc.status))
+		r.prov.ghRefreshAnswer.Store(tc.answer)
+		r.clock.Advance(9 * time.Hour)
+		_, err := r.o.GitHubAccess(ctx)
+		if err == nil || errors.Is(err, auth.ErrNeedsReconnect) {
+			t.Fatalf("%s: got %v", tc.name, err)
+		}
+		var tok auth.GitHubToken
+		tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+		if tok.NeedsReconnect || tok.RefreshToken != "ghr_1" || tok.Token != "ghu_1" {
+			t.Fatalf("%s: %+v", tc.name, tok)
+		}
+	}
+	r := newOAuthRig(t)
+	connectGitHub(t, r)
+	r.clock.Advance(9 * time.Hour)
+	r.prov.srv.Close()
+	if _, err := r.o.GitHubAccess(ctx); err == nil || errors.Is(err, auth.ErrNeedsReconnect) {
+		t.Fatalf("network down: %v", err)
+	}
+	if acc, _, _ := r.o.GitHubAccount(); acc.NeedsReconnect || acc.RefreshToken != "ghr_1" {
+		t.Fatalf("%+v", acc)
+	}
+}
+
+func TestGitHubRefreshKeepsOldRefreshTokenWhenNoneIsReturned(t *testing.T) {
+	r := newOAuthRig(t)
+	connectGitHub(t, r)
+	r.prov.ghRefreshAnswer.Store(`{"access_token":"ghu_2","expires_in":60}`)
+	r.clock.Advance(9 * time.Hour)
+	if _, err := r.o.GitHubAccess(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if acc, _, _ := r.o.GitHubAccount(); acc.RefreshToken != "ghr_1" {
+		t.Fatalf("%+v", acc)
+	}
+}
+
+func TestGitHubAccessReturnsPATAndLegacyOAuthTokensAsStored(t *testing.T) {
+	r := newOAuthRig(t)
+	if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNotConnected) {
+		t.Fatalf("got %v", err)
+	}
+	for _, raw := range []string{
+		`{"token":"gho_legacy","method":"oauth","login":"octocat"}`,
+		`{"token":"ghp_pat","method":"pat","login":"octocat"}`,
+	} {
+		_ = r.sec.Set(secrets.GitHubToken, []byte(raw))
+		r.clock.Advance(10000 * time.Hour)
+		got, err := r.o.GitHubAccess(ctx)
+		if err != nil || (got != "gho_legacy" && got != "ghp_pat") || r.prov.ghRefreshCalls.Load() != 0 {
+			t.Fatalf("%s: %q %v", raw, got, err)
+		}
+	}
+	if tok, err := r.o.CheckGitHub(ctx); err != nil || tok.Method != "pat" {
+		t.Fatalf("%+v %v", tok, err)
+	}
+}
+
+func TestGitHubRefreshNeedsClientCredentials(t *testing.T) {
+	r := newOAuthRig(t)
+	connectGitHub(t, r)
+	_ = r.sec.Delete(secrets.GitHubClient)
+	r.clock.Advance(9 * time.Hour)
+	if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNotConfigured) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestCheckGitHubRefreshesWhenDue(t *testing.T) {
+	r := newOAuthRig(t)
+	connectGitHub(t, r)
+	r.clock.Advance(9 * time.Hour)
+	tok, err := r.o.CheckGitHub(ctx)
+	if err != nil || tok.Token != "ghu_2" || tok.RefreshToken != "ghr_2" || r.prov.ghRefreshCalls.Load() != 1 {
+		t.Fatalf("%+v %v", tok, err)
+	}
+}
+
+func TestClientSlugAndInstallURL(t *testing.T) {
+	r := newOAuthRig(t)
+	if got := r.o.InstallURL(); got != "" {
+		t.Fatalf("no slug yet: %q", got)
+	}
+	for _, slug := range []string{"Acme", "-x", "a b", "a/b", "a..b", "a_b", "https://evil.example", strings.Repeat("a", 101), "é"} {
+		err := r.o.SetClient(auth.GitHub, auth.ClientCredentials{ClientID: "i", ClientSecret: "s", AppSlug: slug})
+		if !errors.Is(err, auth.ErrInvalidSlug) {
+			t.Errorf("%q accepted: %v", slug, err)
+		}
+	}
+	for _, slug := range []string{"a", "my-pr-dashboard", "app2", strings.Repeat("a", 100)} {
+		if err := r.o.SetClient(auth.GitHub, auth.ClientCredentials{ClientID: "i", ClientSecret: "s", AppSlug: slug}); err != nil {
+			t.Fatalf("%q: %v", slug, err)
+		}
+		if got := r.o.InstallURL(); got != "https://github.com/apps/"+slug+"/installations/new" {
+			t.Fatalf("%q: %q", slug, got)
+		}
+	}
+	// Atlassian has no slug, and a slug is dropped there.
+	if err := r.o.SetClient(auth.Atlassian, auth.ClientCredentials{ClientID: "i", ClientSecret: "s", AppSlug: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	var c auth.ClientCredentials
+	tokenJSON(t, r.sec, secrets.AtlassianClient, &c)
+	if c.AppSlug != "" {
+		t.Fatalf("%+v", c)
+	}
+	// A slug stored by hand that is not valid never becomes a link.
+	_ = r.sec.Set(secrets.GitHubClient, []byte(`{"clientId":"i","clientSecret":"s","appSlug":"../evil"}`))
+	if got := r.o.InstallURL(); got != "" {
+		t.Fatalf("%q", got)
 	}
 }
 

@@ -24,10 +24,9 @@ import (
 const (
 	// StateTTL is how long a started authorization stays valid.
 	StateTTL = 10 * time.Minute
-	// RefreshSkew is how long before expiry an Atlassian access token counts as expired.
+	// RefreshSkew is how long before expiry an access token counts as expired.
 	RefreshSkew = time.Minute
 
-	githubScope    = "repo read:org"
 	atlassianScope = "read:jira-work write:jira-work read:jira-user offline_access"
 	maxResponse    = 1 << 20
 	userAgent      = "prdash"
@@ -74,11 +73,11 @@ type Config struct {
 }
 
 // OAuth runs the GitHub and Atlassian authorization flows, keeps the tokens in the secrets store
-// and refreshes Atlassian tokens.
+// and refreshes the expiring ones.
 type OAuth struct {
 	cfg Config
 
-	// tokenMu serializes every read-modify-write of atlassian.token. A refresh holds it, so one
+	// tokenMu serializes every read-modify-write of atlassian.token and github.token. A refresh holds it, so one
 	// refresh is in flight at a time and the rotated refresh token is stored before anyone
 	// uses the new access token.
 	tokenMu sync.Mutex
@@ -97,8 +96,14 @@ func (o *OAuth) CallbackURL(p Provider) string {
 	return fmt.Sprintf("http://127.0.0.1:%d/oauth/%s/callback", o.cfg.Port, p)
 }
 
-// SetClient stores the OAuth app's client credentials.
+// SetClient stores the client credentials. The GitHub App slug, when given, must be valid.
 func (o *OAuth) SetClient(p Provider, c ClientCredentials) error {
+	if p != GitHub {
+		c.AppSlug = ""
+	}
+	if c.AppSlug != "" && !ValidSlug(c.AppSlug) {
+		return ErrInvalidSlug
+	}
 	return saveJSON(o.cfg.Secrets, p.clientItem(), c)
 }
 
@@ -106,6 +111,16 @@ func (o *OAuth) SetClient(p Provider, c ClientCredentials) error {
 func (o *OAuth) ClientConfigured(p Provider) bool {
 	_, err := o.client(p)
 	return err == nil
+}
+
+// InstallURL is the link where an org owner picks the repositories for the GitHub App. It is built
+// only from a validated slug and is empty when no slug is stored.
+func (o *OAuth) InstallURL() string {
+	c, err := o.client(GitHub)
+	if err != nil || !ValidSlug(c.AppSlug) {
+		return ""
+	}
+	return "https://github.com/apps/" + c.AppSlug + "/installations/new"
 }
 
 func (o *OAuth) client(p Provider) (ClientCredentials, error) {
@@ -126,7 +141,8 @@ func (o *OAuth) random(n int) (string, error) {
 
 // Start begins an authorization for the session and returns the provider URL to redirect to. The
 // state is 256 random bits, stored only as a hash, bound to the session and valid for 10 minutes.
-// GitHub also gets a PKCE S256 challenge.
+// GitHub also gets a PKCE S256 challenge. A GitHub App takes its permissions from its settings,
+// so no scope is sent.
 func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (string, error) {
 	cred, err := o.client(p)
 	if err != nil {
@@ -151,7 +167,6 @@ func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (strin
 			return "", err
 		}
 		sum := sha256.Sum256([]byte(row.Verifier))
-		q.Set("scope", githubScope)
 		q.Set("code_challenge", b64.EncodeToString(sum[:]))
 		q.Set("code_challenge_method", "S256")
 		base = o.cfg.Endpoints.GitHubAuthorize

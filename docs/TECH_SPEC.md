@@ -147,22 +147,41 @@ prdash --fake ...        # e2e build only (`-tags e2e`): fake GitHub and Atlassi
 
 ### 5.1 First-run setup
 
-`/setup` asks for the OAuth client IDs and secrets (GitHub OAuth App, Atlassian 3LO app). They are
-stored in the keychain, never in the repo or the database. Setup also shows the exact callback URLs
-to register:
+`/setup` asks for the client IDs and secrets (GitHub App, Atlassian 3LO app) and, for GitHub, the
+App's optional slug. They are stored in the keychain, never in the repo or the database. Setup also
+shows the exact callback URLs to register:
 
 - GitHub: `http://127.0.0.1:4317/oauth/github/callback`
 - Atlassian: `http://127.0.0.1:4317/oauth/atlassian/callback`
 
-The API is `GET /api/setup` (which providers are configured, plus the callback URLs) and
-`PUT /api/setup/{github|atlassian}` (client id and secret). Neither ever returns the secret.
+The API is `GET /api/setup` (which providers are configured, plus the callback URLs and, for GitHub
+with a saved slug, the install link `https://github.com/apps/<slug>/installations/new`) and
+`PUT /api/setup/{github|atlassian}` (client id, secret and the optional slug, which must match
+`^[a-z0-9][a-z0-9-]{0,99}$`). Neither ever returns the secret.
 
 ### 5.2 GitHub
 
-- Primary: OAuth App, authorization code flow with `state` and PKCE (S256). Scopes `repo read:org`.
+- Primary: a GitHub App, using only user access tokens (user-to-server). Authorization code flow
+  with `state` and PKCE (S256) against the same `login/oauth/authorize` and `access_token` endpoints
+  as OAuth apps. No `scope` is sent, because a GitHub App takes its permissions from its settings.
+  No private key, app ID or JWT is used. The token only sees the repos where the App is installed
+  and the person has access, so the search results are limited to the repos an org owner selected.
+  The install link is `https://github.com/apps/<slug>/installations/new`.
+- App permissions (repository only, no organization or account permissions): Pull requests read and
+  write, Contents read and write (merge and delete branch), Checks read, Commit statuses read,
+  Metadata read (mandatory).
+- With "Expire user authorization tokens" on (the default), the token response has `expires_in`
+  (8 hours) and a `refresh_token` (6 months) that rotates on each use. Before a GitHub call the
+  token is refreshed when it has less than a minute left, under the same mutex as the Jira token,
+  and the rotated refresh token is stored before the new access token is used. A refresh GitHub
+  rejects (`bad_refresh_token`, which GitHub sends in a `200` body, or a `400` or `401`) marks the
+  connection as needing a reconnect, and the UI offers "Reconnect GitHub". Network errors and `5xx`
+  keep the stored token. With expiry off there is no refresh token and the token is used as is.
 - Fallback: personal access token pasted in Settings. Classic tokens need `repo read:org`.
-  Fine-grained tokens are accepted with a warning that they only see the repos they were granted.
-- The token is checked once with `viewer { login }` and the scopes header before it is stored.
+  Fine-grained tokens are accepted with a warning that they only see the repos they were granted,
+  and can be limited to selected repositories.
+- A pasted token is checked once with `viewer { login }` and the scopes header before it is stored.
+  A GitHub App token sends no scopes header.
 - Blocked orgs: the GraphQL response's `errors` (type `FORBIDDEN`, SAML enforcement messages) and
   the `X-GitHub-SSO` header are mapped to an `orgBlocked` entry with the authorization URL. The UI
   shows the "access blocked, authorize org" banner from the prototype. The rest of the list still
@@ -176,7 +195,8 @@ The API is `GET /api/setup` (which providers are configured, plus the callback U
 - Access tokens last one hour. Refresh tokens rotate: every refresh stores the new refresh token
   before the access token is used. A single refresh runs at a time (mutex), so parallel calls never
   spend the same refresh token twice.
-- A refresh failure marks Jira as disconnected, and the UI offers "Reconnect".
+- A refresh failure marks Jira as disconnected, and the UI offers "Reconnect". GitHub App tokens
+  follow the same rules (5.2).
 
 ### 5.4 OAuth hardening
 
@@ -196,7 +216,8 @@ The API is `GET /api/setup` (which providers are configured, plus the callback U
   `/auth/done/?provider=..&result=ok|denied|invalid_state|error`, which carries no code or token.
   The callback response has `Cache-Control: no-store`. `GET /oauth/{provider}/start` is protected
   (session required) and redirects `302` to the provider.
-- GitHub uses PKCE S256 (the verifier stays on the server with the state). The Atlassian token
+- GitHub uses PKCE S256 (the verifier stays on the server with the state). The install link is
+  built only from the validated slug. The Atlassian token
   response is checked for `accessible-resources` sites on `https://*.atlassian.net` only.
 
 ## 6. Storage
@@ -474,7 +495,7 @@ Fonts.
 
 ### 8.6 Outbound calls
 
-`netguard` wraps the HTTP transport and allows only: `api.github.com`, `github.com` (OAuth),
+`netguard` wraps the HTTP transport and allows only: `api.github.com`, `github.com` (sign-in and token refresh),
 `api.atlassian.com`, `auth.atlassian.com`. Redirects to other hosts fail. TLS 1.2 minimum.
 Timeouts: 10 s connect, 30 s total.
 

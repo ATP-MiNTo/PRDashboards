@@ -18,7 +18,7 @@ type accounts struct {
 
 var _ poller.Accounts = accounts{}
 
-func (a accounts) GitHubToken() (string, error) { return a.oauth.GitHubAccessToken() }
+func (a accounts) GitHubToken(ctx context.Context) (string, error) { return a.oauth.GitHubAccess(ctx) }
 
 // JiraSite returns the selected site, or the only one the account can reach.
 func (a accounts) JiraSite(ctx context.Context) (jira.Site, error) {

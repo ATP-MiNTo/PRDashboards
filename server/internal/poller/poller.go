@@ -52,7 +52,7 @@ type Jira interface {
 // auth.ErrNotConnected when GitHub is not connected. JiraSite returns one that wraps
 // auth.ErrNotConnected, auth.ErrNeedsReconnect or ErrNoSite.
 type Accounts interface {
-	GitHubToken() (string, error)
+	GitHubToken(ctx context.Context) (string, error)
 	JiraSite(ctx context.Context) (jira.Site, error)
 }
 

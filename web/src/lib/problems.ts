@@ -5,7 +5,7 @@ const MESSAGES: Record<string, string> = {
   upstream_error: 'The provider could not be reached. Try again.',
   not_connected: 'Not connected.',
   unknown_site: 'That Jira site is not available for the connected account.',
-  provider_not_configured: 'Set up the OAuth app first.',
+  provider_not_configured: 'Set up the GitHub App or the Atlassian app first.',
   rate_limited: 'Too many requests. Wait a moment and try again.',
   invalid_body: 'The values were not accepted.',
   head_moved:

@@ -27,8 +27,8 @@ Secrets, kept in `vault.enc` (or the same names in `secrets.enc`):
 | Item | Content |
 | --- | --- |
 | `session.key` | 32 random bytes, HMAC key of the session cookie and CSRF token |
-| `github.oauth.client`, `atlassian.oauth.client` | JSON `{clientId, clientSecret}` |
-| `github.token` | JSON `{token, method (oauth or pat), login, warning}` |
+| `github.oauth.client`, `atlassian.oauth.client` | JSON `{clientId, clientSecret}`, and `appSlug` (GitHub App URL name, optional) for GitHub |
+| `github.token` | JSON `{token, method (app, pat, or legacy oauth), login, warning, refreshToken, expiresAt, needsReconnect}`. Without `expiresAt` the token does not expire |
 | `atlassian.token` | JSON `{accessToken, refreshToken, expiresAt, sites, needsReconnect}` |
 
 Keychain, service `prdashboards`: one item, `vault.key`, 32 random bytes (base64 as every keychain

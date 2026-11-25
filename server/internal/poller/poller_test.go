@@ -409,6 +409,17 @@ func TestGitHubDisconnectedClearsTheList(t *testing.T) {
 	}
 }
 
+func TestGitHubNeedsReconnectIsDisconnectedWithAClearMessage(t *testing.T) {
+	r := newRig(t, pr("PR_a", 1, "acme/web", "feat/a", "main", "a"))
+	r.sync()
+	r.accounts.set(func(a *fakeAccounts) { a.tokenEr = fmt.Errorf("refresh: %w", auth.ErrNeedsReconnect) })
+	r.sync()
+	s := r.snapshot()
+	if s.Sources.Github.State != "disconnected" || s.Sources.Github.Error == nil || *s.Sources.Github.Error != "Reconnect GitHub" || len(s.Prs) != 0 {
+		t.Fatalf("%+v", s.Sources.Github)
+	}
+}
+
 func TestJiraUnreachableMarksRowsAndKeepsLastGoodTickets(t *testing.T) {
 	r := newRig(t, pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a"), pr("PR_b", 2, "acme/web", "feat/none", "main", "b"))
 	r.sync()

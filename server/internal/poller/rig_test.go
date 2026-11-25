@@ -213,7 +213,7 @@ type fakeAccounts struct {
 	siteErr error
 }
 
-func (a *fakeAccounts) GitHubToken() (string, error) {
+func (a *fakeAccounts) GitHubToken(context.Context) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.token, a.tokenEr

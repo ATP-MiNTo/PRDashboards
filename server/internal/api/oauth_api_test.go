@@ -231,7 +231,7 @@ func TestOAuthCompleteStateRules(t *testing.T) {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 	wantProblem(t, complete(l, "github", state), http.StatusBadRequest, "invalid_oauth_state")
-	if a := accounts(t, g, l); !a.Github.Connected || a.Github.Method != "oauth" || a.Github.Login != "octocat" {
+	if a := accounts(t, g, l); !a.Github.Connected || a.Github.Method != "app" || a.Github.Login != "octocat" {
 		t.Fatalf("%+v", a.Github)
 	}
 }

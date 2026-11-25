@@ -6,6 +6,22 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.1.0] - 2026-11-25
+
+### Changed
+
+- GitHub sign-in uses a GitHub App instead of an OAuth App, so an organization owner can install it
+  on selected repositories only, without approving the full `repo` scope. The dashboard shows the
+  pull requests of the repositories the App is installed on. User tokens are refreshed
+  automatically before they expire, and "Reconnect GitHub" appears if GitHub refuses a refresh.
+  Existing OAuth App sign-ins and personal access tokens keep working. The README explains how to
+  create and install the App.
+
+### Added
+
+- The GitHub setup card takes an optional App slug and shows an "Install on repositories" link.
+- Connected accounts shows how GitHub is connected: GitHub App, OAuth or access token.
+
 ## [1.0.3] - 2026-11-25
 
 ### Changed

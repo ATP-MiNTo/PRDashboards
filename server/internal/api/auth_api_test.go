@@ -135,6 +135,7 @@ type setupBody struct {
 	Github, Atlassian struct {
 		Configured  bool
 		CallbackURL string
+		InstallURL  *string
 	}
 }
 
@@ -168,6 +169,78 @@ func TestSetupNeverReturnsSecrets(t *testing.T) {
 	}
 	if strings.Contains(g.logs.String(), "very-secret-value") {
 		t.Fatal("secret in the log")
+	}
+}
+
+func TestSetupAppSlugBuildsTheInstallLink(t *testing.T) {
+	g := newRig(t, webFS())
+	l := g.login()
+	put := func(path, body string) *httptest.ResponseRecorder {
+		return g.do(http.MethodPut, path, body, l.write()...)
+	}
+	setup := func() setupBody {
+		return decode[setupBody](t, g.do(http.MethodGet, "/api/setup", "", cookie(l.cookie)))
+	}
+
+	if w := put("/api/setup/github", `{"clientId":"a","clientSecret":"b"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if got := setup(); got.Github.InstallURL != nil {
+		t.Fatalf("no slug, no link: %+v", got.Github)
+	}
+	if w := put("/api/setup/github", `{"clientId":"a","clientSecret":"b","appSlug":"my-dash"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	got := setup()
+	if got.Github.InstallURL == nil || *got.Github.InstallURL != "https://github.com/apps/my-dash/installations/new" || got.Atlassian.InstallURL != nil {
+		t.Fatalf("%+v", got)
+	}
+	// Saving again without a slug clears it.
+	put("/api/setup/github", `{"clientId":"a","clientSecret":"b"}`)
+	if got := setup(); got.Github.InstallURL != nil {
+		t.Fatalf("%+v", got.Github)
+	}
+	// Atlassian ignores the slug.
+	if w := put("/api/setup/atlassian", `{"clientId":"a","clientSecret":"b","appSlug":"x"}`); w.Code != http.StatusNoContent {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if got := setup(); got.Atlassian.InstallURL != nil {
+		t.Fatalf("%+v", got.Atlassian)
+	}
+	for name, slug := range map[string]string{"upper": "Acme", "url": "evil.example/x", "dash first": "-a", "space": "a b", "long": strings.Repeat("a", 101), "scheme": "https://x"} {
+		w := put("/api/setup/github", `{"clientId":"keep","clientSecret":"b","appSlug":"`+slug+`"}`)
+		if w.Code != http.StatusBadRequest && w.Code != http.StatusUnprocessableEntity {
+			t.Errorf("%s: status %d", name, w.Code)
+		}
+	}
+	if got := setup(); got.Github.InstallURL != nil {
+		t.Fatalf("an invalid slug was stored: %+v", got.Github)
+	}
+	raw, _ := g.secrets.Get(secrets.GitHubClient)
+	if strings.Contains(string(raw), `"keep"`) {
+		t.Fatalf("an invalid request replaced the credentials: %s", raw)
+	}
+}
+
+func TestAccountsReportsGitHubNeedsReconnect(t *testing.T) {
+	g := newRig(t, webFS())
+	l := g.login()
+	if a := accounts(t, g, l); a.Github.NeedsReconnect != nil {
+		t.Fatalf("%+v", a.Github)
+	}
+	_ = g.secrets.Set(secrets.GitHubToken, []byte(`{"token":"ghu_x","method":"app","login":"octocat","refreshToken":"ghr_x","needsReconnect":true}`))
+	a := accounts(t, g, l)
+	if !a.Github.Connected || a.Github.Method != "app" || a.Github.NeedsReconnect == nil || !*a.Github.NeedsReconnect {
+		t.Fatalf("%+v", a.Github)
+	}
+	body := g.do(http.MethodGet, "/api/accounts", "", cookie(l.cookie)).Body.String()
+	if strings.Contains(body, "ghu_x") || strings.Contains(body, "ghr_x") {
+		t.Fatalf("token in the response: %s", body)
+	}
+	// A check of a flagged token answers with the account instead of an error.
+	w := g.do(http.MethodPost, "/api/accounts/github/check", "", l.write()...)
+	if w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }
 
@@ -251,6 +324,8 @@ type accountsBody struct {
 		Login     string
 		Method    string
 		Warning   *string
+		// NeedsReconnect is a pointer so the test sees that the field is absent when false.
+		NeedsReconnect *bool
 	}
 	Jira struct {
 		Connected      bool

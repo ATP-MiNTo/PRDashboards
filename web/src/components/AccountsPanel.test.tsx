@@ -60,11 +60,11 @@ describe('AccountsPanel', () => {
     );
   });
 
-  it('sends people to setup when the OAuth app is not configured', async () => {
+  it('sends people to setup when the app is not configured', async () => {
     api.getSetup.mockResolvedValue(setup(false, false));
     api.getAccounts.mockResolvedValue(accounts());
     renderWithClient(<AccountsPanel />);
-    const links = await screen.findAllByRole('link', { name: 'Set up the OAuth app' });
+    const links = await screen.findAllByRole('link', { name: 'Set up' });
     expect(links).toHaveLength(2);
     links.forEach((l) => expect(l).toHaveAttribute('href', '/setup/'));
   });
@@ -78,6 +78,36 @@ describe('AccountsPanel', () => {
     renderWithClient(<AccountsPanel />);
     expect(await screen.findByText('Connected as octocat (access token)')).toBeInTheDocument();
     expect(screen.getByText('Only granted repos')).toBeInTheDocument();
+  });
+
+  it('labels each GitHub sign-in method', async () => {
+    for (const [method, label] of [
+      ['app', 'GitHub App'],
+      ['oauth', 'OAuth'],
+      ['pat', 'access token'],
+    ] as const) {
+      api.getAccounts.mockResolvedValue(
+        accounts({ github: { connected: true, login: 'octocat', method } }),
+      );
+      const { unmount } = renderWithClient(<AccountsPanel />);
+      expect(await screen.findByText(`Connected as octocat (${label})`)).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Reconnect GitHub' })).toBeNull();
+      unmount();
+    }
+  });
+
+  it('shows Reconnect when the GitHub App authorization needs it', async () => {
+    api.getAccounts.mockResolvedValue(
+      accounts({
+        github: { connected: true, login: 'octocat', method: 'app', needsReconnect: true },
+      }),
+    );
+    renderWithClient(<AccountsPanel />);
+    expect(await screen.findByText(/GitHub authorization expired/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Reconnect GitHub' })).toHaveAttribute(
+      'href',
+      '/oauth/github/start',
+    );
   });
 
   it('disconnects and refetches', async () => {

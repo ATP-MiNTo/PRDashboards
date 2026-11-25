@@ -21,8 +21,9 @@ export function PatForm() {
         GitHub access token
       </h2>
       <p className={styles.muted}>
-        An alternative to OAuth. Classic tokens need the repo and read:org scopes. Fine-grained
-        tokens only see the repositories they were granted.
+        An alternative to the GitHub App. Classic tokens need the repo and read:org scopes.
+        Fine-grained tokens can be limited to selected repositories and only see the repositories
+        they were granted.
       </p>
       <form onSubmit={submit}>
         <label className={styles.field}>

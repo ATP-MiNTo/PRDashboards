@@ -147,7 +147,7 @@ type Snapshot interface {
 // Accounts says who the merge acts as. Both methods return errors that wrap auth.ErrNotConnected
 // (or auth.ErrNeedsReconnect, poller.ErrNoSite) when the account cannot be used.
 type Accounts interface {
-	GitHubToken() (string, error)
+	GitHubToken(ctx context.Context) (string, error)
 	JiraSite(ctx context.Context) (jira.Site, error)
 }
 

@@ -18,7 +18,7 @@ test.beforeEach(async ({ page, request }) => {
   await disconnectAll(page);
 });
 
-test("OAuth sign-in through the cross-site callback and the finish page", async ({
+test("GitHub App sign-in through the cross-site callback and the finish page", async ({
   page,
   request,
 }) => {
@@ -33,7 +33,9 @@ test("OAuth sign-in through the cross-site callback and the finish page", async 
   expect(page.url()).not.toContain("state=");
 
   await page.getByRole("link", { name: "Back to accounts" }).click();
-  await expect(page.getByText("Connected as octocat (OAuth)")).toBeVisible();
+  await expect(
+    page.getByText("Connected as octocat (GitHub App)"),
+  ).toBeVisible();
 
   const state = await fakeState<{
     exchanges: number;
@@ -41,6 +43,35 @@ test("OAuth sign-in through the cross-site callback and the finish page", async 
   }>(request, "github");
   expect(state.exchanges).toBe(1);
   expect(state.lastCodeVerifier.length).toBeGreaterThanOrEqual(43);
+});
+
+test("an expiring token is refreshed and the refresh token rotates", async ({
+  page,
+  request,
+}) => {
+  type State = {
+    refreshes: number;
+    rejectedRefreshes: number;
+    currentRefreshToken: string;
+  };
+  await configure(request, "github", { expiresIn: 1 });
+  await page.getByRole("link", { name: "Connect GitHub" }).click();
+  await expect(page.getByRole("status")).toHaveText("GitHub is connected.");
+  await page.getByRole("link", { name: "Back to accounts" }).click();
+
+  // Connecting starts a refresh, whose search may already have rotated the token once.
+  const before = await fakeState<State>(request, "github");
+
+  await page.getByRole("button", { name: "Check GitHub" }).click();
+  await expect
+    .poll(async () => (await fakeState<State>(request, "github")).refreshes)
+    .toBeGreaterThan(before.refreshes);
+  const after = await fakeState<State>(request, "github");
+  expect(after.currentRefreshToken).not.toBe(before.currentRefreshToken);
+  expect(after.rejectedRefreshes).toBe(0);
+  await expect(
+    page.getByText("Connected as octocat (GitHub App)"),
+  ).toBeVisible();
 });
 
 test("a tampered state is rejected and nothing is connected", async ({

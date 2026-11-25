@@ -15,8 +15,12 @@ vi.mock('@/api/client', async (importOriginal) => ({
   ...api,
 }));
 
-const state = (g: boolean, a: boolean) => ({
-  github: { configured: g, callbackUrl: 'http://127.0.0.1:4317/oauth/github/callback' },
+const state = (g: boolean, a: boolean, installUrl?: string) => ({
+  github: {
+    configured: g,
+    callbackUrl: 'http://127.0.0.1:4317/oauth/github/callback',
+    ...(installUrl ? { installUrl } : {}),
+  },
   atlassian: { configured: a, callbackUrl: 'http://127.0.0.1:4317/oauth/atlassian/callback' },
 });
 
@@ -48,7 +52,7 @@ describe('Setup page', () => {
   it('saves client credentials and clears the secret field', async () => {
     api.putSetupClient.mockResolvedValue(undefined);
     renderWithClient(<Setup />);
-    const github = await screen.findByRole('region', { name: 'GitHub OAuth App' });
+    const github = await screen.findByRole('region', { name: 'GitHub App' });
     const id = github.querySelector<HTMLInputElement>('input[name=clientId]')!;
     const secret = github.querySelector<HTMLInputElement>('input[name=clientSecret]')!;
     expect(secret.type).toBe('password');
@@ -63,6 +67,59 @@ describe('Setup page', () => {
     );
     await waitFor(() => expect(secret.value).toBe(''));
     expect(await screen.findByText('Saved')).toBeInTheDocument();
+  });
+
+  it('sends the optional app slug for GitHub only', async () => {
+    api.putSetupClient.mockResolvedValue(undefined);
+    renderWithClient(<Setup />);
+    const github = await screen.findByRole('region', { name: 'GitHub App' });
+    expect(screen.getByText(/github\.com\/apps\/<slug>/)).toBeInTheDocument();
+    fireEvent.change(github.querySelector('input[name=clientId]')!, { target: { value: 'i' } });
+    fireEvent.change(github.querySelector('input[name=clientSecret]')!, { target: { value: 's' } });
+    fireEvent.change(github.querySelector('input[name=appSlug]')!, {
+      target: { value: ' my-dash ' },
+    });
+    fireEvent.submit(github.querySelector('form')!);
+    await waitFor(() =>
+      expect(api.putSetupClient).toHaveBeenCalledWith('github', {
+        clientId: 'i',
+        clientSecret: 's',
+        appSlug: 'my-dash',
+      }),
+    );
+    const atlassian = screen.getByRole('region', { name: 'Atlassian OAuth 2.0 (3LO) app' });
+    expect(atlassian.querySelector('input[name=appSlug]')).toBeNull();
+  });
+
+  it('shows the install link only for the validated server URL', async () => {
+    api.getSetup.mockResolvedValue(
+      state(true, true, 'https://github.com/apps/my-dash/installations/new'),
+    );
+    renderWithClient(<Setup />);
+    const link = await screen.findByRole('link', { name: 'Install on repositories' });
+    expect(link).toHaveAttribute('href', 'https://github.com/apps/my-dash/installations/new');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.getByText(/organization owner picks the repositories/)).toBeInTheDocument();
+  });
+
+  it('shows no install link without a slug or for an unexpected URL', async () => {
+    api.getSetup.mockResolvedValue(state(true, true));
+    const { unmount } = renderWithClient(<Setup />);
+    await screen.findByRole('region', { name: 'GitHub App' });
+    expect(screen.queryByRole('link', { name: 'Install on repositories' })).toBeNull();
+    unmount();
+    api.getSetup.mockResolvedValue(
+      state(true, true, 'https://evil.example/apps/x/installations/new'),
+    );
+    renderWithClient(<Setup />);
+    await screen.findByRole('region', { name: 'GitHub App' });
+    expect(screen.queryByRole('link', { name: 'Install on repositories' })).toBeNull();
+  });
+
+  it('mentions fine-grained tokens limited to selected repositories', async () => {
+    renderWithClient(<Setup />);
+    expect(await screen.findByText(/limited to selected repositories/)).toBeInTheDocument();
   });
 
   it('validates a token and shows the login and the warning', async () => {

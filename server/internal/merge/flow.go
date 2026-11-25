@@ -132,7 +132,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 			return Result{}, &Error{Code: CodeTicketNotLinked, Detail: t.Key + " is not linked to this pull request"}
 		}
 	}
-	token, err := s.cfg.Accounts.GitHubToken()
+	token, err := s.cfg.Accounts.GitHubToken(ctx)
 	if err != nil {
 		if notConnected(err) {
 			return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}

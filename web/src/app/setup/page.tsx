@@ -15,8 +15,8 @@ export default function Setup() {
       <section className={`${styles.card} ${styles.wide}`}>
         <h1 className={styles.title}>Setup</h1>
         <p className={styles.muted}>
-          Register one OAuth app per provider, then paste its client ID and secret here. They are
-          stored in your keychain and never leave this machine.
+          Create a GitHub App and an Atlassian OAuth app, then paste each client ID and secret here.
+          They are stored in your keychain and never leave this machine.
         </p>
         {setup.isPending && <p className={styles.muted}>Loading</p>}
         {setup.isError &&
@@ -29,9 +29,11 @@ export default function Setup() {
           <div className={styles.stack}>
             <ClientForm
               provider="github"
-              title="GitHub OAuth App"
+              title="GitHub App"
               configured={setup.data.github.configured}
               callbackUrl={setup.data.github.callbackUrl}
+              installUrl={setup.data.github.installUrl}
+              withSlug
             />
             <PatForm />
             <ClientForm

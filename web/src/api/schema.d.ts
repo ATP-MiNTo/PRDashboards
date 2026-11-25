@@ -483,10 +483,14 @@ export interface components {
         ClientCredentials: {
             clientId: string;
             clientSecret: string;
+            /** @description The GitHub App's URL name, used for the install link. Ignored for Atlassian. */
+            appSlug?: string;
         };
         ProviderSetup: {
             configured: boolean;
             callbackUrl: string;
+            /** @description Where an org owner installs the GitHub App on selected repositories. Present only for GitHub, when an app slug is saved. */
+            installUrl?: string;
         };
         Setup: {
             github: components["schemas"]["ProviderSetup"];
@@ -504,8 +508,10 @@ export interface components {
             connected: boolean;
             login?: string;
             /** @enum {string} */
-            method?: "oauth" | "pat";
+            method?: "app" | "oauth" | "pat";
             warning?: string;
+            /** @description GitHub refused to refresh the token, so the person must sign in again. */
+            needsReconnect?: boolean;
         };
         JiraSite: {
             id: string;

@@ -118,7 +118,7 @@ type stubAccounts struct {
 	err  error
 }
 
-func (a stubAccounts) GitHubToken() (string, error)                { return "tok", nil }
+func (a stubAccounts) GitHubToken(context.Context) (string, error) { return "tok", nil }
 func (a stubAccounts) JiraSite(context.Context) (jira.Site, error) { return a.site, a.err }
 
 type snapRig struct {

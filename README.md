@@ -74,14 +74,34 @@ window says so.
 
 ## First-time setup
 
-You need two OAuth apps, one on GitHub and one on Atlassian. This is a one-time step.
+You need a GitHub App and an Atlassian OAuth app. This is a one-time step.
 
-### 1. Create the GitHub OAuth App
+### 1. Create the GitHub App
 
-1. Go to GitHub, **Settings**, **Developer settings**, **OAuth Apps**, **New OAuth App**.
+A GitHub App can be installed on only the repositories you choose, so an organization admin can
+approve it without handing out the full `repo` scope. The dashboard shows the pull requests of the
+repositories the App is installed on.
+
+1. Go to GitHub, **Settings**, **Developer settings**, **GitHub Apps**, **New GitHub App**. If an
+   organization owner creates it under the organization, use the organization's **Settings**,
+   **Developer settings**, **GitHub Apps** instead.
 2. **Homepage URL**: `http://127.0.0.1:4317`
-3. **Authorization callback URL**: `http://127.0.0.1:4317/oauth/github/callback`
-4. Create it, then generate a client secret. Keep the client ID and secret for step 3.
+3. **Callback URL**: `http://127.0.0.1:4317/oauth/github/callback`
+4. Tick **Expire user authorization tokens**. Leave **Request user authorization (OAuth) during
+   installation** unticked.
+5. **Webhook**: untick **Active**.
+6. **Repository permissions**: Pull requests **Read and write**, Contents **Read and write** (to
+   merge and delete the branch), Checks **Read-only**, Commit statuses **Read-only**, Metadata
+   **Read-only** (mandatory). No organization or account permissions.
+7. **Where can this GitHub App be installed?** Choose **Any account** if the App is owned by your
+   personal account and must be installed on an organization. Choose **Only on this account** if an
+   organization owner creates it in the organization.
+8. Create it, then generate a client secret. Keep the client ID and the secret, and note the
+   **slug** from the App's public link, `https://github.com/apps/<slug>`.
+9. Install it. An organization owner opens `https://github.com/apps/<slug>/installations/new`,
+   picks the organization, chooses **Only select repositories** and picks them. Or you request the
+   installation and the owner approves it. To add a repository later, the owner edits the
+   installation.
 
 ### 2. Create the Atlassian OAuth 2.0 (3LO) app
 
@@ -97,18 +117,27 @@ You need two OAuth apps, one on GitHub and one on Atlassian. This is a one-time 
 
 1. Start the app. In the browser, open `http://127.0.0.1:4317/setup/`. The page also shows the
    exact callback URLs to register.
-2. Paste the GitHub client ID and secret, save, then click **Connect GitHub** and approve.
+2. Paste the GitHub client ID, secret and slug, save, then click **Connect GitHub** and approve.
+   The slug is optional. With it, the page shows an **Install on repositories** link.
 3. Paste the Atlassian client ID and secret, save, then click **Connect Jira** and approve.
 4. If your Atlassian account has several Jira sites, pick one in **Connected accounts**.
 
 The dashboard fills in within a minute.
 
-**No OAuth app for GitHub?** On the same page you can paste a personal access token instead. A
-classic token needs the `repo` and `read:org` scopes. A fine-grained token works too, but it only
-sees the repositories it was granted, and the app shows a warning for it.
+**No GitHub App?** On the same page you can paste a personal access token instead. A classic token
+needs the `repo` and `read:org` scopes. A fine-grained token works too and can be limited to
+selected repositories. It only sees the repositories it was granted, and the app shows a warning
+for it.
 
-**Organizations that block third-party apps.** If an organization restricts OAuth apps or needs
-SAML SSO, its pull requests don't appear. Instead, a banner says "access blocked, authorize org",
+**A pull request is missing.** The repository is probably not part of the App's installation. Ask
+the organization owner to add it under the installation's **Repository access**.
+
+**GitHub says "Reconnect".** GitHub App tokens are refreshed automatically. If GitHub refuses a
+refresh (for example after six months without use, or after the secret was regenerated), click
+**Reconnect GitHub** in **Connected accounts**.
+
+**Organizations that require SAML SSO.** If an organization needs SAML SSO, its pull requests
+don't appear. Instead, a banner says "access blocked, authorize org",
 with a link to authorize. The rest of the list still loads.
 
 ### Where your data lives
@@ -286,6 +315,8 @@ The Settings button opens a panel on the right with these sections:
 | The browser shows "Open the app with scripts/start.sh" | Your session ended. Run the start script again; it opens a fresh sign-in link |
 | "The launch link expired or was already used" | Launch links last 2 minutes and work once. Run the start script again |
 | "access blocked, authorize org" banner | Click Authorize and approve the app for that organization |
+| A pull request is missing | The repository is not part of the GitHub App's installation. Ask the organization owner to add it to the installation's repositories |
+| GitHub shows "Reconnect GitHub" | GitHub refused to refresh the sign-in. Click Reconnect GitHub in Connected accounts |
 | Jira shows "Reconnect" | The Jira sign-in expired. Click Reconnect |
 | GitHub shows "rate limited" | The app waits for GitHub's limit to reset and slows its polling. The last data stays visible |
 | "stdin is not a terminal" at start | There is no keychain, so the app needs a passphrase. Start it from a terminal |

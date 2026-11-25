@@ -34,7 +34,15 @@ type githubConfig struct {
 	MultiPR bool `json:"multiPr"`
 	// Approved lists the numbers of pull requests that GitHub reports as approved.
 	Approved []int `json:"approved"`
+	// ExpiresIn is the lifetime in seconds of issued user tokens (default 28800, like GitHub). The
+	// app refreshes tokens that have less than a minute left, so 1 makes every use refresh.
+	ExpiresIn int `json:"expiresIn"`
+	// RefreshFail makes every refresh answer bad_refresh_token.
+	RefreshFail bool `json:"refreshFail"`
 }
+
+// defaultGitHubExpiry is the lifetime of a GitHub App user token with expiry turned on.
+const defaultGitHubExpiry = 8 * 3600
 
 type githubState struct {
 	Config            githubConfig `json:"config"`
@@ -42,6 +50,9 @@ type githubState struct {
 	Exchanges         int          `json:"exchanges"`
 	LastCallbackURL   string       `json:"lastCallbackUrl"`
 	LastCodeVerifier  string       `json:"lastCodeVerifier"`
+	Refreshes         int          `json:"refreshes"`
+	RejectedRefreshes int          `json:"rejectedRefreshes"`
+	CurrentRefresh    string       `json:"currentRefreshToken"`
 	LastRedirectURI   string       `json:"lastRedirectUri"`
 	BadExchangeErrors int          `json:"badExchangeErrors"`
 	NodeQueries       int          `json:"nodeQueries"`
@@ -61,6 +72,7 @@ type github struct {
 	st     githubState
 	codes  safeMap[ghCode]
 	tokens safeMap[bool]
+	n      int
 }
 
 func newGitHub() *github { return &github{} }
@@ -106,7 +118,7 @@ func (g *github) routes() http.Handler {
 func (g *github) authorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if q.Get("client_id") != GitHubClient.ClientID || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" ||
-		!strings.Contains(q.Get("scope"), "repo") || q.Get("state") == "" {
+		q.Has("scope") || q.Get("state") == "" {
 		http.Error(w, "invalid authorize request", http.StatusBadRequest)
 		return
 	}
@@ -137,23 +149,53 @@ func (g *github) accessToken(w http.ResponseWriter, r *http.Request) {
 		fail("incorrect_client_credentials")
 		return
 	}
-	c, ok := g.codes.take(r.PostForm.Get("code"))
-	if !ok || c.redirect != r.PostForm.Get("redirect_uri") {
-		fail("bad_verification_code")
+	switch r.PostForm.Get("grant_type") {
+	case "refresh_token":
+		g.mu.Lock()
+		reject := g.st.Config.RefreshFail || g.st.CurrentRefresh == "" || r.PostForm.Get("refresh_token") != g.st.CurrentRefresh
+		if reject {
+			g.st.RejectedRefreshes++
+		} else {
+			g.st.Refreshes++
+		}
+		g.mu.Unlock()
+		if reject {
+			fail("bad_refresh_token")
+			return
+		}
+	case "":
+		c, ok := g.codes.take(r.PostForm.Get("code"))
+		if !ok || c.redirect != r.PostForm.Get("redirect_uri") {
+			fail("bad_verification_code")
+			return
+		}
+		if v := r.PostForm.Get("code_verifier"); v == "" || s256(v) != c.challenge {
+			fail("bad_verification_code")
+			return
+		}
+		g.mu.Lock()
+		g.st.Exchanges++
+		g.st.LastCodeVerifier = r.PostForm.Get("code_verifier")
+		g.st.LastRedirectURI = r.PostForm.Get("redirect_uri")
+		g.mu.Unlock()
+	default:
+		fail("unsupported_grant_type")
 		return
 	}
-	if v := r.PostForm.Get("code_verifier"); v == "" || s256(v) != c.challenge {
-		fail("bad_verification_code")
-		return
-	}
-	token := "gho_fake_" + randomHex(8)
-	g.tokens.put(token, true)
 	g.mu.Lock()
-	g.st.Exchanges++
-	g.st.LastCodeVerifier = r.PostForm.Get("code_verifier")
-	g.st.LastRedirectURI = r.PostForm.Get("redirect_uri")
+	g.n++
+	token, refresh := "ghu_fake_"+strconv.Itoa(g.n)+"_"+randomHex(8), "ghr_fake_"+strconv.Itoa(g.n)+"_"+randomHex(8)
+	g.st.CurrentRefresh = refresh
+	expires := g.st.Config.ExpiresIn
+	if expires <= 0 {
+		expires = defaultGitHubExpiry
+	}
 	g.mu.Unlock()
-	writeJSON(w, http.StatusOK, map[string]string{"access_token": token, "token_type": "bearer", "scope": "repo,read:org"})
+	g.tokens.put(token, true)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token": token, "token_type": "bearer", "expires_in": expires,
+		"refresh_token": refresh, "refresh_token_expires_in": 15811200,
+	})
 }
 
 // authed answers 401 for an unknown token and otherwise returns the scopes of the token.
@@ -163,7 +205,7 @@ func (g *github) authed(w http.ResponseWriter, r *http.Request) (scopes string, 
 	switch {
 	case isPAT:
 	case g.tokens.has(token):
-		scopes = "repo, read:org"
+		// A GitHub App user token has no X-OAuth-Scopes header.
 	default:
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"message": "Bad credentials"})
 		return "", false
