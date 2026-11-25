@@ -465,6 +465,11 @@ func (c *Client) graphql(ctx context.Context, token, query string, vars map[stri
 // send runs one request with the shared retry policy, reads the answer and maps a rejected token
 // and a rate limit answer to errors. Other statuses are the caller's to judge.
 func (c *Client) send(ctx context.Context, token, method, target string, payload []byte) ([]byte, int, http.Header, error) {
+	return c.sendVersion(ctx, token, apiVersion, method, target, payload)
+}
+
+// sendVersion is send with an explicit X-GitHub-Api-Version.
+func (c *Client) sendVersion(ctx context.Context, token, version, method, target string, payload []byte) ([]byte, int, http.Header, error) {
 	resp, err := c.Backoff.Do(ctx, func(ctx context.Context) (*http.Response, error) {
 		var rd io.Reader
 		if payload != nil {
@@ -476,7 +481,7 @@ func (c *Client) send(ctx context.Context, token, method, target string, payload
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("X-GitHub-Api-Version", apiVersion)
+		req.Header.Set("X-GitHub-Api-Version", version)
 		req.Header.Set("User-Agent", userAgent)
 		if payload != nil {
 			req.Header.Set("Content-Type", "application/json")

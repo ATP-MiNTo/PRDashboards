@@ -30,6 +30,8 @@ type fixturePR struct {
 	// (assignee:@me and author:@me both match when it is also assigned), and unassigned drops
 	// the assignment (only author:@me matches).
 	authored, unassigned bool
+	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
+	stacked bool
 }
 
 // matchesViewer reports whether the search query selects the pull request for the viewer.
@@ -78,12 +80,29 @@ func multiPRs() []fixturePR {
 	return []fixturePR{pr("acme/fe", 34, "frontend"), pr("acme/be", 12, "backend"), pr("acme/proxy", 56, "proxy")}
 }
 
+// stackedPRs are a GitHub-native stack of two approved pull requests, #21 below #22.
+func stackedPRs() []fixturePR {
+	pr := func(number int, name, head, base string, stacked bool) fixturePR {
+		return fixturePR{
+			repo: "acme/stack", org: "acme", number: number, title: name, head: head, base: base, stacked: stacked,
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", reviewApproved: true, committedAgo: time.Hour, rollup: "SUCCESS",
+		}
+	}
+	return []fixturePR{
+		pr(21, "Stack bottom", "feat/stack-a", "main", true),
+		pr(22, "Stack top", "feat/stack-b", "feat/stack-a", false),
+	}
+}
+
 // fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
 // requests the config asks for.
 func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
 	prs := basePRs(now)
 	if cfg.MultiPR {
 		prs = append(prs, multiPRs()...)
+	}
+	if cfg.Stacked {
+		prs = append(prs, stackedPRs()...)
 	}
 	for i, p := range prs {
 		if slices.Contains(cfg.Approved, p.number) {

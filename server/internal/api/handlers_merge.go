@@ -60,7 +60,7 @@ func mergeProblem(e *merge.Error) gen.MergePr409ApplicationProblemPlusJSONRespon
 func conflictCode(code string) bool {
 	switch code {
 	case merge.CodeHeadMoved, merge.CodeNotMergeable, merge.CodeStackBaseOpen, merge.CodeDraft, merge.CodeNotOpen,
-		merge.CodeTransitionUnavailable, merge.CodeNotConnected:
+		merge.CodeTransitionUnavailable, merge.CodeNotConnected, merge.CodeMergeFailed, merge.CodeMergePending:
 		return true
 	}
 	return false

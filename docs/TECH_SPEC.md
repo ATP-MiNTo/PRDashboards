@@ -405,7 +405,12 @@ Server flow for `POST /api/prs/{id}/merge`:
 3. Check that each requested transition id is in the ticket's current transitions list (fetched or
    cached at most 60 s) and that required fields are present.
 4. `PUT /repos/{o}/{r}/pulls/{n}/merge` with `merge_method` and `sha`. GitHub rejects the merge if
-   the head moved.
+   the head moved. A stacked PR is refused there with a 403 that says to use the asynchronous
+   merge endpoint, and the server then submits `PUT .../pulls/{n}/merge-async` (same method and
+   `sha`, `X-GitHub-Api-Version: 2026-03-10`) and polls `GET .../merge-async/{id}` for at most 90 s.
+   The outcome is merged (go on), enqueued in a merge queue (nothing else runs, the poller's
+   `merged` rule moves the tickets later), failed (409 `merge_failed`) or still pending (409
+   `merge_pending`).
 5. Optionally delete the head branch, only if it is in the same repo and no other open PR uses it
    as a base.
 6. Transition each ticket, at most 4 in parallel. Each result is written to `activity`. Failures go

@@ -31,6 +31,16 @@ describe('describeProblem', () => {
     );
   });
 
+  it('shows the reason of a merge GitHub failed, and a fixed text for a pending one', () => {
+    expect(describeProblem('merge_failed', 'GitHub did not merge: 2 approvals are required')).toBe(
+      'GitHub did not merge: 2 approvals are required',
+    );
+    expect(describeProblem('merge_failed')).toBe('GitHub did not merge this pull request.');
+    expect(describeProblem('merge_pending', 'x')).toBe(
+      'GitHub is still merging. Refresh in a moment to see the result.',
+    );
+  });
+
   it('ignores the detail of other codes', () => {
     expect(describeProblem('upstream_error', '<b>x</b>')).toBe(
       'The provider could not be reached. Try again.',

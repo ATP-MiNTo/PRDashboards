@@ -6,6 +6,18 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.1.2] - 2026-11-25
+
+### Fixed
+
+- Merging a pull request of a GitHub stack no longer says the token needs "contents: write". GitHub
+  refuses stacked pull requests on its normal merge endpoint; the merge now goes through GitHub's
+  asynchronous merge API and waits for the result (up to 90 seconds). Merging a stacked pull request
+  also merges the ones below it.
+- A merge that GitHub adds to a merge queue says "Added to the merge queue" and moves no ticket until
+  it has merged. A merge GitHub fails shows GitHub's reason, and one still running after the wait says
+  to refresh in a moment.
+
 ## [1.1.1] - 2026-11-25
 
 ### Fixed

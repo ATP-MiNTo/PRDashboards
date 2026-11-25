@@ -32,6 +32,13 @@ type githubConfig struct {
 	RateLimit string `json:"rateLimit"`
 	// MultiPR adds three pull requests of three repositories that all link to INP-105.
 	MultiPR bool `json:"multiPr"`
+	// Stacked adds a GitHub-native stack of two pull requests in acme/stack (#21 below #22). The
+	// synchronous merge of #21 is refused like GitHub does for a stacked pull request, and only the
+	// asynchronous merge works.
+	Stacked bool `json:"stacked"`
+	// AsyncResult is what polling the asynchronous merge ends with after one "pending" answer:
+	// "" (merged), "failed" or "enqueued".
+	AsyncResult string `json:"asyncResult"`
 	// Approved lists the numbers of pull requests that GitHub reports as approved.
 	Approved []int `json:"approved"`
 	// ExpiresIn is the lifetime in seconds of issued user tokens (default 28800, like GitHub). The
@@ -59,6 +66,11 @@ type githubState struct {
 	Searches          int          `json:"searches"`
 	Merges            int          `json:"merges"`
 	BranchDeletes     int          `json:"branchDeletes"`
+	// AsyncSubmits and AsyncPolls count the calls of the asynchronous merge, and AsyncVersion is the
+	// X-GitHub-Api-Version of the last one.
+	AsyncSubmits int    `json:"asyncSubmits"`
+	AsyncPolls   int    `json:"asyncPolls"`
+	AsyncVersion string `json:"asyncVersion"`
 	// Merged lists the node ids merged so far; they leave the open search.
 	Merged []string `json:"merged"`
 	// LastMerge is the last accepted or refused merge request body.
@@ -91,6 +103,8 @@ func (g *github) routes() http.Handler {
 	mux.HandleFunc("POST /login/oauth/access_token", g.accessToken)
 	mux.HandleFunc("POST /graphql", g.graphql)
 	mux.HandleFunc("PUT /repos/{owner}/{repo}/pulls/{number}/merge", g.merge)
+	mux.HandleFunc("PUT /repos/{owner}/{repo}/pulls/{number}/merge-async", g.mergeAsync)
+	mux.HandleFunc("GET /repos/{owner}/{repo}/pulls/{number}/merge-async/{uuid}", g.mergeAsyncPoll)
 	mux.HandleFunc("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch...}", g.deleteBranch)
 	mux.HandleFunc("GET /__admin/state", func(w http.ResponseWriter, _ *http.Request) {
 		g.mu.Lock()
@@ -314,6 +328,10 @@ func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	cfg := g.st.Config
+	if p.stacked {
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead."})
+		return
+	}
 	g.st.Merges++
 	g.st.LastMerge = map[string]string{"repo": repo, "number": r.PathValue("number"), "method": body["merge_method"], "sha": body["sha"]}
 	switch {
@@ -340,4 +358,70 @@ func (g *github) deleteBranch(w http.ResponseWriter, r *http.Request) {
 	}
 	g.st.Deleted = append(g.st.Deleted, r.PathValue("owner")+"/"+r.PathValue("repo")+":"+r.PathValue("branch"))
 	w.WriteHeader(http.StatusNoContent)
+}
+
+const asyncUUID = "7d1b8c1e-52a4-4f0e-9a43-0c2f5a1e9b10"
+
+// mergeAsync accepts the asynchronous merge of a pull request: 202 with the id of the request.
+func (g *github) mergeAsync(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	var body map[string]string
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Problems parsing JSON"})
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	number, _ := strconv.Atoi(r.PathValue("number"))
+	p, ok := findFixture(repo, number, g.config())
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.st.AsyncSubmits++
+	g.st.AsyncPolls = 0
+	g.st.AsyncVersion = r.Header.Get("X-GitHub-Api-Version")
+	g.st.LastMerge = map[string]string{"repo": repo, "number": r.PathValue("number"), "method": body["merge_method"], "sha": body["sha"]}
+	if body["sha"] != p.headSHA(g.st.Config.HeadMoved) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"message": "Head branch was modified. Review and try the merge again."})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"status": "pending", "details": map[string]any{
+		"uuid": asyncUUID, "merge_method": body["merge_method"], "expected_head_sha": body["sha"],
+	}})
+}
+
+// mergeAsyncPoll answers "pending" once and then the configured end of the request.
+func (g *github) mergeAsyncPoll(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	number, _ := strconv.Atoi(r.PathValue("number"))
+	p, ok := findFixture(repo, number, g.config())
+	if !ok || r.PathValue("uuid") != asyncUUID {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.st.AsyncPolls++
+	if g.st.AsyncPolls < 2 {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "pending"})
+		return
+	}
+	switch g.st.Config.AsyncResult {
+	case "failed":
+		writeJSON(w, http.StatusOK, map[string]any{"status": "failed", "message": "Required status check \"build\" is expected."})
+	case "enqueued":
+		writeJSON(w, http.StatusOK, map[string]any{"status": "enqueued"})
+	default:
+		if !slices.Contains(g.st.Merged, p.id()) {
+			g.st.Merged = append(g.st.Merged, p.id())
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "merged", "details": map[string]any{"merge_commit_sha": fmt.Sprintf("%040x", p.number*104729)}})
+	}
 }

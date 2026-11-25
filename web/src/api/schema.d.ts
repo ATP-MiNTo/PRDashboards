@@ -387,7 +387,7 @@ export interface paths {
         put?: never;
         /**
          * Merge a pull request and move its tickets
-         * @description Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and checked before anything is written. A refusal is a 409 with the fresh state of the pull request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or transition_unavailable. A 403 is org_blocked (SAML SSO or an organization policy refuses the token) or missing_permission (the token lacks a GitHub permission such as contents: write; detail names it). A repeated Idempotency-Key returns the first result. Once GitHub has merged, failed steps are reported in the result and the merge is never rolled back.
+         * @description Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and checked before anything is written. A refusal is a 409 with the fresh state of the pull request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or transition_unavailable. merge_failed (GitHub accepted the merge and then failed it; detail has GitHub's reason) and merge_pending (GitHub was still merging when the wait ended) come from GitHub's asynchronous merge API, which merges stacked pull requests. A 403 is org_blocked (SAML SSO or an organization policy refuses the token) or missing_permission (the token lacks a GitHub permission such as contents: write; detail names it). A merge GitHub put in a merge queue answers 200 with a merge step in state queued: nothing is merged yet and no ticket is moved. A repeated Idempotency-Key returns the first result. Once GitHub has merged, failed steps are reported in the result and the merge is never rolled back.
          */
         post: operations["mergePr"];
         delete?: never;
@@ -819,7 +819,7 @@ export interface components {
             kind: "merge" | "delete_branch" | "transition";
             ticket: string | null;
             /** @enum {string} */
-            state: "ok" | "failed" | "skipped";
+            state: "ok" | "failed" | "skipped" | "queued";
             message: string | null;
             toStatus: string | null;
             /** Format: int64 */

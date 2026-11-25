@@ -18,6 +18,11 @@ const (
 	CodeDraft                 = "draft"
 	CodeNotOpen               = "not_open"
 	CodeTransitionUnavailable = "transition_unavailable"
+	// CodeMergeFailed is a merge GitHub accepted and then failed (for example a branch protection
+	// rule); the detail carries GitHub's reason. CodeMergePending is a merge GitHub was still
+	// working on when the wait ended.
+	CodeMergeFailed  = "merge_failed"
+	CodeMergePending = "merge_pending"
 
 	CodeNotFound         = "not_found"
 	CodeNotConnected     = "not_connected"
@@ -93,6 +98,8 @@ const (
 	StateOK      = "ok"
 	StateFailed  = "failed"
 	StateSkipped = "skipped"
+	// StateQueued is a merge step that GitHub put in a merge queue: not merged yet.
+	StateQueued = "queued"
 )
 
 // Step is the outcome of one part of a merge.

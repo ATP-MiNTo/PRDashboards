@@ -316,6 +316,9 @@ The Settings button opens a panel on the right with these sections:
 | "The launch link expired or was already used" | Launch links last 2 minutes and work once. Run the start script again |
 | "access blocked, authorize org" banner | Click Authorize and approve the app for that organization. If the organization blocks this kind of token (policy), use a token type it allows |
 | "The token needs the GitHub permission contents: write" | Edit the token (or the GitHub App's permissions): Contents must be Read and write to merge and delete branches, with Pull requests Read and write |
+| A stacked pull request merges and the app waits a few seconds | GitHub merges stacked pull requests only through its asynchronous merge API, and the app polls it for up to 90 seconds. Merging a pull request also merges the ones below it. "GitHub is still merging" means the wait ended first: refresh in a moment |
+| "Added to the merge queue" | The repository uses a merge queue. The pull request is not merged yet and no ticket is moved; the app moves the tickets once the pull request has merged |
+| "GitHub did not merge: ..." | GitHub accepted the merge and then refused it, usually because a branch protection rule or a required check was not met. The text is GitHub's reason |
 | A pull request is missing | The repository is not part of the GitHub App's installation. Ask the organization owner to add it to the installation's repositories |
 | GitHub shows "Reconnect GitHub" | GitHub refused to refresh the sign-in. Click Reconnect GitHub in Connected accounts |
 | Jira shows "Reconnect" | The Jira sign-in expired. Click Reconnect |

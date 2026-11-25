@@ -160,6 +160,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
+	var failed *github.MergeFailedError
 	merged, err := s.cfg.GitHub.Merge(ctx, token, pr.Repo.NameWithOwner, pr.Number, string(req.Method), req.ExpectedHeadSHA)
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
@@ -168,6 +169,12 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 		return Result{}, &Error{Code: CodeNotMergeable, Detail: "GitHub refused the merge", Fresh: freshOf(pr)}
 	case errors.Is(err, github.ErrPRNotFound):
 		return Result{}, &Error{Code: CodeNotFound, Detail: "GitHub has no such pull request"}
+	case errors.Is(err, github.ErrEnqueued):
+		return s.queued(ctx, req, pr), nil
+	case errors.Is(err, github.ErrMergePending):
+		return Result{}, &Error{Code: CodeMergePending, Detail: "GitHub is still merging; refresh in a moment", Fresh: freshOf(pr)}
+	case errors.As(err, &failed):
+		return Result{}, &Error{Code: CodeMergeFailed, Detail: "GitHub did not merge: " + failed.Reason, Fresh: freshOf(pr)}
 	case notConnected(err):
 		return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}
 	case err != nil:
@@ -223,6 +230,38 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	}
 	s.cfg.Refresh()
 	return res, nil
+}
+
+// queued is the outcome of a pull request that GitHub put in a merge queue. Nothing is merged, so no
+// ticket moves and no branch goes: the poller's merged rules move the tickets once the pull request
+// has merged. The attempt is recorded, with the idempotency key, so a repeat does not submit again.
+func (s *Service) queued(ctx context.Context, req Request, pr github.PR) Result {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), afterMergeTimeout)
+	defer cancel()
+	const queuedMsg = "Added to the merge queue"
+	res := Result{PRID: req.PRID, Method: req.Method, Steps: []Step{{Kind: StepMerge, State: StateQueued, Message: queuedMsg}}}
+	if req.DeleteBranch {
+		res.Steps = append(res.Steps, Step{Kind: StepDeleteBranch, State: StateSkipped, Message: "Branch kept: the pull request is not merged yet"})
+	}
+	for _, t := range req.Tickets {
+		res.Steps = append(res.Steps, Step{Kind: StepTransition, Ticket: t.Key, State: StateSkipped, Message: "Not moved: the pull request is not merged yet"})
+	}
+	acts := []store.ActivityRow{{
+		Kind: StepMerge, PRID: req.PRID, TriggeredBy: "manual", Result: StateOK,
+		Summary: queuedMsg + ": " + pr.Repo.NameWithOwner + "#" + strconv.Itoa(pr.Number) + " with " + req.Method.Label(),
+	}}
+	err := s.cfg.Store.RecordMerge(ctx, store.Merged{
+		Now: s.cfg.Clock(), PRID: req.PRID, Key: req.IdempotencyKey, Activity: acts,
+		Encode: func(map[string]int64) ([]byte, error) { return json.Marshal(res) },
+	})
+	if err != nil {
+		s.cfg.Log.ErrorContext(ctx, "record queued merge", "pr", req.PRID, "err", err)
+	}
+	if s.cfg.Publisher != nil {
+		_ = s.cfg.Publisher.Publish(events.Activity, map[string]string{"pr": req.PRID})
+	}
+	s.cfg.Refresh()
+	return res
 }
 
 func contains(list []string, key string) bool {

@@ -167,9 +167,22 @@ func (c *Client) Merge(ctx context.Context, token, nameWithOwner string, number 
 	case http.StatusNotFound:
 		return MergeResult{}, ErrPRNotFound
 	case http.StatusForbidden:
+		if isStackRefusal(restMessage(body)) {
+			// A stacked PR cannot use this endpoint. GitHub says to use the asynchronous one, which
+			// is the only path that merges stacks. Not a permission problem.
+			return c.MergeAsync(ctx, token, nameWithOwner, number, method, sha)
+		}
 		return MergeResult{}, forbiddenError(h, body)
 	}
 	return MergeResult{}, &APIError{Status: status, Message: restMessage(body)}
+}
+
+// isStackRefusal reports whether message is GitHub's refusal of the synchronous merge for a
+// stacked pull request ("Merging stacked PRs via this endpoint is not supported. Use the
+// asynchronous merge endpoint instead.").
+func isStackRefusal(message string) bool {
+	m := strings.ToLower(message)
+	return strings.Contains(m, "stacked prs") && strings.Contains(m, "asynchronous merge endpoint")
 }
 
 // DeleteBranch deletes a branch with DELETE /repos/{o}/{r}/git/refs/heads/{branch}. A branch that
