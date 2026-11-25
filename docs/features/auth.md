@@ -63,7 +63,7 @@ Server:
 - [server/internal/auth/github.go](../../server/internal/auth/github.go): `completeGitHub`, `GitHubAccess`, `refreshGitHub`, `SetPAT`, `ScopeError`, `FineGrainedWarning`, `GitHubAccount`, `CheckGitHub`.
 - [server/internal/auth/atlassian.go](../../server/internal/auth/atlassian.go): `completeAtlassian`, `AtlassianAccess`, `refresh`, `AtlassianAccount`, `CheckAtlassian`.
 - [server/internal/auth/tokens.go](../../server/internal/auth/tokens.go): token blob types, method constants, `ValidSlug`, `validSite`, errors.
-- [server/internal/github/github.go](../../server/internal/github/github.go): `Client.Viewer`, `HasScope`, `OrgBlocked`, `Classify`, SSO header parsing.
+- [server/internal/github/github.go](../../server/internal/github/github.go): `Client.Viewer`, `HasScope`, `OrgBlocked`, `PermissionError`, `Classify`, SSO header parsing. A FORBIDDEN that only says the token lacks a permission is a `PermissionError`, not an organization block ([merge-and-transition.md](merge-and-transition.md)).
 - [server/internal/netguard/netguard.go](../../server/internal/netguard/netguard.go): `Guard`, the only HTTP client the providers use. [allow_e2e.go](../../server/internal/netguard/allow_e2e.go) adds loopback hosts in the e2e build only.
 - [server/internal/backoff/backoff.go](../../server/internal/backoff/backoff.go): `Policy`, `Do`, `Retryable`, `Hint`, `Delay`.
 - [server/internal/api/handlers_oauth.go](../../server/internal/api/handlers_oauth.go): `oauthStart`, `oauthCallback`, `CompleteOAuth`.
@@ -113,7 +113,7 @@ E2e:
      saves `jiraSiteId` through `PUT /api/settings`.
 7. PAT: `PUT /api/github/pat` calls `Viewer` with the token. A classic token needs `repo` and
    `read:org` (else `insufficient_scopes`, nothing is stored). A fine-grained token is stored with
-   `FineGrainedWarning`. A rejected token is `invalid_token`. `org_blocked` is returned when the
+   `FineGrainedWarning`. A rejected token is `invalid_token`. `org_blocked` (SAML SSO or an organization token policy, `OrgBlocked.Reason` `sso` or `policy`) is returned when the
    response carries SSO enforcement.
 8. Jira refresh (`AtlassianAccess`): under `tokenMu`, reload the blob and return the access token
    when it has more than one minute left. Otherwise `POST` a refresh, store the rotated refresh token

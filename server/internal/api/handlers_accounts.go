@@ -81,7 +81,7 @@ func githubProblem(err error) error {
 		if blocked.Org != "" {
 			detail = "organization " + blocked.Org + " blocked access to the token"
 		}
-		return problem(http.StatusForbidden, codeOrgBlocked, detail)
+		return problem(http.StatusForbidden, codeOrgBlocked, blockedDetail(blocked, detail))
 	case errors.Is(err, auth.ErrNotConnected):
 		return problem(http.StatusConflict, codeNotConnected, "")
 	}

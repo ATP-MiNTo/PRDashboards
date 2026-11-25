@@ -81,6 +81,8 @@ var githubPATs = map[string]string{
 	"ghp_classic_ok":         "repo, read:org",
 	"ghp_classic_no_org":     "repo",
 	"github_pat_finegrained": "",
+	// contents_read is a fine-grained token with Contents read-only: its merge is refused.
+	"github_pat_contents_read": "",
 }
 
 func (g *github) routes() http.Handler {
@@ -290,6 +292,11 @@ func limited(w http.ResponseWriter, mode string, now time.Time) bool {
 
 func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") == "github_pat_contents_read" {
+		w.Header().Set("X-Accepted-GitHub-Permissions", "contents=write")
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Resource not accessible by personal access token"})
 		return
 	}
 	var body map[string]string

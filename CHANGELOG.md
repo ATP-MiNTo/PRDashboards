@@ -6,6 +6,17 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.1.1] - 2026-11-25
+
+### Fixed
+
+- Merging with a fine-grained token that lacks a permission no longer says "An organization blocked
+  access". The merge now says which GitHub permission the token needs (for example
+  "contents: write"), and organization blocks are told apart as SAML SSO or an organization policy.
+  A missing permission on a field the merge does not need, such as team review requests, no longer
+  blocks the merge or adds a blocked-organization banner.
+- GitHub refusals are logged with their status, message and the permissions GitHub accepts.
+
 ## [1.1.0] - 2026-11-25
 
 ### Changed

@@ -387,7 +387,7 @@ export interface paths {
         put?: never;
         /**
          * Merge a pull request and move its tickets
-         * @description Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and checked before anything is written. A refusal is a 409 with the fresh state of the pull request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or transition_unavailable. A repeated Idempotency-Key returns the first result. Once GitHub has merged, failed steps are reported in the result and the merge is never rolled back.
+         * @description Runs the flow of docs/TECH_SPEC.md section 7.7. The pull request is fetched again and checked before anything is written. A refusal is a 409 with the fresh state of the pull request and the code head_moved, not_mergeable, stack_base_open, draft, not_open or transition_unavailable. A 403 is org_blocked (SAML SSO or an organization policy refuses the token) or missing_permission (the token lacks a GitHub permission such as contents: write; detail names it). A repeated Idempotency-Key returns the first result. Once GitHub has merged, failed steps are reported in the result and the merge is never rolled back.
          */
         post: operations["mergePr"];
         delete?: never;
@@ -921,6 +921,15 @@ export interface components {
         };
         /** @description No such pull request. */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description GitHub refused the token (org_blocked, missing_permission). */
+        Forbidden: {
             headers: {
                 [name: string]: unknown;
             };
@@ -1528,6 +1537,7 @@ export interface operations {
                     "application/json": components["schemas"]["MergeResult"];
                 };
             };
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /** @description The state does not allow the merge. */
             409: {

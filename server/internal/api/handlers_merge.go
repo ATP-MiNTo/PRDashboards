@@ -71,6 +71,7 @@ func conflictCode(code string) bool {
 func (h *handlers) mergeFailure(ctx context.Context, err error) error {
 	var rl *github.RateLimitedError
 	var blocked *github.OrgBlocked
+	var perm *github.PermissionError
 	var apiErr *github.APIError
 	var jiraErr *jira.StatusError
 	var netErr net.Error
@@ -78,8 +79,12 @@ func (h *handlers) mergeFailure(ctx context.Context, err error) error {
 	switch {
 	case errors.As(err, &rl):
 		return problem(http.StatusTooManyRequests, mw.CodeRateLimited, "GitHub's rate limit is used up")
+	case errors.As(err, &perm):
+		h.cfg.Log.WarnContext(ctx, "merge refused: missing token permission", "err", err, "accepted", perm.Accepted)
+		return problem(http.StatusForbidden, codeMissingPermission, perm.Detail())
 	case errors.As(err, &blocked):
-		return problem(http.StatusForbidden, codeOrgBlocked, "An organization has not authorized the token")
+		h.cfg.Log.WarnContext(ctx, "merge refused: organization blocked the token", "err", err, "reason", blocked.Reason)
+		return problem(http.StatusForbidden, codeOrgBlocked, blockedDetail(blocked, "An organization has not authorized the token"))
 	case errors.As(err, &apiErr), errors.As(err, &jiraErr), errors.As(err, &netErr), errors.As(err, &urlErr):
 		h.cfg.Log.ErrorContext(ctx, "merge call failed", "err", err)
 		return problem(http.StatusBadGateway, codeUpstream, "GitHub or Jira could not be reached")

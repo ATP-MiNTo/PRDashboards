@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/mw"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
@@ -140,6 +142,34 @@ func TestMergeProviderFailures(t *testing.T) {
 	} {
 		g.m.err = err
 		wantProblem(t, g.merge(goodBody), want[0].(int), want[1].(string))
+	}
+}
+
+func TestMergePermissionAndPolicyProblems(t *testing.T) {
+	g := newMergeRig(t)
+	cases := []struct {
+		err    error
+		code   string
+		detail string
+	}{
+		{&github.PermissionError{Message: "Resource not accessible by personal access token", Accepted: []string{"contents=write"}},
+			"missing_permission", "The token needs the GitHub permission contents: write"},
+		{&github.PermissionError{Accepted: []string{"pull_requests=write", "contents=write"}},
+			"missing_permission", "The token needs one of these GitHub permissions: pull_requests: write or contents: write"},
+		{&github.PermissionError{Message: "Nope"}, "missing_permission", "The token lacks a GitHub permission this action needs: Nope"},
+		{fmt.Errorf("wrapped: %w", &github.PermissionError{Accepted: []string{"contents=write"}}), "missing_permission", "contents: write"},
+		{&github.OrgBlocked{Org: "acme", Reason: "policy", Message: "secret wording"}, "org_blocked", "The acme organization policy does not allow this token"},
+		{&github.OrgBlocked{Reason: "policy"}, "org_blocked", "An organization policy does not allow this token"},
+		{&github.OrgBlocked{Org: "acme", Reason: "sso"}, "org_blocked", "An organization has not authorized the token"},
+	}
+	for _, tc := range cases {
+		g.m.err = tc.err
+		w := g.merge(goodBody)
+		wantProblem(t, w, http.StatusForbidden, tc.code)
+		var p mw.Problem
+		if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil || !strings.Contains(p.Detail, tc.detail) || strings.Contains(p.Detail, "secret wording") {
+			t.Errorf("detail %q, want %q", p.Detail, tc.detail)
+		}
 	}
 }
 

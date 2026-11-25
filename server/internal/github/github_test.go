@@ -107,10 +107,11 @@ func TestViewerOrgBlocked(t *testing.T) {
 		fixture string
 		org     string
 		url     string
+		reason  string
 	}{
-		{"viewer_saml_forbidden", "", ""},
-		{"viewer_token_policy_forbidden", "acme-corp", "https://github.com/orgs/acme-corp/sso"},
-		{"viewer_sso_header", "acme-corp", "https://github.com/orgs/acme-corp/sso?authorization_request=ABCDEF123"},
+		{"viewer_saml_forbidden", "", "", "sso"},
+		{"viewer_token_policy_forbidden", "acme-corp", "", "policy"},
+		{"viewer_sso_header", "acme-corp", "https://github.com/orgs/acme-corp/sso?authorization_request=ABCDEF123", "sso"},
 	}
 	for _, tc := range cases {
 		c, _, _ := serve(t, tc.fixture)
@@ -119,7 +120,7 @@ func TestViewerOrgBlocked(t *testing.T) {
 		if !errors.As(err, &blocked) {
 			t.Fatalf("%s: got %v", tc.fixture, err)
 		}
-		if blocked.Org != tc.org || blocked.AuthorizeURL != tc.url {
+		if blocked.Org != tc.org || blocked.AuthorizeURL != tc.url || blocked.Reason != tc.reason {
 			t.Errorf("%s: %+v", tc.fixture, blocked)
 		}
 		if blocked.Error() == "" {
@@ -202,17 +203,18 @@ func TestClassify(t *testing.T) {
 		{"garbage body", 200, nil, `<html>`, nil},
 		{"partial results header", 200, hdr("X-GitHub-SSO", "partial-results; organizations=1,2"), `{}`, nil},
 		{"required with url", 403, hdr("X-GitHub-SSO", "required; url=https://github.com/orgs/acme/sso?authorization_request=A"), `{}`,
-			&github.OrgBlocked{Org: "acme", AuthorizeURL: "https://github.com/orgs/acme/sso?authorization_request=A"}},
-		{"required without url", 403, hdr("X-GitHub-SSO", "required"), `{}`, &github.OrgBlocked{}},
-		{"url on another host", 403, hdr("X-GitHub-SSO", "required; url=https://evil.example/orgs/acme/sso"), `{}`, &github.OrgBlocked{}},
-		{"http url", 403, hdr("X-GitHub-SSO", "required; url=http://github.com/orgs/acme/sso"), `{}`, &github.OrgBlocked{}},
-		{"credentials in url", 403, hdr("X-GitHub-SSO", "required; url=https://x@github.com/orgs/acme/sso"), `{}`, &github.OrgBlocked{}},
-		{"wrong path", 403, hdr("X-GitHub-SSO", "required; url=https://github.com/login"), `{}`, &github.OrgBlocked{}},
-		{"bad org name", 403, hdr("X-GitHub-SSO", "required; url=https://github.com/orgs/a%20b/sso"), `{}`, &github.OrgBlocked{}},
-		{"graphql forbidden quoted org", 200, nil, "{\"errors\":[{\"type\":\"FORBIDDEN\",\"message\":\"`acme` forbids\"}]}",
-			&github.OrgBlocked{Org: "acme", AuthorizeURL: "https://github.com/orgs/acme/sso"}},
-		{"graphql forbidden without org", 200, nil, `{"errors":[{"type":"FORBIDDEN","message":"SAML"}]}`, &github.OrgBlocked{}},
-		{"forbidden status with errors", 403, nil, `{"errors":[{"type":"FORBIDDEN","message":"SAML"}]}`, &github.OrgBlocked{}},
+			&github.OrgBlocked{Org: "acme", AuthorizeURL: "https://github.com/orgs/acme/sso?authorization_request=A", Reason: "sso"}},
+		{"required without url", 403, hdr("X-GitHub-SSO", "required"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"url on another host", 403, hdr("X-GitHub-SSO", "required; url=https://evil.example/orgs/acme/sso"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"http url", 403, hdr("X-GitHub-SSO", "required; url=http://github.com/orgs/acme/sso"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"credentials in url", 403, hdr("X-GitHub-SSO", "required; url=https://x@github.com/orgs/acme/sso"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"wrong path", 403, hdr("X-GitHub-SSO", "required; url=https://github.com/login"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"bad org name", 403, hdr("X-GitHub-SSO", "required; url=https://github.com/orgs/a%20b/sso"), `{}`, &github.OrgBlocked{Reason: "sso"}},
+		{"graphql saml quoted org", 200, nil, "{\"errors\":[{\"type\":\"FORBIDDEN\",\"message\":\"`acme` requires SAML\"}]}",
+			&github.OrgBlocked{Org: "acme", AuthorizeURL: "https://github.com/orgs/acme/sso", Reason: "sso"}},
+		{"permission message is not a block", 200, nil, `{"errors":[{"type":"FORBIDDEN","message":"Resource not accessible by personal access token"}]}`, nil},
+		{"graphql forbidden without org", 200, nil, `{"errors":[{"type":"FORBIDDEN","message":"SAML"}]}`, &github.OrgBlocked{Reason: "sso"}},
+		{"forbidden status with errors", 403, nil, `{"errors":[{"type":"FORBIDDEN","message":"SAML"}]}`, &github.OrgBlocked{Reason: "sso"}},
 	}
 	for _, tc := range cases {
 		got := github.Classify(tc.status, tc.h, []byte(tc.body))

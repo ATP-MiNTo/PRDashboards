@@ -11,6 +11,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -298,9 +299,9 @@ func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, er
 // searchOpenQuery runs one paginated open pull request search.
 func (c *Client) searchOpenQuery(ctx context.Context, token, q string) (SearchResult, error) {
 	var res SearchResult
-	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, status int, h http.Header) error {
+	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, _ int, h http.Header) error {
 		res.Total = p.Data.Search.IssueCount
-		res.Blocked = mergeBlocked(res.Blocked, blockedOf(status, h, p.Errors))
+		res.Blocked = mergeBlocked(res.Blocked, blockedOf(h, p.Errors))
 		res.Errors = append(res.Errors, otherErrors(p.Errors)...)
 		for _, raw := range p.Data.Search.Nodes {
 			var n rawPR
@@ -490,6 +491,9 @@ func (c *Client) send(ctx context.Context, token, method, target string, payload
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("github %s: %w", method, err)
 	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		c.logRefusal(ctx, method+" "+requestPath(target), resp.StatusCode, resp.Header, restMessage(body), nil)
+	}
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
 		return nil, resp.StatusCode, resp.Header, ErrBadCredentials
@@ -502,6 +506,14 @@ func (c *Client) send(ctx context.Context, token, method, target string, payload
 		return nil, resp.StatusCode, resp.Header, &RateLimitedError{}
 	}
 	return body, resp.StatusCode, resp.Header, nil
+}
+
+// requestPath is the path of a request URL, for logs: no host, query or credentials.
+func requestPath(target string) string {
+	if u, err := url.Parse(target); err == nil {
+		return u.EscapedPath()
+	}
+	return "?"
 }
 
 // secondaryLimit recognizes the 403 GitHub sends for a secondary rate limit without Retry-After.
@@ -539,8 +551,11 @@ func (c *Client) searchPage(ctx context.Context, token, query string, vars map[s
 			return nil, status, h, &RateLimitedError{RetryAfter: wait, ResetAt: p.Data.RateLimit.ResetAt}
 		}
 	}
+	if len(p.Errors) > 0 {
+		c.logRefusal(ctx, "search", status, h, "", p.Errors)
+	}
 	if status != http.StatusOK {
-		if len(blockedOf(status, h, p.Errors)) > 0 {
+		if len(blockedOf(h, p.Errors)) > 0 {
 			return &p, status, h, nil
 		}
 		return nil, status, h, fmt.Errorf("github search: unexpected status %d", status)
@@ -549,21 +564,21 @@ func (c *Client) searchPage(ctx context.Context, token, query string, vars map[s
 }
 
 // blockedOf lists the organizations that refused the token in one answer: the X-GitHub-SSO header
-// names one, and every GraphQL FORBIDDEN error names its own when the message does.
-func blockedOf(status int, h http.Header, errs []graphQLError) []OrgBlocked {
+// names one, and every GraphQL FORBIDDEN error about SAML or an organization policy names its own
+// when the message does. A FORBIDDEN error about a missing token permission is not a blocked
+// organization; otherErrors reports it.
+func blockedOf(h http.Header, errs []graphQLError) []OrgBlocked {
 	var out []OrgBlocked
-	if b := Classify(status, h, nil); b != nil {
+	if b := ssoHeader(h); b != nil {
 		out = append(out, *b)
 	}
 	for _, e := range errs {
 		if e.Type != "FORBIDDEN" {
 			continue
 		}
-		b := OrgBlocked{}
-		if m := quotedName.FindStringSubmatch(e.Message); m != nil {
-			b.Org, b.AuthorizeURL = m[1], "https://github.com/orgs/"+m[1]+"/sso"
+		if b, ok := classifyForbidden(h, e.Message, e.Extensions).(*OrgBlocked); ok {
+			out = append(out, *b)
 		}
-		out = append(out, b)
 	}
 	return out
 }
@@ -582,6 +597,9 @@ func otherErrors(errs []graphQLError) []string {
 	for _, e := range errs {
 		if e.Type != "FORBIDDEN" {
 			out = append(out, strings.TrimSpace(e.Type+" "+e.Message))
+		} else if p, ok := classifyForbidden(nil, e.Message, e.Extensions).(*PermissionError); ok && !slices.Contains(out, "FORBIDDEN "+p.Message) {
+			// One line per message: a token that cannot read check runs repeats it once per check.
+			out = append(out, "FORBIDDEN "+p.Message)
 		}
 	}
 	return out

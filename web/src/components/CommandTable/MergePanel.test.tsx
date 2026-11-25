@@ -243,6 +243,23 @@ describe('MergePanel', () => {
     expect(api.mergePr.mock.calls[0]?.[1]).toBe(api.mergePr.mock.calls[1]?.[1]);
   });
 
+  it('shows the server detail when the token lacks a permission', async () => {
+    api.mergePr.mockRejectedValue(
+      new ApiError(
+        403,
+        'missing_permission',
+        null,
+        'The token needs the GitHub permission contents: write',
+      ),
+    );
+    renderWithClient(<MergePanel pr={pr('a', 7)} method="squash" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Merge without moving any ticket' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge without ticket' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The token needs the GitHub permission contents: write',
+    );
+  });
+
   it('lists the steps after the merge and retries a failed move', async () => {
     api.mergePr.mockResolvedValue(
       okResult({

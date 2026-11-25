@@ -428,6 +428,39 @@ func TestSearchOpenMergesCapIncompleteBlockedAndErrors(t *testing.T) {
 	}
 }
 
+func TestSearchOpenPermissionForbiddenIsAnErrorNotABanner(t *testing.T) {
+	cases := []struct {
+		name    string
+		message string
+		blocked int
+		errors  int
+	}{
+		{"permission", "Resource not accessible by personal access token", 0, 1},
+		{"integration", "Resource not accessible by integration", 0, 1},
+		{"sso", "Resource protected by organization SAML enforcement. You must grant your OAuth token access to the `acme-corp` organization.", 1, 0},
+		{"policy", "The `acme-corp` organization forbids access via a personal access token (classic).", 1, 0},
+	}
+	for _, tc := range cases {
+		forbidden := map[string]any{"errors": []map[string]string{{"type": "FORBIDDEN", "message": tc.message}}}
+		c := serveBodies(t, func(q string) fixtureBody {
+			if q == github.OpenAssignedQuery {
+				return page([]string{"A"}, 1, 4900, 1, forbidden)
+			}
+			return page([]string{"B"}, 1, 4900, 1, nil)
+		})
+		res, err := c.SearchOpen(context.Background(), "tok")
+		if err != nil || len(res.PRs) != 2 || len(res.Blocked) != tc.blocked || len(res.Errors) != tc.errors {
+			t.Fatalf("%s: %+v %v", tc.name, res, err)
+		}
+		if tc.errors == 1 && !strings.Contains(res.Errors[0], "Resource not accessible") {
+			t.Errorf("%s: %v", tc.name, res.Errors)
+		}
+		if tc.blocked == 1 && res.Blocked[0].Org != "acme-corp" {
+			t.Errorf("%s: %+v", tc.name, res.Blocked)
+		}
+	}
+}
+
 func TestSearchOpenBlockedOrgIsListedOnce(t *testing.T) {
 	sso := map[string]string{"X-GitHub-SSO": "required; url=https://github.com/orgs/acme-corp/sso?authorization_request=X"}
 	forbidden := map[string]any{"errors": []map[string]string{{"type": "FORBIDDEN", "message": "Resource protected by organization SAML enforcement. You must grant your OAuth token access to the `acme-corp` organization."}}}

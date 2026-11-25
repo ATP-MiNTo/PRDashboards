@@ -21,13 +21,16 @@ export class ApiError extends Error {
   readonly code: string;
   /** The pull request as GitHub has it now, for a merge the server refused. */
   readonly pr: FreshPr | null;
+  /** The problem's detail, shown only for codes that name what the person must change. */
+  readonly detail: string | undefined;
 
-  constructor(status: number, code: string, pr: FreshPr | null = null) {
+  constructor(status: number, code: string, pr: FreshPr | null = null, detail?: string) {
     super(`${status} ${code}`);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.pr = pr;
+    this.detail = detail;
   }
 }
 
@@ -65,7 +68,12 @@ async function request(method: Method, path: string, opts: RequestOptions = {}):
   if (res.ok) return res;
   const problem: unknown = await res.json().catch(() => undefined);
   const fresh = (problem as { pr?: FreshPr | null } | undefined)?.pr ?? null;
-  throw new ApiError(res.status, isProblem(problem) ? problem.code : 'unknown', fresh);
+  throw new ApiError(
+    res.status,
+    isProblem(problem) ? problem.code : 'unknown',
+    fresh,
+    isProblem(problem) ? problem.detail : undefined,
+  );
 }
 
 async function json<T>(method: Method, path: string, body?: unknown): Promise<T> {

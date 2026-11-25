@@ -58,6 +58,8 @@ function CheckRow({ check }: { check: Check }) {
 export function CiCell({ pr }: { pr: SnapshotPr }) {
   const rollup = ROLLUP[pr.ci.state];
   const more = pr.ci.total - pr.ci.checks.length;
+  // A fine-grained token cannot read check runs: the rollup and the count come back, the list is empty.
+  const moreText = pr.ci.checks.length === 0 ? `${more} checks` : `+${more} more`;
   const moreUrl = more > 0 ? githubChecksUrl(pr.repo.nameWithOwner, pr.number) : null;
   return (
     <div className={styles.ci}>
@@ -72,10 +74,10 @@ export function CiCell({ pr }: { pr: SnapshotPr }) {
       {more > 0 &&
         (moreUrl ? (
           <a className={styles.more} href={moreUrl} target="_blank" rel="noopener noreferrer">
-            +{more} more
+            {moreText}
           </a>
         ) : (
-          <span className={styles.more}>+{more} more</span>
+          <span className={styles.more}>{moreText}</span>
         ))}
     </div>
   );
