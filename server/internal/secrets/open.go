@@ -14,6 +14,13 @@ import (
 // FileName is the encrypted fallback file in the data dir.
 const FileName = "secrets.enc"
 
+// VaultFileName is the vault in the data dir used with the keychain, and VaultKeyName the only
+// keychain item: the 32-byte key that seals it.
+const (
+	VaultFileName = "vault.enc"
+	VaultKeyName  = "vault.key"
+)
+
 const (
 	minPassphraseLen = 8
 	maxAttempts      = 3
@@ -61,12 +68,17 @@ func TerminalPrompter(in *os.File, out io.Writer) Prompter {
 
 // Open picks the backend: the OS keychain when a probe item can be written, read and deleted,
 // otherwise the encrypted file in dir, with the passphrase from prompt. It returns the store and
-// the backend name, "keychain" or "file".
+// the backend name, "keychain" or "file". With the keychain, the store is the vault file
+// VaultFileName in dir, sealed with the key kept in the keychain (see openKeychainVault).
 func Open(dir string, rnd io.Reader, prompt Prompter, log *slog.Logger) (Store, string, error) {
 	kc := Keychain{}
 	err := kc.Probe()
 	if err == nil {
-		return kc, "keychain", nil
+		v, err := openKeychainVault(dir, kc, rnd, log)
+		if err != nil {
+			return nil, "", err
+		}
+		return v, "keychain", nil
 	}
 	log.Info("keychain unavailable, using the encrypted file", "reason", err.Error())
 

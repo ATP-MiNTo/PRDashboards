@@ -43,7 +43,7 @@ func prepareDataDir(dir string) error {
 }
 
 // privateFiles are the files in the data dir that hold secrets or user data.
-var privateFiles = []string{"session.key", secrets.FileName, "data.db"}
+var privateFiles = []string{"session.key", secrets.FileName, secrets.VaultFileName, "data.db"}
 
 // checkPrivateFiles refuses to start when a secret file can be read or written by the group or by
 // others on POSIX. Files that do not exist are fine.

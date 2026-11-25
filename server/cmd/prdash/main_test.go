@@ -553,7 +553,7 @@ func TestRunRefusesLooseSecretFiles(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX modes only")
 	}
-	for _, name := range []string{"session.key", "secrets.enc", "data.db"} {
+	for _, name := range []string{"session.key", "secrets.enc", "vault.enc", "data.db"} {
 		for _, mode := range []os.FileMode{0o640, 0o604, 0o644, 0o660, 0o666} {
 			dir := newDataDir(t)
 			path := filepath.Join(dir, name)
@@ -662,12 +662,23 @@ func TestLegacySessionKeyIsImportedOnce(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "session.key")); !os.IsNotExist(err) {
 		t.Fatalf("legacy file kept: %v", err)
 	}
-	stored, err := secrets.Keychain{}.Get(secrets.SessionKey)
-	if err != nil || !bytes.Equal(stored, legacy) {
-		t.Fatalf("legacy key not in the keychain: %v", err)
-	}
 	if err := in.stop(t); err != nil {
 		t.Fatal(err)
+	}
+	if _, err := (secrets.Keychain{}).Get(secrets.SessionKey); !errors.Is(err, secrets.ErrNotFound) {
+		t.Fatalf("session key written to the keychain itself: %v", err)
+	}
+	vaultKey, err := secrets.Keychain{}.Get(secrets.VaultKeyName)
+	if err != nil {
+		t.Fatalf("vault key: %v", err)
+	}
+	vault, err := secrets.OpenVault(filepath.Join(dir, secrets.VaultFileName), vaultKey, &testutil.Rand{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := vault.Get(secrets.SessionKey)
+	if err != nil || !bytes.Equal(stored, legacy) {
+		t.Fatalf("legacy key not in the vault: %v", err)
 	}
 }
 

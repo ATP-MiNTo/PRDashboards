@@ -27,7 +27,7 @@ A local web dashboard that lists every open pull request assigned to me, across 
 
 - Single user (me).
 - Runs locally on my machine. Not reachable from other devices.
-- Tokens are stored locally (OS keychain, with an encrypted local file as fallback) and never leave the machine.
+- Tokens are stored locally (an encrypted local file keyed from the OS keychain, with a passphrase-protected file as fallback) and never leave the machine.
 
 ## 5. Functional Requirements
 
@@ -144,7 +144,7 @@ Matching:
 
 ### 6.2 Security
 
-- Tokens are stored in the OS keychain, or an encrypted file as fallback.
+- Tokens are stored in an encrypted file whose key is in the OS keychain, or in a passphrase-protected file as fallback.
 - Client secrets are kept in local configuration, never committed.
 - The server binds to localhost only.
 - OAuth state parameter is validated on callbacks.
