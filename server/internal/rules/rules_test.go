@@ -117,6 +117,8 @@ func TestFilters(t *testing.T) {
 		{"issue type miss", rules.Filters{IssueType: "Bug"}, false},
 		{"status", rules.Filters{Status: "in review"}, true},
 		{"status miss", rules.Filters{Status: "To Do"}, false},
+		{"status punctuation", rules.Filters{Status: "In-Review"}, true},
+		{"status spaces", rules.Filters{Status: "inreview"}, true},
 		{"all together", rules.Filters{Repo: "acme/*", Branch: "release/*", Project: "INP", IssueType: "Story", Status: "In Review"}, true},
 		{"one fails", rules.Filters{Repo: "acme/*", Branch: "main", Project: "INP"}, false},
 	}
@@ -464,5 +466,58 @@ func TestPreviewAndAfterMergeSkipExcludedStatuses(t *testing.T) {
 	}
 	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"QA"}); !ok {
 		t.Fatal("another status does not exclude it")
+	}
+}
+
+func TestStatusKey(t *testing.T) {
+	tests := []struct{ name, in, want string }{
+		{"hyphen", "Re-open", "reopen"},
+		{"space", "re open", "reopen"},
+		{"upper", "REOPEN", "reopen"},
+		{"different word", "Reopened", "reopened"},
+		{"many separators", "  In  / Progress_(2) ", "inprogress2"},
+		{"digits", "Phase 2", "phase2"},
+		{"thai", "รอ ตรวจสอบ", "รอตรวจสอบ"},
+		{"unicode case", "ÉTÉ", "été"},
+		{"only punctuation", "---", "---"},
+		{"only punctuation trimmed and lowered", "  -- ! ", "-- !"},
+		{"empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rules.StatusKey(tt.in); got != tt.want {
+				t.Fatalf("StatusKey(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusesCompareByKey(t *testing.T) {
+	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
+	rs := []rules.Rule{rule("r", rules.Merged, func(r *rules.Rule) { r.Target = "Re-open" })}
+	tk := ticket("INP-1", merged)
+	tk.Status = "re open"
+	if res := eval(rs, []rules.Ticket{tk}, nil); len(res.Firings) != 1 || !res.Firings[0].InTarget {
+		t.Fatalf("a near-duplicate of the target is already in it: %+v", res.Firings)
+	}
+	tk.Status = "Reopened"
+	if res := eval(rs, []rules.Ticket{tk}, nil); len(res.Firings) != 1 || res.Firings[0].InTarget {
+		t.Fatalf("Reopened is another status: %+v", res.Firings)
+	}
+	waits := rule("w", rules.ReviewApproved, func(r *rules.Rule) { r.Target = "Re-open" })
+	tk = ticket("INP-2", pr("A", func(p *rules.PR) { p.ReviewDecision = "APPROVED" }), pr("B"))
+	tk.Status = "REOPEN"
+	if res := eval([]rules.Rule{waits}, []rules.Ticket{tk}, nil); len(res.Waiting) != 0 {
+		t.Fatalf("a ticket in the target by key is not waiting: %+v", res.Waiting)
+	}
+	tk.Status = "Reopened"
+	if res := eval([]rules.Rule{waits}, []rules.Ticket{tk}, nil); len(res.Waiting) != 1 {
+		t.Fatalf("%+v", res.Waiting)
+	}
+	tk = ticket("INP-3", merged)
+	tk.Status = "re-open"
+	in := rules.Input{Now: now, Rules: rs, Tickets: []rules.Ticket{tk}, Exclude: []string{"Re open"}}
+	if res := rules.Evaluate(in); len(res.Firings) != 0 {
+		t.Fatalf("a near-duplicate of an excluded status is excluded: %+v", res.Firings)
 	}
 }

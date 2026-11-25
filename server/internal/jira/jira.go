@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 )
 
 // DefaultBase is the gateway all Jira Cloud calls go through.
@@ -492,8 +493,9 @@ func (c *Client) Transitions(ctx context.Context, site, key string) ([]Transitio
 	return slices.Clone(out), nil
 }
 
-// Statuses lists the distinct status names of the site, sorted, from one GET /status. Names that
-// differ only in case count once. The answer is cached per site for StatusesTTL.
+// Statuses lists the distinct status names of the site, sorted, from one GET /status. Names with the
+// same rules.StatusKey ("Re-open", "re open", "REOPEN") count once, shown as the spelling that
+// occurs most often (the first on a tie). The answer is cached per site for StatusesTTL.
 func (c *Client) Statuses(ctx context.Context, site string) ([]string, error) {
 	c.mu.Lock()
 	hit, ok := c.statuses[site]
@@ -514,17 +516,7 @@ func (c *Client) Statuses(ctx context.Context, site string) ([]string, error) {
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, fmt.Errorf("jira statuses: bad response: %w", err)
 	}
-	seen := make(map[string]struct{}, len(parsed))
-	out := make([]string, 0, len(parsed))
-	for _, s := range parsed {
-		name := strings.TrimSpace(s.Name)
-		folded := strings.ToLower(name)
-		if _, dup := seen[folded]; name == "" || dup {
-			continue
-		}
-		seen[folded] = struct{}{}
-		out = append(out, name)
-	}
+	out := distinctStatuses(parsed)
 	slices.SortFunc(out, func(a, b string) int {
 		if d := strings.Compare(strings.ToLower(a), strings.ToLower(b)); d != 0 {
 			return d
@@ -538,6 +530,40 @@ func (c *Client) Statuses(ctx context.Context, site string) ([]string, error) {
 	c.statuses[site] = cachedStatuses{at: c.now(), names: out}
 	c.mu.Unlock()
 	return slices.Clone(out), nil
+}
+
+// distinctStatuses keeps one name per rules.StatusKey: the most frequent spelling, the first seen
+// on a tie. GET /status returns one entry per workflow status id, so a count is a vote.
+func distinctStatuses(entries []struct {
+	Name string `json:"name"`
+}) []string {
+	type group struct {
+		order int
+		best  string
+		votes map[string]int
+	}
+	groups := make(map[string]*group, len(entries))
+	for _, e := range entries {
+		name := strings.TrimSpace(e.Name)
+		key := rules.StatusKey(name)
+		if key == "" {
+			continue
+		}
+		g := groups[key]
+		if g == nil {
+			g = &group{order: len(groups), best: name, votes: map[string]int{}}
+			groups[key] = g
+		}
+		g.votes[name]++
+		if g.votes[name] > g.votes[g.best] {
+			g.best = name
+		}
+	}
+	out := make([]string, len(groups))
+	for _, g := range groups {
+		out[g.order] = g.best
+	}
+	return out
 }
 
 func cmpName(name, value string) string {

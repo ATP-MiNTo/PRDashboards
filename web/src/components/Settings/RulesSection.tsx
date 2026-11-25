@@ -17,8 +17,10 @@ import {
   projectsOf,
   ruleName,
   statusesOf,
+  statusKey,
   triggerLabel,
 } from '@/lib/rules';
+import { MultiSelect } from '../MultiSelect/MultiSelect';
 import { RuleForm } from './RuleForm';
 import styles from './Settings.module.css';
 
@@ -33,7 +35,7 @@ function summary(r: SyncRule): string {
 
 const MAX_EXCLUDED = 50;
 
-/** Chip toggles of the statuses whose tickets no rule moves. A status that is excluded but unknown to Jira stays visible. */
+/** A searchable multi-select of the statuses whose tickets no rule moves. A status that is excluded but unknown to Jira stays listed. */
 function ExcludeStatuses({
   statuses,
   excluded,
@@ -45,39 +47,31 @@ function ExcludeStatuses({
   pending: boolean;
   onChange: (next: string[]) => void;
 }) {
-  const names = useMemo(() => {
-    const known = new Set(statuses.map((s) => s.toLowerCase()));
-    return [...statuses, ...excluded.filter((e) => !known.has(e.toLowerCase()))];
+  const { names, values } = useMemo(() => {
+    // Near-duplicates (by `statusKey`) count as one: an excluded "reopen" selects the listed "Reopen".
+    const byKey = new Map<string, string>();
+    for (const n of [...statuses, ...excluded]) {
+      const key = statusKey(n);
+      if (!byKey.has(key)) byKey.set(key, n);
+    }
+    const picked = new Set(excluded.map((e) => byKey.get(statusKey(e)) ?? e));
+    return {
+      names: [...byKey.values()],
+      values: [...picked],
+    };
   }, [statuses, excluded]);
-  const isOn = (name: string) => excluded.some((e) => e.toLowerCase() === name.toLowerCase());
-  const toggle = (name: string) =>
-    onChange(
-      isOn(name)
-        ? excluded.filter((e) => e.toLowerCase() !== name.toLowerCase())
-        : [...excluded, name],
-    );
   return (
     <div className={styles.group} role="group" aria-label="Exclude statuses">
       <b>Exclude statuses</b>
       <p className={styles.hint}>Tickets in these statuses are never moved.</p>
-      <ul className={styles.chips}>
-        {names.map((name) => {
-          const on = isOn(name);
-          return (
-            <li key={name}>
-              <button
-                type="button"
-                className={styles.chip}
-                aria-pressed={on}
-                disabled={pending || (!on && excluded.length >= MAX_EXCLUDED)}
-                onClick={() => toggle(name)}
-              >
-                {name}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <MultiSelect
+        label="Exclude statuses"
+        values={values}
+        options={names}
+        max={MAX_EXCLUDED}
+        disabled={pending}
+        onChange={onChange}
+      />
     </div>
   );
 }

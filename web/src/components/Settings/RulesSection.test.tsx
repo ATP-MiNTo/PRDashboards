@@ -291,6 +291,30 @@ describe('RuleForm choices', () => {
     expect(form.getByRole('combobox', { name: 'Current status' })).toHaveTextContent('Gone');
   });
 
+  it('shows a saved near-duplicate of a listed status by its own spelling', async () => {
+    api.getJiraOptions.mockResolvedValue({ statuses: ['Done', 'Reopen'], projects: ['A_B', 'AB'] });
+    api.getRules.mockResolvedValue({
+      rules: [
+        rule('a', {
+          name: 'First',
+          target: 'Re-open',
+          filters: { ...newRule().filters, project: 'AB', status: 're open' },
+        }),
+      ],
+    });
+    renderWithClient(<RulesSection />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit First' }));
+    const form = within(screen.getByRole('form', { name: 'Edit rule' }));
+    const target = form.getByRole('combobox', { name: 'Move the ticket to' });
+    expect(target).toHaveTextContent('Re-open');
+    fireEvent.click(target);
+    expect(optionNames()).toEqual(['Done', 'Re-open']);
+    fireEvent.keyDown(target, { key: 'Escape' });
+    expect(form.getByRole('combobox', { name: 'Current status' })).toHaveTextContent('re open');
+    fireEvent.click(form.getByRole('combobox', { name: 'Jira project' }));
+    expect(optionNames()).toEqual(['Any project', 'A_B', 'AB']);
+  });
+
   it('falls back to the statuses and projects of the snapshot when Jira gives none', async () => {
     api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
     const form = await openForm();
@@ -331,18 +355,29 @@ describe('RuleForm choices', () => {
 });
 
 describe('Exclude statuses', () => {
-  const chips = async () => within(await screen.findByRole('group', { name: 'Exclude statuses' }));
+  const group = async () => within(await screen.findByRole('group', { name: 'Exclude statuses' }));
+  const trigger = async () => (await group()).getByRole('combobox', { name: 'Exclude statuses' });
+  const open = async () => {
+    const box = await trigger();
+    fireEvent.click(box);
+    return box;
+  };
 
-  it('shows the Jira statuses as toggles with the excluded ones pressed, and the hint', async () => {
+  it('shows the excluded statuses as chips, the summary and the hint', async () => {
     renderWithClient(<RulesSection />);
-    const group = await chips();
+    const box = await trigger();
     expect(screen.getByText('Tickets in these statuses are never moved.')).toBeInTheDocument();
-    await group.findByRole('button', { name: 'Closed' });
-    expect(group.getByRole('button', { name: 'Done' })).toHaveAttribute('aria-pressed', 'true');
-    expect(group.getByRole('button', { name: 'Closed' })).toHaveAttribute('aria-pressed', 'false');
+    expect(box).toHaveTextContent('Done');
+    expect((await group()).getByRole('button', { name: 'Remove Done' })).toBeInTheDocument();
+    await open();
+    expect(screen.getByRole('option', { name: 'Done' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('option', { name: 'Closed' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
   });
 
-  it('saves the whole settings with the status added or removed', async () => {
+  it('searches, then saves the whole settings with the status added or removed', async () => {
     let stored = settings;
     api.getSettings.mockImplementation(() => Promise.resolve(stored));
     api.putSettings.mockImplementation((v: typeof settings) => {
@@ -350,15 +385,19 @@ describe('Exclude statuses', () => {
       return Promise.resolve(v);
     });
     renderWithClient(<RulesSection />);
-    const group = await chips();
-    fireEvent.click(await group.findByRole('button', { name: 'Closed' }));
+    await open();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search Exclude statuses' }), {
+      target: { value: 'clo' },
+    });
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('option', { name: 'Closed' }));
     await waitFor(() =>
       expect(api.putSettings).toHaveBeenLastCalledWith({
         ...settings,
         excludedStatuses: ['Done', 'Closed'],
       }),
     );
-    fireEvent.click(group.getByRole('button', { name: 'Done' }));
+    fireEvent.click((await group()).getByRole('button', { name: 'Remove Done' }));
     await waitFor(() =>
       expect(api.putSettings).toHaveBeenLastCalledWith({
         ...settings,
@@ -367,17 +406,29 @@ describe('Exclude statuses', () => {
     );
   });
 
+  it('treats a near-duplicate of a listed status as the same one', async () => {
+    api.getJiraOptions.mockResolvedValue({ statuses: ['Reopen', 'Re open', 'Done'], projects: [] });
+    api.getSettings.mockResolvedValue({ ...settings, excludedStatuses: ['re-open'] });
+    renderWithClient(<RulesSection />);
+    await open();
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['✓Reopen', '✓Done']);
+    expect(screen.getByRole('option', { name: 'Reopen' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   it('keeps an excluded status that Jira does not list, and falls back to the snapshot', async () => {
     api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
     api.getSettings.mockResolvedValue({ ...settings, excludedStatuses: ['Archived'] });
     renderWithClient(<RulesSection />);
-    const group = await chips();
-    expect(await group.findByRole('button', { name: 'Archived' })).toHaveAttribute(
-      'aria-pressed',
+    expect(
+      await (await group()).findByRole('button', { name: 'Remove Archived' }),
+    ).toBeInTheDocument();
+    await open();
+    expect(screen.getByRole('option', { name: 'Archived' })).toHaveAttribute(
+      'aria-selected',
       'true',
     );
-    expect(group.getByRole('button', { name: 'In Review' })).toHaveAttribute(
-      'aria-pressed',
+    expect(screen.getByRole('option', { name: 'In Review' })).toHaveAttribute(
+      'aria-selected',
       'false',
     );
   });
@@ -385,7 +436,8 @@ describe('Exclude statuses', () => {
   it('says so when saving fails', async () => {
     api.putSettings.mockRejectedValue(new Error('x'));
     renderWithClient(<RulesSection />);
-    fireEvent.click(await (await chips()).findByRole('button', { name: 'Closed' }));
+    await open();
+    fireEvent.click(screen.getByRole('option', { name: 'Closed' }));
     expect(await screen.findByText('Could not save the excluded statuses.')).toBeInTheDocument();
   });
 });

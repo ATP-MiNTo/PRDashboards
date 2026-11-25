@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Trigger is the event a rule waits for.
@@ -209,7 +210,7 @@ func Evaluate(in Input) Result {
 				continue
 			}
 			c := condition(r, counted, in.Now)
-			if len(c.waiting) > 0 && len(c.met) > 0 && !strings.EqualFold(t.Status, r.Target) {
+			if len(c.waiting) > 0 && len(c.met) > 0 && StatusKey(t.Status) != StatusKey(r.Target) {
 				out.Waiting = append(out.Waiting, Waiting{Ticket: t.Key, Rule: r.ID, Total: c.total, WaitingOn: c.waiting})
 			}
 			if !c.holds {
@@ -222,7 +223,7 @@ func Evaluate(in Input) Result {
 			fired = true
 			out.Firings = append(out.Firings, Firing{
 				Rule: r.ID, Ticket: t.Key, Fingerprint: c.fingerprint, Target: r.Target,
-				InTarget: strings.EqualFold(t.Status, r.Target),
+				InTarget: StatusKey(t.Status) == StatusKey(r.Target),
 			})
 		}
 	}
@@ -312,7 +313,27 @@ func meets(r Rule, p PR, now time.Time) (string, bool) {
 
 // excluded reports whether status is one of the excluded statuses.
 func excluded(exclude []string, status string) bool {
-	return slices.ContainsFunc(exclude, func(e string) bool { return strings.EqualFold(e, status) })
+	key := StatusKey(status)
+	return slices.ContainsFunc(exclude, func(e string) bool { return StatusKey(e) == key })
+}
+
+// StatusKey is the comparison key of a Jira status name: lower case with every rune that is not a
+// letter or a number dropped, so "Re-open", "re open" and "REOPEN" all give "reopen" while
+// "Reopened" stays distinct. A name with no letter or number keeps its trimmed lower case form, so
+// "---" is still a status. Every status comparison goes through it.
+func StatusKey(s string) string {
+	lower := strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	b.Grow(len(lower))
+	for _, r := range lower {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return lower
+	}
+	return b.String()
 }
 
 func prPasses(f Filters, p PR) bool {
@@ -322,7 +343,7 @@ func prPasses(f Filters, p PR) bool {
 func ticketPasses(f Filters, t Ticket) bool {
 	return (f.Project == "" || strings.EqualFold(f.Project, t.Project)) &&
 		(f.IssueType == "" || strings.EqualFold(f.IssueType, t.IssueType)) &&
-		(f.Status == "" || strings.EqualFold(f.Status, t.Status))
+		(f.Status == "" || StatusKey(f.Status) == StatusKey(t.Status))
 }
 
 // Match reports whether name matches pattern. A pattern without `*` must equal name. Each `*`
