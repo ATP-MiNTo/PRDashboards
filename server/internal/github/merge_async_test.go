@@ -32,7 +32,6 @@ type asyncServer struct {
 	calls    []string
 	versions map[string]string
 	bodies   []string
-	paths    []string
 }
 
 func (a *asyncServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
