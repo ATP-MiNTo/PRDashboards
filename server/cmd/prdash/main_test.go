@@ -26,6 +26,10 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
+// testClient disables keep-alives so no spare pooled connection is left in http.StateNew on the
+// server, which Shutdown would otherwise wait on for 5 s before treating it as idle.
+var testClient = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+
 type syncBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -305,7 +309,7 @@ func TestRunServesAndCleansUp(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	req, _ := http.NewRequest(http.MethodGet, base+"/api/session", nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -318,7 +322,7 @@ func TestRunServesAndCleansUp(t *testing.T) {
 	req, _ = http.NewRequest(http.MethodPost, base+"/api/session", body)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", base)
-	resp, err = http.DefaultClient.Do(req)
+	resp, err = testClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -609,7 +613,7 @@ func httpDo(t *testing.T, method, url string, body string, cookie string, csrf s
 	if csrf != "" {
 		req.Header.Set("X-PRD-CSRF", csrf)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := testClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
