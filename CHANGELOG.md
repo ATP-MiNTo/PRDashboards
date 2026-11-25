@@ -30,6 +30,16 @@ entry for that version. There is no "Unreleased" section.
 - `PUT /api/repos/{id}` is documented as able to look up unseen tickets in Jira when it rebuilds the
   snapshot.
 
+## [1.1.3] - 2026-11-25
+
+### Fixed
+
+- A fine-grained token no longer makes the list show "GitHub reported errors for part of the list:
+  FORBIDDEN Resource not accessible by personal access token". GitHub refuses to show check runs to
+  such tokens, which is harmless: the pull requests, their overall CI state and the "N checks" link
+  are all still there. Merged pull requests are now also resolved as having left the list with these
+  tokens.
+
 ## [1.1.2] - 2026-11-25
 
 ### Fixed
