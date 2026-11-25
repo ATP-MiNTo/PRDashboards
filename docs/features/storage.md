@@ -5,7 +5,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 ## Purpose
 
 Keeps everything the app remembers: secrets (tokens, OAuth client credentials, the cookie signing
-key) in the OS keychain or an encrypted file, and everything else in one SQLite file. Milestone 2
+key) in an encrypted vault file whose key is in the OS keychain (or a passphrase-protected file), and everything else in one SQLite file. Milestone 2
 adds the secrets store, the database with all tables of TECH_SPEC 6.2, persisted sessions, global
 settings and "sign out all browsers".
 
@@ -22,7 +22,7 @@ Differences from the spec:
 
 ## Data model
 
-Secrets, keychain service `prdashboards` (or the same names in `secrets.enc`):
+Secrets, kept in `vault.enc` (or the same names in `secrets.enc`):
 
 | Item | Content |
 | --- | --- |
@@ -30,6 +30,16 @@ Secrets, keychain service `prdashboards` (or the same names in `secrets.enc`):
 | `github.oauth.client`, `atlassian.oauth.client` | JSON `{clientId, clientSecret}` |
 | `github.token` | JSON `{token, method (oauth or pat), login, warning}` |
 | `atlassian.token` | JSON `{accessToken, refreshToken, expiresAt, sites, needsReconnect}` |
+
+Keychain, service `prdashboards`: one item, `vault.key`, 32 random bytes (base64 as every keychain
+value). Nothing else is stored there. The reason is a size limit: go-keyring on macOS fails with
+`data passed to Set was too big` when its `security -i` command exceeds 4096 bytes, which is
+about 3000 characters of value, and the Atlassian token (access JWT, refresh token, sites) is
+larger. `Keychain.Set` itself refuses values over 2048 base64 characters with `ErrTooLarge`.
+
+`vault.enc`: header `PRDV`, version, 12-byte nonce, then the AES-256-GCM ciphertext of the same
+JSON map, sealed with the raw `vault.key`, no KDF. The header is the additional data. A fresh
+nonce on every write. The magic differs from `secrets.enc`, so neither file opens as the other.
 
 `secrets.enc`: header `PRDS`, version, KDF time, memory (KiB) and threads, 16-byte salt, 12-byte
 nonce, then the AES-256-GCM ciphertext of a JSON map. The whole header is the additional data.
@@ -51,9 +61,10 @@ values per key in one transaction.
 Server:
 
 - [server/internal/secrets/secrets.go](../../server/internal/secrets/secrets.go): `Store`, `ErrNotFound`, item name constants, `Memory`.
-- [server/internal/secrets/keychain.go](../../server/internal/secrets/keychain.go): `Keychain` over go-keyring, `Probe`. Values are base64 so binary keys survive every backend.
-- [server/internal/secrets/file.go](../../server/internal/secrets/file.go): `File`, `OpenFile`, `ErrWrongPassphrase`, `ErrNotSecretsFile`.
-- [server/internal/secrets/open.go](../../server/internal/secrets/open.go): `Open` (choose the backend), `Prompter`, `TerminalPrompter`, `ErrNoTerminal`.
+- [server/internal/secrets/keychain.go](../../server/internal/secrets/keychain.go): `Keychain` over go-keyring, `Probe`, `ErrTooLarge`. Values are base64 so binary keys survive every backend. `kr` is the seam tests replace to model the macOS size limit.
+- [server/internal/secrets/file.go](../../server/internal/secrets/file.go): `File` with a codec (passphrase plus Argon2id, or raw key), `OpenFile`, `OpenVault`, the batch `setMany`, `writeAtomic`, and the errors `ErrWrongPassphrase`, `ErrNotSecretsFile`, `ErrWrongVaultKey`, `ErrNotVaultFile`.
+- [server/internal/secrets/vault.go](../../server/internal/secrets/vault.go): `openKeychainVault` (key from the keychain, create or open `vault.enc`) and `migrateLegacy`.
+- [server/internal/secrets/open.go](../../server/internal/secrets/open.go): `Open` (choose the backend), `VaultFileName`, `VaultKeyName`, `Prompter`, `TerminalPrompter`, `ErrNoTerminal`.
 - [server/internal/store/store.go](../../server/internal/store/store.go): `Open`, `Write` (the one write transaction), `Close`.
 - [server/internal/store/migrate.go](../../server/internal/store/migrate.go): embedded numbered migrations, applied in order, each in a transaction.
 - [server/internal/store/repos.go](../../server/internal/store/repos.go) and [merges.go](../../server/internal/store/merges.go): repo settings, `RecordMerge` and the retry, activity and idempotency queries.
@@ -66,13 +77,22 @@ Server:
 
 ## Key flows
 
-1. Start: `prepareDataDir`, lock, `checkPrivateFiles` (refuses a `session.key`, `secrets.enc` or
-   `data.db` that group or others can access, with the `chmod 600 <path>` to run), then
+1. Start: `prepareDataDir`, lock, `checkPrivateFiles` (refuses a `session.key`, `secrets.enc`,
+   `vault.enc` or `data.db` that group or others can access, with the `chmod 600 <path>` to run), then
    `secrets.Open`.
-2. `secrets.Open`: probe the keychain (set, get and delete a probe item). On success use it. Else,
-   with `secrets.enc` present ask for the passphrase (3 attempts), without it ask twice and create
+2. `secrets.Open`: probe the keychain (set, get and delete a probe item). On success read
+   `vault.key` (one Get). Missing and no `vault.enc`: create 32 random bytes and store them. Missing
+   but `vault.enc` exists: fail with `ErrVaultKeyMissing`, the file is left alone. A key that is not
+   32 bytes, a wrong key or a damaged vault fail too, and the vault is never recreated over an
+   unreadable file. Then open or create `vault.enc` with the key and migrate (below); the backend
+   is `keychain`. Else, with `secrets.enc` present ask for the passphrase (3 attempts), without it ask twice and create
    it (minimum 8 characters). No terminal: `ErrNoTerminal`, the binary prints how to run it from a
    terminal and exits 1.
+   Migration, once: for each of the five item names, one Get from the keychain. Items the vault
+   lacks are copied into it with one vault write. Only after that write succeeds are the keychain
+   copies deleted (an item already in the vault just has its keychain copy deleted). A failed
+   delete is logged as a warning and does not stop the start. The log names the items, never
+   values.
 3. `store.Open` creates `data.db` with mode 0600, opens the writer and the reader pool and runs
    pending migrations.
 4. `LoadOrCreateKey`: use the `session.key` item. When a legacy `<data-dir>/session.key` file
@@ -99,8 +119,10 @@ None. The keychain is a local call to the OS.
   short-lived PKCE verifier of a pending flow, deleted when the state is consumed or expires.
 - Session ids and OAuth states are stored as SHA-256 hashes. `ConsumeOAuthState` is one
   `DELETE ... RETURNING`, so a state works once, and only for its session and provider.
-- `secrets.enc` is written to a temporary file in the same directory, synced and renamed over the
-  old one, mode 0600. A wrong passphrase gives `ErrWrongPassphrase` and no partial state. Tampering
+- `vault.enc` and `secrets.enc` are written to a temporary file in the same directory, synced
+  (`fsync`) and renamed over the old one, mode 0600. One write per `Set`, `Delete` or batch, rolled
+  back in memory when it fails. A wrong passphrase gives `ErrWrongPassphrase`, a wrong key
+  `ErrWrongVaultKey`, and no partial state. Tampering
   with the header fails the GCM check.
 - The passphrase is read from the terminal without echo, never from a flag or the environment, and
   never logged.
@@ -109,8 +131,9 @@ None. The keychain is a local call to the OS.
 
 ## Tests
 
+- [server/internal/secrets/vault_test.go](../../server/internal/secrets/vault_test.go): a keychain mock with the macOS size limit, a 22 KB token round trip with only `vault.key` in the keychain, migration (and a second start), missing key, wrong key, tampering, foreign files, passphrase and key files not interchangeable, mode, fresh nonce, batch rollback.
 - [server/internal/secrets/secrets_test.go](../../server/internal/secrets/secrets_test.go): memory and file stores, round trip, wrong passphrase, tampered header and ciphertext, fresh nonce and salt per write, file mode, atomic rewrite, backend choice, passphrase confirmation, no terminal.
 - [server/internal/store/store_test.go](../../server/internal/store/store_test.go): migrations from empty and again, every table, STRICT and constraints, concurrent writers, reader pool is read-only, settings round trip, sessions, `oauth_states` single use and expiry.
 - [server/internal/auth/persist_test.go](../../server/internal/auth/persist_test.go) and [session_test.go](../../server/internal/auth/session_test.go): persisted sessions across a restart, revoke all, legacy key import.
 - [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go): settings and revoke-all over HTTP.
-- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): file mode refusal, legacy key import, sessions across a restart, file backend with a passphrase, no-terminal exit.
+- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): file mode refusal (including `vault.enc`), legacy key import into the vault, sessions across a restart, file backend with a passphrase, no-terminal exit.

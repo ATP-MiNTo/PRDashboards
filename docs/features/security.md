@@ -96,7 +96,7 @@ Web:
 5. Launch: `Launcher.Consume` compares the presented token with the live tokens in constant time,
    spends it and issues a new one. `CreateSession` then calls `Sessions.Create` and sets the cookie.
 6. Startup refuses to run when the data dir is group- or world-writable, or when `session.key`,
-   `secrets.enc` or `data.db` is accessible to group or others, and the lock is taken before the
+   `secrets.enc`, `vault.enc` or `data.db` is accessible to group or others, and the lock is taken before the
    port is bound (see [app-shell.md](app-shell.md)).
 7. `POST /api/sessions/revoke-all` clears the cache, deletes every session row and answers `204`
    with an expired cookie.

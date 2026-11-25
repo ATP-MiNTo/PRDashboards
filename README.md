@@ -6,7 +6,7 @@ one action. Status sync rules keep tickets in the right Jira status while their 
 through review.
 
 It runs on your own machine only. The app listens on `127.0.0.1`, and your GitHub and Jira
-tokens stay in your OS keychain.
+tokens stay in an encrypted file only you can read, sealed with a key in your OS keychain.
 
 - Requirements: [docs/PRD.md](docs/PRD.md)
 - Design: [docs/TECH_SPEC.md](docs/TECH_SPEC.md) and [docs/architecture.md](docs/architecture.md)
@@ -113,10 +113,13 @@ with a link to authorize. The rest of the list still loads.
 
 ### Where your data lives
 
-- Tokens and client secrets are in the OS keychain (macOS Keychain, Windows Credential Manager,
-  or the Secret Service on Linux).
-- With no keychain, the app keeps them in an encrypted file instead and asks for a passphrase in
-  the terminal at each start.
+- Tokens and client secrets are in the encrypted file `~/.prdashboards/vault.enc`. The key that
+  opens it is in the OS keychain (macOS Keychain, Windows Credential Manager, or the Secret
+  Service on Linux). The file is readable only by you, and the app refuses to start if other
+  users can read it. Keep the keychain entry and the file together: the file cannot be opened
+  without its key.
+- With no keychain, the app keeps them in the encrypted file `secrets.enc` instead and asks for a
+  passphrase in the terminal at each start.
 - Settings, rules and the activity log are in `~/.prdashboards/data.db`. That folder is readable
   only by you, and the app refuses to start if other users can write to it.
 

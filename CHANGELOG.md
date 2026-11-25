@@ -6,6 +6,15 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.0.2] - 2026-11-25
+
+### Fixed
+
+- Jira sign-in failing on macOS with "data passed to Set was too big": the Atlassian token is too
+  big for the keychain. Tokens and client secrets now live in an encrypted vault file
+  (`~/.prdashboards/vault.enc`) whose key is the only item in the keychain. Items an earlier
+  version saved in the keychain are moved into the vault on the first start.
+
 ## [1.0.1] - 2026-11-25
 
 ### Added

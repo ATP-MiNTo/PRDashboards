@@ -22,7 +22,8 @@ Differences from the spec:
 ## Data model
 
 - Secrets: `github.oauth.client`, `atlassian.oauth.client`, `github.token`, `atlassian.token` (see
-  [storage.md](storage.md)).
+  [storage.md](storage.md)). They live in the encrypted vault `vault.enc`, not in the OS keychain: the
+  Atlassian token is too big for the macOS keychain, which holds only the vault key.
 - SQLite: `oauth_states` (pending flows) and the setting `jiraSiteId`.
 - API schemas: `SetupState`, `ClientCredentials`, `PatRequest`, `Accounts` (`github`: connected,
   login, method, warning; `jira`: connected, needsReconnect, sites, selectedSiteId),

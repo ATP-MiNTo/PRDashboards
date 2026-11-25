@@ -46,7 +46,7 @@ func TestFakeFlagStartsFakesAndPreconfiguresClients(t *testing.T) {
 	}
 
 	// The app starts the OAuth flow against the fake, which is reachable only in this build.
-	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	noRedirect := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, _ := http.NewRequest(http.MethodGet, base+"/oauth/github/start", nil)
 	req.Header.Set("Cookie", "prd_session="+cookie)
 	r, err := noRedirect.Do(req)

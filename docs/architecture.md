@@ -120,7 +120,7 @@ sequenceDiagram
 
 - One writer (a single-connection pool). Multi-row changes run in one transaction. No per-row loops against the
   database.
-- Tokens and client secrets live only in the keychain or the encrypted fallback. Never in SQLite,
+- Tokens and client secrets live only in the encrypted vault (its key in the OS keychain) or the passphrase-protected fallback. Never in SQLite,
   logs or API responses.
 
 ### Security

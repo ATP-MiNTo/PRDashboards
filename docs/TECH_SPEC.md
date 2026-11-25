@@ -28,7 +28,7 @@ server. The browser and the backend are treated as if they were on different mac
 | GitHub client | Hand-written GraphQL over `net/http` | Queries live in `.graphql` files, embedded. REST only for merge and branch delete |
 | Jira client | Hand-written REST v3 client | Jira Cloud via `api.atlassian.com/ex/jira/{cloudId}` |
 | Storage | SQLite via `modernc.org/sqlite` | Pure Go, no cgo. WAL mode. Migrations embedded and versioned |
-| Secrets | `github.com/zalando/go-keyring` | Fallback: AES-256-GCM file, key from Argon2id over a user passphrase |
+| Secrets | `github.com/zalando/go-keyring` | The keychain holds one 32-byte key that seals an AES-256-GCM vault file. Fallback: the same kind of file with a key from Argon2id over a user passphrase |
 | Frontend | Next.js 16, React 19, TypeScript, `output: 'export'` | App Router, client components only. No Next server at runtime |
 | Frontend data | TanStack Query 5 | Mutations and cache. SSE pushes invalidations |
 | Frontend styling | CSS Modules + CSS custom properties | Theme tokens from the prototype |
@@ -47,7 +47,7 @@ server/                       Go module github.com/ATP-MiNTo/PRDashboards/server
   cmd/prdash/                 main: flags, wiring, browser launch
   internal/api/               handlers, static UI server, generated code (gen/), middleware (mw/)
   internal/auth/              OAuth flows, PAT entry, session cookies, launch tokens
-  internal/secrets/           keychain + encrypted-file fallback
+  internal/secrets/           keychain-keyed vault + passphrase-file fallback
   internal/store/             SQLite access, migrations/, typed queries
   internal/github/            GraphQL queries, REST merge, rate-limit tracking
   internal/jira/              JQL search, transitions, fields metadata
@@ -203,11 +203,18 @@ The API is `GET /api/setup` (which providers are configured, plus the callback U
 
 ### 6.1 Secrets
 
-Keychain service `prdashboards`. Items: `github.oauth.client`, `github.token`,
-`atlassian.oauth.client`, `atlassian.token` (access + refresh + expiry as JSON),
-`session.key` (HMAC key for cookies).
+Items: `github.oauth.client`, `github.token`, `atlassian.oauth.client`, `atlassian.token`
+(access + refresh + expiry + sites as JSON, over 3 KB), `session.key` (HMAC key for cookies).
 
-Fallback when no keychain is available: `secrets.enc`, AES-256-GCM, with a key derived with
+With a keychain, the keychain (service `prdashboards`) holds exactly one item, `vault.key`: 32
+random bytes. All items above live in `vault.enc` in the data dir, sealed with AES-256-GCM under
+that key (no KDF). The reason is size: go-keyring on macOS refuses a value that makes its
+`security -i` command longer than 4096 bytes, and the Atlassian token is larger. A fresh 12-byte
+nonce is used on every write, the header (magic `PRDV`, version, nonce) is the additional data,
+and the file is written to a temporary file with mode 0600, synced and renamed over the old one.
+Items that earlier versions kept in the keychain are moved into the vault at start.
+
+Fallback when no keychain is available: `secrets.enc` (header magic `PRDS`), AES-256-GCM, with a key derived with
 Argon2id (time 3, memory 64 MiB, 4 threads, 32-byte key, 16-byte salt) from a passphrase. Every
 write uses a fresh 12-byte nonce, and the file header (magic, version, KDF parameters, salt,
 nonce) is authenticated as additional data. The file is rewritten atomically with mode 0600.

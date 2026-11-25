@@ -20,8 +20,8 @@ Differences from the spec:
 
 - Files in the data dir (default `~/.prdashboards`, mode 0700): `prdash.lock` (exclusive lock),
   `launch.token` (JSON `{"port":N,"token":"..."}`, newest launch token, mode 0600, atomic write),
-  `data.db` (SQLite) and, without a keychain, `secrets.enc` (both 0600, see
-  [storage.md](storage.md)). The cookie signing key is the secrets item `session.key`. A
+  `data.db` (SQLite) and the secrets file: `vault.enc` with a keychain, `secrets.enc` without one
+  (all 0600, see [storage.md](storage.md)). The cookie signing key is the secrets item `session.key`. A
   `session.key` file from an earlier version is imported once and deleted.
 - API schemas (from [api/openapi.yaml](../../api/openapi.yaml)): `CreateSessionRequest`
   `{launchToken}`, `Session` `{csrfToken, expiresAt, version}`, `Problem`.
@@ -75,7 +75,7 @@ Scripts and CI:
    0. The port comes from the file, so a second start without `--port` still finds an instance on
    another port.
 4. Lock acquired: bind `tcp4 127.0.0.1:<port>` (a busy port exits with a message), open the
-   secrets store (keychain, else the passphrase prompt, else exit when there is no terminal), open
+   secrets store (keychain-keyed vault, else the passphrase prompt, else exit when there is no terminal), open
    SQLite, load or create the session key, load sessions, create the `Launcher` (writes
    `launch.token` with the port), build the `netguard` client, the GitHub client and `auth.OAuth`,
    build the Jira client, the SSE hub and the poller (which loads the stored snapshot), build the

@@ -66,6 +66,9 @@ func TestKeychainErrors(t *testing.T) {
 	if _, err := k.Get("a"); err == nil || errors.Is(err, ErrNotFound) {
 		t.Fatalf("get: %v", err)
 	}
+	if err := k.Set("a", bytes.Repeat([]byte{1}, 4000)); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("large set: %v", err)
+	}
 	if k.Set("a", []byte("x")) == nil || k.Delete("a") == nil || k.Probe() == nil {
 		t.Fatal("expected errors")
 	}
@@ -228,7 +231,7 @@ func TestOpenPicksKeychain(t *testing.T) {
 	if err != nil || kind != "keychain" {
 		t.Fatalf("%v %v", kind, err)
 	}
-	if _, ok := s.(Keychain); !ok {
+	if _, ok := s.(*File); !ok {
 		t.Fatalf("%T", s)
 	}
 }
