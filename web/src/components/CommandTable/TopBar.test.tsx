@@ -47,6 +47,7 @@ describe('TopBar buttons', () => {
   it('has no theme control and no Accounts link', () => {
     bar({});
     expect(screen.queryByRole('group', { name: 'Theme' })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Light' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
   });

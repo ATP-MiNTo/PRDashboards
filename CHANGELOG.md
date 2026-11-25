@@ -11,6 +11,13 @@ entry for that version. There is no "Unreleased" section.
 ### Added
 
 - Enabled Merge buttons show a coloured aura (`--merge-aura`); disabled ones show none.
+## [1.2.2] - 2026-11-25
+
+### Changed
+
+- The Theme section in Settings is a rotating sun/moon toggle plus an "Auto (light from 07:00 to 19:00)"
+  checkbox instead of Light, Dark and Auto buttons. The toggle shows the mode in effect, including in Auto,
+  and using it is an explicit choice that turns Auto off.
 
 ## [1.2.1] - 2026-11-25
 
