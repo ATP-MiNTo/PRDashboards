@@ -299,7 +299,7 @@ func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, er
 // searchOpenQuery runs one paginated open pull request search.
 func (c *Client) searchOpenQuery(ctx context.Context, token, q string) (SearchResult, error) {
 	var res SearchResult
-	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, status int, h http.Header) error {
+	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, _ int, h http.Header) error {
 		res.Total = p.Data.Search.IssueCount
 		res.Blocked = mergeBlocked(res.Blocked, blockedOf(h, p.Errors))
 		res.Errors = append(res.Errors, otherErrors(p.Errors)...)
