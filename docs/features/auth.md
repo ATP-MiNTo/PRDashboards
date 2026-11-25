@@ -6,7 +6,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 Connects the app to GitHub (OAuth App, or a pasted personal access token) and to Jira (Atlassian
 OAuth 2.0 3LO), keeps the Jira token fresh, and shows the state in a "Connected accounts" panel.
-No PR or ticket data is fetched yet. That starts with the poller in milestone 4.
+PR and ticket data are fetched by the poller ([poller.md](poller.md)).
 
 Differences from the spec:
 
@@ -16,8 +16,8 @@ Differences from the spec:
   See Key flows 4 and Rules.
 - The "disconnected" state after a failed Jira refresh is `needsReconnect` on the stored token. The
   access token is dropped, the site list is kept.
-- Setup is under `/setup`. The PAT form is on the same page, not in a settings drawer, which does
-  not exist yet.
+- Setup is under `/setup`. The PAT form is on the same page. The Connected accounts panel is also
+  in the settings drawer ([settings.md](settings.md)).
 
 ## Data model
 
