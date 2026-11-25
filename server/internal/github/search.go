@@ -597,13 +597,18 @@ func mergeBlocked(have, more []OrgBlocked) []OrgBlocked {
 	return have
 }
 
+// otherErrors lists the errors worth showing, one line per distinct permission message. Errors
+// about check runs a fine-grained token cannot read are dropped.
 func otherErrors(errs []graphQLError) []string {
 	var out []string
 	for _, e := range errs {
+		if hiddenCheckError(e) {
+			continue
+		}
 		if e.Type != "FORBIDDEN" {
 			out = append(out, strings.TrimSpace(e.Type+" "+e.Message))
 		} else if p, ok := classifyForbidden(nil, e.Message, e.Extensions).(*PermissionError); ok && !slices.Contains(out, "FORBIDDEN "+p.Message) {
-			// One line per message: a token that cannot read check runs repeats it once per check.
+			// One line per message.
 			out = append(out, "FORBIDDEN "+p.Message)
 		}
 	}
