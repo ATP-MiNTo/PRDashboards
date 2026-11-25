@@ -18,19 +18,19 @@ Differences from the spec:
 
 - `idempotency(key, pr_id, result_json, created_at)`: the result of a finished merge by `Idempotency-Key`, kept 24 hours (purged in the same transaction as each new row). [migration 0002](../../server/internal/store/migrations/0002_merge.sql).
 - `activity` (now with `summary`), `pending_retries` (now with `pr_id` and `to_status`), `rule_firings` ([storage.md](storage.md)).
-- API: `POST /api/prs/{id}/merge` (`MergeRequest {method, expectedHeadSha, deleteBranch, tickets[{key, transitionId|null, fields}]}`, at most 20 tickets, header `Idempotency-Key` UUID) answers `MergeResult {prId, method, sha, steps[]}`. A step is `{kind: merge|delete_branch|transition, ticket, state: ok|failed|skipped, message, toStatus, retryId}`. A refusal is `MergeProblem` (a problem with `pr`, the fresh state, for 409).
+- API: `POST /api/prs/{id}/merge` (`MergeRequest {method, expectedHeadSha, deleteBranch, tickets[{key, transitionId|null, fields}]}`, at most 20 tickets, header `Idempotency-Key` UUID) answers `MergeResult {prId, method, sha, steps[]}`. A step is `{kind: merge|delete_branch|transition, ticket, state: ok|failed|skipped|queued, message, toStatus, retryId}`. A refusal is `MergeProblem` (a problem with `pr`, the fresh state, for 409).
 - `GET /api/retries`, `POST /api/retries/{id}` (answers `RetryResult {step}`), `DELETE /api/retries/{id}`, `GET /api/activity?limit&cursor` (newest first, limit 1 to 100, `nextCursor` is the last id of the page or null).
-- Problem codes: 409 `head_moved`, `not_mergeable`, `stack_base_open`, `draft`, `not_open`, `transition_unavailable`, `not_connected`; 404 `not_found`; 422 `method_not_allowed`, `ticket_not_linked`, `missing_field`, `invalid_field`, `idempotency_key_reused`; 429 `rate_limited`; 403 `org_blocked`, `missing_permission`; 502 `upstream_error`.
+- Problem codes: 409 `head_moved`, `not_mergeable`, `merge_failed`, `merge_pending`, `stack_base_open`, `draft`, `not_open`, `transition_unavailable`, `not_connected`; 404 `not_found`; 422 `method_not_allowed`, `ticket_not_linked`, `missing_field`, `invalid_field`, `idempotency_key_reused`; 429 `rate_limited`; 403 `org_blocked`, `missing_permission`; 502 `upstream_error`.
 
 ## Code map
 
-- [server/internal/merge/flow.go](../../server/internal/merge/flow.go): `Service.Merge`, `once`, `run`, `check`, `prepare`, `deleteBranch`, `transition`, `Retry`. [fields.go](../../server/internal/merge/fields.go): `encodeFields`. [types.go](../../server/internal/merge/types.go): requests, results, errors and the interfaces it needs.
-- [server/internal/github/pr.go](../../server/internal/github/pr.go): `PullRequest` (node query), `Merge` (REST, 405, 409 and 403 mapped), `DeleteBranch`. [pull_request.graphql](../../server/internal/github/pull_request.graphql) shares `PullRequestFields` with the search.
+- [server/internal/merge/flow.go](../../server/internal/merge/flow.go): `Service.Merge`, `once`, `run`, `queued`, `check`, `prepare`, `deleteBranch`, `transition`, `Retry`. [fields.go](../../server/internal/merge/fields.go): `encodeFields`. [types.go](../../server/internal/merge/types.go): requests, results, errors and the interfaces it needs.
+- [server/internal/github/pr.go](../../server/internal/github/pr.go): `PullRequest` (node query), `Merge` (REST, 405, 409 and 403 mapped; a stack refusal goes on to `MergeAsync`), `DeleteBranch`. [merge_async.go](../../server/internal/github/merge_async.go): `MergeAsync` and the polling. [pull_request.graphql](../../server/internal/github/pull_request.graphql) shares `PullRequestFields` with the search.
 - [server/internal/jira/jira.go](../../server/internal/jira/jira.go): `Transition` (POST, drops the cached transitions of the ticket).
 - [server/internal/store/merges.go](../../server/internal/store/merges.go): `RecordMerge`, `Idempotent`, `Retries`, `Retry`, `DeleteRetry`, `FinishRetry`, `Activity`.
 - [server/internal/api/handlers_merge.go](../../server/internal/api/handlers_merge.go): `MergePr`, `ListRetries`, `RetryTransition`, `DismissRetry`, `GetActivity`.
 - [web/src/components/CommandTable/MergePanel.tsx](../../web/src/components/CommandTable/MergePanel.tsx), [MergeSteps.tsx](../../web/src/components/CommandTable/MergeSteps.tsx), [RecentMerges.tsx](../../web/src/components/CommandTable/RecentMerges.tsx); [web/src/lib/merge.ts](../../web/src/lib/merge.ts) (`mergeLabel`, `mergeBlock`); `useMerge`, `useRetryTransition`, `useTicketTransitions` in [queries.ts](../../web/src/api/queries.ts).
-- [server/internal/fake](../../server/internal/fake) (e2e build tag): node query, REST merge and branch delete, Jira transition POST.
+- [server/internal/fake](../../server/internal/fake) (e2e build tag): node query, REST merge, the asynchronous merge (config `stacked`, `asyncResult`) and branch delete, Jira transition POST.
 
 ## Key flows
 
@@ -39,6 +39,7 @@ Differences from the spec:
 3. The button reads "Merge & move to <status>" for one moved ticket, "Merge & update N tickets" for several. It is disabled, with the reason beside it, while a row block (`blockOf`), a missing required field or a missing confirmation applies.
 4. `Merge` runs the steps of spec 7.7: an `Idempotency-Key` that was already used returns the stored result (a key used for another PR is `idempotency_key_reused`; two requests with the same key at once share one run). Then one GraphQL node query and the checks (open, not a draft, stack base not open, head equals `expectedHeadSha`, mergeable, clean or has hooks, no review missing), the repo allows the method, every requested transition is in the ticket's current list with its required fields.
 5. `PUT /repos/{o}/{r}/pulls/{n}/merge` with `merge_method` and `sha`. 409 is `head_moved`, 405 is `not_mergeable`; both carry the fresh state and start a refresh.
+   A 403 whose message says stacked PRs must use the asynchronous merge endpoint is not a permission problem: see "Asynchronous merge" below.
 6. Branch delete when asked: only a branch of the same repo, and not one another open PR uses as its base ("Branch kept: ..." otherwise). A failed delete is a failed step, nothing more.
 7. Tickets are moved at most 4 in parallel. A failure becomes a `pending_retries` row and a step with `retryId`.
 8. One transaction (`RecordMerge`) writes the activity rows, the retries, the rule firings and the idempotency row. A `activity` event is published and a refresh is triggered. The web shows the steps in the panel, and in "Recent merges" once the row has left the table.
@@ -59,6 +60,24 @@ Differences from the spec:
 - All the database writes of one merge are one transaction.
 - Field values are shaped by the transition's own metadata (`{"id"}` for options, `{"accountId"}` for users, text as is). Unknown ids and unsupported types are refused.
 
+### Asynchronous merge
+
+GitHub merges a pull request of a GitHub-native stack only through its asynchronous merge API (merging one also merges every unmerged pull request below it, in one step; the pull request above is rebased onto the base by GitHub). The synchronous `PUT .../merge` answers a stacked pull request with 403 "Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead.". `Merge` recognises exactly that (a message with "stacked PRs" and "asynchronous merge endpoint", any case) and calls `MergeAsync` once; every other 403 is classified as before. Normal pull requests keep the synchronous call.
+
+`MergeAsync` sends `PUT /repos/{o}/{r}/pulls/{n}/merge-async` with `{merge_method, sha}` (the head pin stays) and `X-GitHub-Api-Version: 2026-03-10` on every call, then polls `GET .../merge-async/{id}`, waiting 1 s, 2 s, 4 s and then 5 s between polls, for at most 90 s overall (`Backoff.Wait`, so tests do not sleep). The id is taken from a 202 or a 409 ("a request already exists") and must match `^[A-Za-z0-9-]{1,64}$` before it goes into a URL. Outcomes:
+
+| GitHub says | Client result | API |
+| --- | --- | --- |
+| `merged` | `MergeResult` (SHA when GitHub names it, else empty) | 200, the normal flow: branch rule, tickets, firings |
+| `enqueued` (merge queue) | `ErrEnqueued` | 200, merge step `queued` "Added to the merge queue", activity "Added to the merge queue: ...", tickets are not moved and the branch is kept; the poller's `merged` rule moves the tickets once it merges. The result is stored under the idempotency key |
+| `failed` | `*MergeFailedError{Reason}` (200 characters) | 409 `merge_failed`, detail "GitHub did not merge: <reason>" (plain text), nothing moves |
+| still `pending` at 90 s | `ErrMergePending` | 409 `merge_pending` "GitHub is still merging; refresh in a moment", nothing moves; a refresh is started and the poller handles the merge when it lands |
+| 400, 422 | `ErrNotMergeable` | 409 `not_mergeable` |
+| 404 | `ErrPRNotFound` | 404 |
+| 403 | as in "Refusals by GitHub" | 403 `org_blocked` or `missing_permission` |
+
+The documentation does not give the poll body in full, so the client reads `status` (top level, else `details.status`), the failure reason from `message`, `details.message`, `details.reason` or `reason`, and the merge commit from `details.merge_commit_sha`, `merge_commit_sha` or `sha` (kept only when it looks like a commit id). The id may be in `details.uuid`, `uuid` or `id`. An unknown status is treated as pending, and a 5xx while polling is waited out until the cap. The HTTP request of the merge stays open while polling (the server has no write timeout).
+
 ### Refusals by GitHub
 
 GitHub says no in three different ways, and the client tells them apart ([github.go](../../server/internal/github/github.go) `classifyForbidden`):
@@ -75,6 +94,6 @@ Every refusal by GitHub is logged at WARN by the client (`github refused a call`
 ## Tests
 
 - [server/internal/merge](../../server/internal/merge): `flow_test.go` (every refusal, partial failure, retry, idempotent replay, concurrent same key, parallelism of 4, branch rules), `calls_test.go` (outbound call counts and one `RecordMerge`), `resolve_test.go`.
-- [server/internal/github/pr_test.go](../../server/internal/github/pr_test.go), [permission_test.go](../../server/internal/github/permission_test.go) (classification, header parsing, REST and node refusals, logging), [server/internal/jira/jira_test.go](../../server/internal/jira/jira_test.go), [server/internal/store/merges_test.go](../../server/internal/store/merges_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go).
+- [server/internal/github/merge_async_test.go](../../server/internal/github/merge_async_test.go) (stack message detection, submit answers, id validation, polling outcomes and cap, header, cancel), [server/internal/merge/async_test.go](../../server/internal/merge/async_test.go) (enqueued, failed, pending), [server/internal/github/pr_test.go](../../server/internal/github/pr_test.go), [permission_test.go](../../server/internal/github/permission_test.go) (classification, header parsing, REST and node refusals, logging), [server/internal/jira/jira_test.go](../../server/internal/jira/jira_test.go), [server/internal/store/merges_test.go](../../server/internal/store/merges_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go).
 - [MergePanel.test.tsx](../../web/src/components/CommandTable/MergePanel.test.tsx), [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx).
-- [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge and move with a required field, a failed move that is retried, a head that moved, a token without Contents write (fake `github_pat_contents_read`).
+- [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge and move with a required field, a failed move that is retried, a head that moved, a token without Contents write (fake `github_pat_contents_read`), a stacked pull request merged through the asynchronous API.

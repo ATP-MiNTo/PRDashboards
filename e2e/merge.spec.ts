@@ -16,6 +16,8 @@ type GitHubState = {
   branchDeletes: number;
   nodeQueries: number;
   searches: number;
+  asyncSubmits: number;
+  asyncVersion: string;
   lastMerge: { method: string; sha: string; repo: string; number: string };
 };
 type JiraState = {
@@ -223,4 +225,35 @@ test("a token without Contents write says which permission is missing", async ({
   } finally {
     await useToken("ghp_classic_ok");
   }
+});
+
+test("a stacked pull request merges through GitHub's asynchronous API", async ({
+  page,
+  request,
+}) => {
+  await configure(request, "github", { stacked: true });
+  const row = rowOf(page, "Stack bottom");
+  await expect(async () => {
+    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await expect(row).toBeVisible({ timeout: 3000 });
+  }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
+  await row.getByRole("button", { name: "Merge", exact: true }).click();
+  const panel = page.getByRole("group", { name: "Merge #21" });
+  await panel
+    .getByRole("checkbox", { name: "Merge without moving any ticket" })
+    .check();
+  await panel.getByRole("button", { name: "Merge without ticket" }).click();
+
+  const recent = page.getByRole("region", { name: "Recent merges" });
+  await expect(recent).toContainText("Stack bottom", { timeout: 15_000 });
+  await expect(recent.getByText("Failed", { exact: true })).toHaveCount(0);
+  const github = await fakeState<GitHubState>(request, "github");
+  expect(github.merges).toBe(0);
+  expect(github.asyncSubmits).toBe(1);
+  expect(github.asyncVersion).toBe("2026-03-10");
+  expect(github.lastMerge).toMatchObject({
+    repo: "acme/stack",
+    number: "21",
+    sha: headOf(21),
+  });
 });

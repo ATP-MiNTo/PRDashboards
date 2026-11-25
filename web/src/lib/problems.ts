@@ -4,6 +4,8 @@ const MESSAGES: Record<string, string> = {
   org_blocked:
     'An organization requires SAML SSO or blocks this kind of token. Authorize it for the organization in GitHub.',
   missing_permission: 'The token lacks a GitHub permission this action needs.',
+  merge_failed: 'GitHub did not merge this pull request.',
+  merge_pending: 'GitHub is still merging. Refresh in a moment to see the result.',
   upstream_error: 'The provider could not be reached. Try again.',
   not_connected: 'Not connected.',
   unknown_site: 'That Jira site is not available for the connected account.',
@@ -27,7 +29,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 /** Codes whose server detail is shown, as plain text, because it names what the person must change. */
-const SHOWS_DETAIL = new Set(['missing_permission']);
+const SHOWS_DETAIL = new Set(['missing_permission', 'merge_failed']);
 
 /**
  * Turns a problem code into text for the person. The code itself is never shown. For a code in

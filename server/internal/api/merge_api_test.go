@@ -116,12 +116,17 @@ func TestMergeRefusalsAreProblems(t *testing.T) {
 		p.Code != "head_moved" || p.Pr == nil || p.Pr.HeadSha != "new" || *p.Pr.ReviewDecision != "APPROVED" {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	for _, code := range []string{merge.CodeNotMergeable, merge.CodeStackBaseOpen, merge.CodeDraft, merge.CodeNotOpen, merge.CodeTransitionUnavailable, merge.CodeNotConnected} {
+	for _, code := range []string{merge.CodeNotMergeable, merge.CodeStackBaseOpen, merge.CodeDraft, merge.CodeNotOpen, merge.CodeTransitionUnavailable, merge.CodeNotConnected, merge.CodeMergeFailed, merge.CodeMergePending} {
 		g.m.err = &merge.Error{Code: code}
 		w := g.merge(goodBody)
 		if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"code":"`+code+`"`) || !strings.Contains(w.Body.String(), `"pr":null`) {
 			t.Errorf("%s: %d %s", code, w.Code, w.Body)
 		}
+	}
+	g.m.err = &merge.Error{Code: merge.CodeMergeFailed, Detail: "GitHub did not merge: <b>checks</b> pending"}
+	w = g.merge(goodBody)
+	if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), `"detail":"GitHub did not merge: \u003cb\u003echecks\u003c/b\u003e pending"`) {
+		t.Errorf("merge_failed: %d %s", w.Code, w.Body)
 	}
 	g.m.err = &merge.Error{Code: merge.CodeNotFound}
 	wantProblem(t, g.merge(goodBody), http.StatusNotFound, "not_found")

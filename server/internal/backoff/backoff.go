@@ -65,6 +65,10 @@ func (p Policy) jitter() float64 {
 	return rand.Float64() //nolint:gosec // jitter does not need a secure source
 }
 
+// Wait pauses for d, or until ctx ends (then it returns ctx's error). It uses the Sleep seam, so a
+// test can make it instant.
+func (p Policy) Wait(ctx context.Context, d time.Duration) error { return p.sleep(ctx, d) }
+
 func (p Policy) sleep(ctx context.Context, d time.Duration) error {
 	if p.Sleep != nil {
 		return p.Sleep(ctx, d)

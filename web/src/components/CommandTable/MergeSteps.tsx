@@ -7,6 +7,7 @@ const STATE: Record<MergeStep['state'], { tone: Tone; label: string }> = {
   ok: { tone: 'good', label: 'Done' },
   failed: { tone: 'bad', label: 'Failed' },
   skipped: { tone: 'mute', label: 'Skipped' },
+  queued: { tone: 'warn', label: 'Queued' },
 };
 
 function stepName(s: MergeStep): string {

@@ -315,6 +315,43 @@ describe('MergePanel', () => {
     expect(within(steps).queryByText('Failed')).toBeNull();
   });
 
+  it('says the pull request was added to the merge queue', async () => {
+    api.mergePr.mockResolvedValue(
+      okResult({
+        sha: '',
+        steps: [
+          {
+            kind: 'merge',
+            ticket: null,
+            state: 'queued',
+            message: 'Added to the merge queue',
+            toStatus: null,
+            retryId: null,
+          },
+        ],
+      }),
+    );
+    renderWithClient(<MergePanel pr={withTickets()} method="squash" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Merge without moving any ticket' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge without ticket' }));
+    const steps = await screen.findByRole('list', { name: 'Merge steps' });
+    expect(within(steps).getByText('Added to the merge queue')).toBeInTheDocument();
+    expect(within(steps).getByText('Queued')).toBeInTheDocument();
+    expect(within(steps).queryByText('Done')).toBeNull();
+  });
+
+  it('shows the reason GitHub gave when it did not merge', async () => {
+    api.mergePr.mockRejectedValue(
+      new ApiError(409, 'merge_failed', null, 'GitHub did not merge: 2 approvals are required'),
+    );
+    renderWithClient(<MergePanel pr={withTickets()} method="squash" onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Merge without moving any ticket' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge without ticket' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'GitHub did not merge: 2 approvals are required',
+    );
+  });
+
   it('does not offer a move for a ticket Jira does not know', () => {
     renderWithClient(
       <MergePanel
