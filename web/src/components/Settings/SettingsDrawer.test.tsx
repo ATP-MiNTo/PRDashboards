@@ -174,12 +174,69 @@ describe('SettingsDrawer', () => {
     );
   });
 
-  it('saves a new theme from its own section', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
-    await screen.findByRole('checkbox', { name: /Delete the head branch/ });
-    const theme = within(await screen.findByRole('group', { name: 'Theme' }));
-    fireEvent.click(theme.getByRole('button', { name: 'Dark' }));
-    await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'dark' }));
+  describe('theme', () => {
+    beforeEach(() => document.documentElement.removeAttribute('data-mode'));
+
+    const ready = async (name: string | RegExp) => {
+      const box = await screen.findByRole('checkbox', { name });
+      await waitFor(() => expect(box).toBeEnabled());
+      return box as HTMLInputElement;
+    };
+    const darkMode = () => ready('Dark mode');
+    const auto = () => ready(/^Auto \(light from 07:00 to 19:00\)/);
+    const withTheme = (theme: string) => api.getSettings.mockResolvedValue({ ...settings, theme });
+
+    it('reflects the stored theme in the swap', async () => {
+      withTheme('dark');
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      const swap = await darkMode();
+      await waitFor(() => expect(swap).toBeChecked());
+      expect(await auto()).not.toBeChecked();
+    });
+
+    it('saves an explicit dark from a light start', async () => {
+      withTheme('light');
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      const swap = await darkMode();
+      await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
+      expect(swap).not.toBeChecked();
+      fireEvent.click(swap);
+      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'dark' }));
+    });
+
+    it('saves an explicit light from a dark start', async () => {
+      withTheme('dark');
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      fireEvent.click(await darkMode());
+      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'light' }));
+    });
+
+    it('turns Auto on and saves it', async () => {
+      withTheme('dark');
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      fireEvent.click(await auto());
+      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'auto' }));
+    });
+
+    it('turns Auto off by saving the mode in effect', async () => {
+      withTheme('auto');
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      const swap = await darkMode();
+      const box = await auto();
+      await waitFor(() => expect(box).toBeChecked());
+      await waitFor(() => expect(document.documentElement.dataset.mode).toBeTruthy());
+      const shown = swap.checked ? 'dark' : 'light';
+      expect(document.documentElement.dataset.mode).toBe(shown);
+      fireEvent.click(box);
+      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: shown }));
+    });
+
+    it('disables both controls until the settings load', async () => {
+      api.getSettings.mockReturnValue(new Promise(() => {}));
+      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      expect(await screen.findByRole('checkbox', { name: 'Dark mode' })).toBeDisabled();
+      expect(await screen.findByRole('checkbox', { name: /^Auto/ })).toBeDisabled();
+    });
   });
 
   it('lists the activity and loads the next page', async () => {

@@ -3,13 +3,14 @@
 import { useRevokeAll, useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { useTheme } from '@/theme/useTheme';
-import type { ThemeSetting } from '@/theme/theme';
+import { DARK_FROM_HOUR, LIGHT_FROM_HOUR } from '@/theme/theme';
 import { SidePanel } from '../SidePanel/SidePanel';
 import { ActivitySection } from './ActivitySection';
 import { MultiPrSection } from './MultiPrSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { RulesSection } from './RulesSection';
 import styles from './Settings.module.css';
+import { ThemeSwap } from './ThemeSwap';
 
 const INTERVALS: { value: string; label: string }[] = [
   { value: '60', label: '1 minute' },
@@ -17,12 +18,6 @@ const INTERVALS: { value: string; label: string }[] = [
   { value: '300', label: '5 minutes' },
   { value: '900', label: '15 minutes' },
   { value: '3600', label: '1 hour' },
-];
-
-const THEMES: { value: ThemeSetting; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'auto', label: 'Auto' },
 ];
 
 function Preferences() {
@@ -85,23 +80,28 @@ function Preferences() {
   );
 }
 
+const hh = (h: number) => String(h).padStart(2, '0');
+
 function ThemeSection() {
-  const { theme, setTheme } = useTheme();
+  const { theme, mode, setTheme } = useTheme();
+  const loading = theme === undefined;
   return (
     <section className={styles.section} aria-labelledby="set-theme">
       <h3 id="set-theme">Theme</h3>
-      <div className={styles.segment} role="group" aria-label="Theme">
-        {THEMES.map((t) => (
-          <button
-            key={t.value}
-            type="button"
-            aria-pressed={theme === t.value}
-            onClick={() => setTheme(t.value)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <ThemeSwap
+        dark={mode === 'dark'}
+        disabled={loading}
+        onChange={(dark) => setTheme(dark ? 'dark' : 'light')}
+      />
+      <label className={styles.check}>
+        <input
+          type="checkbox"
+          checked={theme === 'auto'}
+          disabled={loading}
+          onChange={(e) => setTheme(e.target.checked ? 'auto' : (mode ?? 'light'))}
+        />
+        Auto (light from {hh(LIGHT_FROM_HOUR)}:00 to {hh(DARK_FROM_HOUR)}:00)
+      </label>
     </section>
   );
 }

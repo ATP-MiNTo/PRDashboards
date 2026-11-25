@@ -6,6 +6,14 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.2.2] - 2026-11-25
+
+### Changed
+
+- The Theme section in Settings is a rotating sun/moon toggle plus an "Auto (light from 07:00 to 19:00)"
+  checkbox instead of Light, Dark and Auto buttons. The toggle shows the mode in effect, including in Auto,
+  and using it is an explicit choice that turns Auto off.
+
 ## [1.2.1] - 2026-11-25
 
 ### Changed
