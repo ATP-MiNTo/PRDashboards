@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "headers": {},
+  "body": [
+    { "id": "1", "name": "To Do", "statusCategory": { "key": "new" } },
+    { "id": "3", "name": "In Progress", "statusCategory": { "key": "indeterminate" } },
+    { "id": "4", "name": "done", "statusCategory": { "key": "done" } },
+    { "id": "5", "name": "Done", "statusCategory": { "key": "done" } },
+    { "id": "6", "name": " In Progress ", "statusCategory": { "key": "indeterminate" } },
+    { "id": "7", "name": "", "statusCategory": { "key": "new" } },
+    { "id": "8", "name": "Blocked", "statusCategory": { "key": "indeterminate" } }
+  ]
+}

@@ -201,9 +201,25 @@ func TestModeAnyMovesOnTheFirstPR(t *testing.T) {
 	}
 }
 
+func TestTicketInAnExcludedStatusIsNeverTouched(t *testing.T) {
+	a := pr("PR_a", 1, "acme/web", "feat/OPS-9", "main", "a")
+	r := newRig(t, a)
+	r.putRules(syncRule("done", "review_approved", "DONE", "all"))
+	r.allowTransitions("OPS-9")
+	r.sync()
+	if len(r.jira.transitionLog()) != 0 || len(r.jira.moveLog()) != 0 || len(r.activity()) != 0 || len(r.fired()) != 0 {
+		t.Fatalf("OPS-9 is in Done, which is excluded by default: %v", r.fired())
+	}
+}
+
 func TestTicketAlreadyInTargetRecordsTheFiringWithoutACall(t *testing.T) {
 	a := pr("PR_a", 1, "acme/web", "feat/OPS-9", "main", "a")
 	r := newRig(t, a)
+	noExclusions := store.DefaultSettings()
+	noExclusions.ExcludedStatuses = nil
+	if err := r.store.PutSettings(context.Background(), noExclusions); err != nil {
+		t.Fatal(err)
+	}
 	r.putRules(syncRule("done", "review_approved", "DONE", "all"))
 	r.allowTransitions("OPS-9")
 	r.sync()

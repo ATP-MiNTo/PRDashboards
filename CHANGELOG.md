@@ -6,6 +6,30 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.2.0] - 2026-11-25
+
+### Added
+
+- The top bar has an Account button that opens the connected accounts in a side panel. It shares its
+  shell with the Settings panel, and only one of the two is open at a time. The `/accounts/` page stays.
+- Repositories in Settings fold away (closed by default) and have a "Save all" button that saves every
+  changed and every new repository in one request. Drafts now survive a refresh of the list. New
+  `PUT /api/repos` saves several repositories in one transaction.
+- Status sync rules pick the status to move to, the current-status filter and the Jira project from
+  dropdowns filled with the real Jira statuses and project keys (new `GET /api/jira/options`, one
+  cached Jira call, no GitHub call). The form falls back to what the dashboard knows when Jira gives none.
+- "Exclude statuses" in the rules section: tickets in those statuses (default Done) are never moved,
+  fired or shown as waiting, and have no merge plan.
+
+### Changed
+
+- The theme control moved from the top bar to its own section in Settings, after Sessions. The
+  accounts left the Settings panel.
+- The two polling intervals sit on one line. Per-repository buttons read "Add rule" and "Save".
+- The explanatory texts under Repositories rules and Status sync rules are gone.
+- `PUT /api/repos/{id}` is documented as able to look up unseen tickets in Jira when it rebuilds the
+  snapshot.
+
 ## [1.1.3] - 2026-11-25
 
 ### Fixed

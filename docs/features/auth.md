@@ -23,7 +23,7 @@ Differences from the spec:
 - No private key, app ID or JWT: only user access tokens are used. GitHub ignores `scope` for a
   GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup).
 - Setup is under `/setup`. The PAT form is on the same page. The Connected accounts panel is also
-  in the settings drawer ([settings.md](settings.md)).
+  in the Account side panel of the dashboard, opened from the Account button ([settings.md](settings.md)).
 
 ## Data model
 
@@ -78,7 +78,7 @@ Web:
 - [web/src/lib/githubApp.ts](../../web/src/lib/githubApp.ts): `isAppSlug`, `appInstallUrl` (the install link is rebuilt from the validated slug in the server URL, otherwise none).
 - [web/src/app/oauth/finish/page.tsx](../../web/src/app/oauth/finish/page.tsx) and [web/src/lib/oauthFinish.ts](../../web/src/lib/oauthFinish.ts): clear the query, post to `/api/oauth/complete`, go to `/auth/done/`.
 - [web/src/app/auth/done/page.tsx](../../web/src/app/auth/done/page.tsx): result message and a link back to `/accounts/`.
-- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts on `/accounts/`.
+- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts, on `/accounts/` and in the Account panel.
 - [web/src/api/queries.ts](../../web/src/api/queries.ts) and [providers.tsx](../../web/src/app/providers.tsx): TanStack Query hooks and client. [web/src/lib/problems.ts](../../web/src/lib/problems.ts): problem code to text.
 
 E2e:

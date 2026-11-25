@@ -7,12 +7,13 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Starts the single binary, serves the embedded UI and the API on `127.0.0.1`, and signs the browser
 in with a one-time launch URL. `/` is the dashboard ([command-table.md](command-table.md)) and
 `/accounts/` shows "Signed in", the server version and the Connected accounts panel
-([auth.md](auth.md)). The poller runs inside the binary ([poller.md](poller.md)).
+([auth.md](auth.md)); the dashboard shows the same panel in its Account side panel. The poller runs inside the binary ([poller.md](poller.md)).
 
 Differences from the spec:
 
 - `GET /events` streams server-sent events ([poller.md](poller.md)). The web app manifest and
   service worker are described in [installable-app.md](installable-app.md).
+- The dashboard has a shared side panel ([settings.md](settings.md)) used by the Account and Settings buttons of the top bar.
 - The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
 

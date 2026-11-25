@@ -4,6 +4,7 @@ package linking
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -51,6 +52,19 @@ func NewProjects(keys []string) Projects {
 
 // Known reports whether the project list is available.
 func (p Projects) Known() bool { return p.set != nil }
+
+// Keys returns the project keys in sorted order. It is nil when the list is unknown.
+func (p Projects) Keys() []string {
+	if p.set == nil {
+		return nil
+	}
+	out := make([]string, 0, len(p.set))
+	for k := range p.set {
+		out = append(out, k)
+	}
+	slices.Sort(out)
+	return out
+}
 
 // Has reports whether the project exists. It is false when the list is unknown.
 func (p Projects) Has(project string) bool {

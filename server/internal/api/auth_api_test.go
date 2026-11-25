@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -29,9 +30,10 @@ type settingsBody struct {
 	DefaultMethodForNewRepos string
 	DeleteBranchAfterMerge   bool
 	JiraSiteID               *string
+	ExcludedStatuses         []string
 }
 
-const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"jiraSiteId":null}`
+const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"jiraSiteId":null,"excludedStatuses":["Done","Closed"]}`
 
 func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	g := newRig(t, webFS())
@@ -42,7 +44,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	}
 	got := decode[settingsBody](t, w)
 	if got.Polling.GithubSec != 60 || got.Polling.JiraSec != 300 || got.Theme != "auto" || got.DefaultMethodForNewRepos != "squash" ||
-		got.DeleteBranchAfterMerge || got.JiraSiteID != nil {
+		got.DeleteBranchAfterMerge || got.JiraSiteID != nil || !slices.Equal(got.ExcludedStatuses, []string{"Done"}) {
 		t.Fatalf("defaults %+v", got)
 	}
 	if !strings.Contains(w.Body.String(), `"jiraSiteId":null`) {
@@ -54,7 +56,8 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("put: %d %s", w.Code, w.Body)
 	}
 	got = decode[settingsBody](t, g.do(http.MethodGet, "/api/settings", "", cookie(l.cookie)))
-	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge {
+	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge ||
+		!slices.Equal(got.ExcludedStatuses, []string{"Done", "Closed"}) {
 		t.Fatalf("after put %+v", got)
 	}
 }
@@ -63,16 +66,19 @@ func TestSettingsValidation(t *testing.T) {
 	g := newRig(t, webFS())
 	l := g.login()
 	bad := map[string]string{
-		"interval not allowed": strings.Replace(validSettings, `"githubSec":120`, `"githubSec":61`, 1),
-		"interval as string":   strings.Replace(validSettings, `"githubSec":120`, `"githubSec":"120"`, 1),
-		"theme":                strings.Replace(validSettings, `"dark"`, `"neon"`, 1),
-		"method":               strings.Replace(validSettings, `"rebase"`, `"fast-forward"`, 1),
-		"unknown field":        strings.Replace(validSettings, `"theme"`, `"extra":1,"theme"`, 1),
-		"unknown polling key":  strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":900,"x":1`, 1),
-		"missing field":        `{"polling":{"githubSec":60,"jiraSec":300},"theme":"auto"}`,
-		"flag as string":       strings.Replace(validSettings, `true`, `"yes"`, 1),
-		"empty site":           strings.Replace(validSettings, `"jiraSiteId":null`, `"jiraSiteId":""`, 1),
-		"not an object":        `[]`,
+		"interval not allowed":  strings.Replace(validSettings, `"githubSec":120`, `"githubSec":61`, 1),
+		"interval as string":    strings.Replace(validSettings, `"githubSec":120`, `"githubSec":"120"`, 1),
+		"theme":                 strings.Replace(validSettings, `"dark"`, `"neon"`, 1),
+		"method":                strings.Replace(validSettings, `"rebase"`, `"fast-forward"`, 1),
+		"unknown field":         strings.Replace(validSettings, `"theme"`, `"extra":1,"theme"`, 1),
+		"unknown polling key":   strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":900,"x":1`, 1),
+		"missing field":         `{"polling":{"githubSec":60,"jiraSec":300},"theme":"auto"}`,
+		"flag as string":        strings.Replace(validSettings, `true`, `"yes"`, 1),
+		"empty excluded status": strings.Replace(validSettings, `"Closed"`, `""`, 1),
+		"excluded not a list":   strings.Replace(validSettings, `["Done","Closed"]`, `"Done"`, 1),
+		"too many excluded":     strings.Replace(validSettings, `["Done","Closed"]`, `[`+strings.TrimSuffix(strings.Repeat(`"a",`, 51), ",")+`]`, 1),
+		"empty site":            strings.Replace(validSettings, `"jiraSiteId":null`, `"jiraSiteId":""`, 1),
+		"not an object":         `[]`,
 	}
 	for name, body := range bad {
 		wantProblem(t, g.do(http.MethodPut, "/api/settings", body, l.write()...), http.StatusBadRequest, "invalid_body")

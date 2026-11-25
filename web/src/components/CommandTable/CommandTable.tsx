@@ -10,15 +10,17 @@ import { Filters, StatStrip } from './StatStrip';
 import { Table } from './Table';
 import { TopBar } from './TopBar';
 import { RecentMerges } from './RecentMerges';
+import { AccountsPanel } from '../AccountsPanel';
+import { SidePanel } from '../SidePanel/SidePanel';
 import { SettingsDrawer } from '../Settings/SettingsDrawer';
 import { useSnapshotEvents } from './useSnapshotEvents';
 
 export function CommandTable() {
   const snapshot = useSnapshot();
   const status = useSyncStatus();
-  const { theme, setTheme } = useTheme();
+  useTheme(); // keeps the mode on <html> in step with the setting
   const [filter, setFilter] = useState<Filter>('all');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [panel, setPanel] = useState<'account' | 'settings' | null>(null);
   useSnapshotEvents();
 
   const data = snapshot.data;
@@ -27,9 +29,8 @@ export function CommandTable() {
       <TopBar
         snapshot={data}
         status={status.data}
-        theme={theme}
-        onTheme={setTheme}
-        onSettings={() => setSettingsOpen(true)}
+        onAccount={() => setPanel('account')}
+        onSettings={() => setPanel('settings')}
       />
       <main className={styles.wrap}>
         {snapshot.isPending && <p className={styles.muted}>Loading</p>}
@@ -48,7 +49,10 @@ export function CommandTable() {
           </>
         )}
       </main>
-      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SidePanel open={panel === 'account'} onClose={() => setPanel(null)} title="Account">
+        <AccountsPanel />
+      </SidePanel>
+      <SettingsDrawer open={panel === 'settings'} onClose={() => setPanel(null)} />
     </div>
   );
 }

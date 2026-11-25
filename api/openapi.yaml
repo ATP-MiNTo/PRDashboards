@@ -259,6 +259,25 @@ paths:
           $ref: '#/components/responses/Conflict'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /api/jira/options:
+    get:
+      operationId: getJiraOptions
+      summary: The status names and project keys of the connected Jira site, for the rule form
+      description: >
+        statuses come from one Jira call, cached for 10 minutes, distinct without regard to case
+        and sorted. projects are the keys the last full Jira refresh stored in memory, sorted, with
+        no Jira call. When the statuses call fails for a reason other than the connection, the
+        answer is still 200 with statuses empty, so the form falls back to the statuses it knows.
+        A Jira that is not connected is a 409. No GitHub call.
+      responses:
+        '200':
+          description: The status names and project keys.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JiraOptions'
+        '409':
+          $ref: '#/components/responses/Conflict'
   /api/tickets/{key}/transitions:
     get:
       operationId: getTransitions
@@ -312,6 +331,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Repos'
+    put:
+      operationId: putRepos
+      summary: Set the default method and replace the branch rules of several repositories
+      description: >
+        Applies every update in one transaction (at most 500), so either all of them are saved or,
+        when an id is unknown, none is. Then one rebuild of the snapshot from the data already
+        fetched. No GitHub call. The rebuild asks Jira only about tickets it has not seen yet.
+        clearNew marks a repository as seen. Returns every repository, as the list does.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReposUpdate'
+      responses:
+        '200':
+          description: Every repository after the update, ordered by name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Repos'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/repos/{id}:
     get:
       operationId: getRepo
@@ -332,7 +374,8 @@ paths:
       summary: Set the default method and replace the branch rules of a repository
       description: >
         Replaces the whole rule list in one transaction, then rebuilds the snapshot from the data
-        already fetched. No GitHub or Jira call. clearNew marks the repository as seen.
+        already fetched. No GitHub call. The rebuild asks Jira only about tickets it has not seen
+        yet. clearNew marks the repository as seen.
       parameters:
         - $ref: '#/components/parameters/RepoId'
       requestBody:
@@ -571,7 +614,7 @@ components:
     Settings:
       type: object
       additionalProperties: false
-      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, jiraSiteId]
+      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, jiraSiteId, excludedStatuses]
       properties:
         polling:
           type: object
@@ -595,6 +638,14 @@ components:
           nullable: true
           minLength: 1
           maxLength: 128
+        excludedStatuses:
+          type: array
+          maxItems: 50
+          description: Jira statuses whose tickets no status sync rule ever moves. Compared without regard to case. Defaults to ["Done"].
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
     ClientCredentials:
       type: object
       additionalProperties: false
@@ -1203,6 +1254,37 @@ components:
             $ref: '#/components/schemas/BranchRule'
         clearNew:
           type: boolean
+    ReposUpdate:
+      type: object
+      additionalProperties: false
+      required: [repos]
+      properties:
+        repos:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, update]
+            properties:
+              id:
+                type: string
+              update:
+                $ref: '#/components/schemas/RepoUpdate'
+    JiraOptions:
+      type: object
+      additionalProperties: false
+      required: [statuses, projects]
+      properties:
+        statuses:
+          type: array
+          items:
+            type: string
+        projects:
+          type: array
+          items:
+            type: string
     RuleTrigger:
       type: string
       enum:

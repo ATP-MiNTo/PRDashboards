@@ -29,12 +29,14 @@ type Poller interface {
 	Preview(ctx context.Context, r rules.Rule) (poller.RulePreview, error)
 	Baseline(ctx context.Context, rs []rules.Rule) ([]store.Firing, error)
 	Reschedule()
+	ProjectKeys() []string
 }
 
 // Jira is what the handlers need from the Jira client.
 type Jira interface {
 	Assigned(ctx context.Context, site string, ttl time.Duration) ([]jira.Issue, error)
 	Transitions(ctx context.Context, site, key string) ([]jira.Transition, error)
+	Statuses(ctx context.Context, site string) ([]string, error)
 }
 
 // Config holds what the handler needs.

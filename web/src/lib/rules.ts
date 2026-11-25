@@ -99,6 +99,26 @@ export function statusesOf(s: Snapshot | undefined): string[] {
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
+/** The Jira project keys seen on the tickets of the snapshot, sorted, as a fallback for the project filter. */
+export function projectsOf(s: Snapshot | undefined): string[] {
+  const keys = new Set<string>();
+  for (const pr of s?.prs ?? []) for (const t of pr.tickets) if (t.project) keys.add(t.project);
+  return [...keys].sort((a, b) => a.localeCompare(b));
+}
+
+/** The names with the current value added when it is missing, so a dropdown can still show it. */
+export function withCurrent(names: readonly string[], current: string): string[] {
+  return current !== '' && !names.includes(current) ? [...names, current] : [...names];
+}
+
+/** The list to offer: the Jira list when it has names, else the names the snapshot shows. */
+export function preferList(
+  jira: readonly string[] | undefined,
+  fallback: readonly string[],
+): string[] {
+  return jira && jira.length > 0 ? [...jira] : [...fallback];
+}
+
 const repoName = (nameWithOwner: string) => nameWithOwner.split('/').pop() ?? nameWithOwner;
 
 /** "FE #34" for a pull request in a waiting hint. */

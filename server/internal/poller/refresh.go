@@ -98,7 +98,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	p.mu.Lock()
 	p.ls = ls
 	p.mu.Unlock()
-	out := p.runRules(ctx, now, state, ls, site)
+	out := p.runRules(ctx, now, state, ls, site, st.ExcludedStatuses)
 
 	p.mu.Lock()
 	p.version++
@@ -316,6 +316,14 @@ func (p *Poller) connectJira(ctx context.Context, req request) (jira.Site, bool)
 	}
 	p.jira.site = site
 	return site, req.jira || p.jira.state == "pending" && !req.relink
+}
+
+// ProjectKeys lists, sorted, the Jira project keys the last full Jira refresh stored. It makes no
+// call and is nil until that refresh succeeded.
+func (p *Poller) ProjectKeys() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.jira.projects.Keys()
 }
 
 // fetchProjects loads the project keys, once per full Jira refresh.

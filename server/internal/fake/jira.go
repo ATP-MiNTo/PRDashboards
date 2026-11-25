@@ -47,6 +47,9 @@ func (a *atlassian) issues() []fakeIssue {
 	return out
 }
 
+// jiraStatuses are the status names the fake site has: the ticket fixtures and the transition targets.
+var jiraStatuses = []string{"To Do", "In Progress", "In Review", "Done", "Ready to Merge"}
+
 // transitionTargets maps the status each fake transition leads to onto its category.
 var transitionTargets = map[string]string{"Done": "done", "In Progress": "indeterminate", "Ready to Merge": "indeterminate"}
 
@@ -101,6 +104,14 @@ func (a *atlassian) jiraRoutes(mux *http.ServeMux, calls *jiraCalls) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"issues": issues, "isLast": true})
+	}))
+	mux.HandleFunc("GET "+base+"/status", guard(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Statuses.Add(1)
+		out := make([]map[string]string, len(jiraStatuses))
+		for i, name := range jiraStatuses {
+			out[i] = map[string]string{"name": name}
+		}
+		writeJSON(w, http.StatusOK, out)
 	}))
 	mux.HandleFunc("GET "+base+"/project/search", guard(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Projects.Add(1)
@@ -170,9 +181,9 @@ func (a *atlassian) jiraRoutes(mux *http.ServeMux, calls *jiraCalls) {
 }
 
 type jiraCalls struct {
-	Search, Assigned, Projects, Transitions, Moves atomic.Int64
+	Search, Assigned, Projects, Transitions, Statuses, Moves atomic.Int64
 }
 
 func (c *jiraCalls) snapshot() map[string]int64 {
-	return map[string]int64{"search": c.Search.Load(), "assigned": c.Assigned.Load(), "projects": c.Projects.Load(), "transitions": c.Transitions.Load(), "moves": c.Moves.Load()}
+	return map[string]int64{"search": c.Search.Load(), "assigned": c.Assigned.Load(), "projects": c.Projects.Load(), "transitions": c.Transitions.Load(), "statuses": c.Statuses.Load(), "moves": c.Moves.Load()}
 }

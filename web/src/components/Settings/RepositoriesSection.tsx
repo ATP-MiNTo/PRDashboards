@@ -1,6 +1,13 @@
 import { useId, useMemo, useState } from 'react';
-import type { BranchRule, MergeMethodName, RepoSettings } from '@/api/client';
-import { useRepos, useSaveRepo, useSaveSettings, useSettings, useSnapshot } from '@/api/queries';
+import type { BranchRule, MergeMethodName, RepoSettings, RepoUpdate } from '@/api/client';
+import {
+  useRepos,
+  useSaveRepo,
+  useSaveRepos,
+  useSaveSettings,
+  useSettings,
+  useSnapshot,
+} from '@/api/queries';
 import { METHOD_CHOICES } from '@/lib/merge';
 import type { Snapshot } from '@/api/client';
 import { Pill } from '../CommandTable/Pill';
@@ -85,17 +92,48 @@ function RuleRow({
   );
 }
 
-function RepoPanel({ repo }: { repo: RepoSettings }) {
+/** The unsaved edits of one repository. */
+interface Draft {
+  method: MergeMethodName;
+  rules: BranchRule[];
+}
+
+const draftOf = (r: RepoSettings): Draft => ({ method: r.defaultMethod, rules: r.branchRules });
+const draftValid = (d: Draft) =>
+  d.rules.length <= MAX_RULES && d.rules.every((r) => validPattern(r.pattern));
+const draftChanged = (d: Draft, r: RepoSettings) =>
+  d.method !== r.defaultMethod || JSON.stringify(d.rules) !== JSON.stringify(r.branchRules);
+const toUpdate = (d: Draft): RepoUpdate => ({
+  defaultMethod: d.method,
+  branchRules: d.rules,
+  clearNew: true,
+});
+
+function RepoPanel({
+  repo,
+  draft,
+  changed,
+  valid,
+  saving,
+  failed,
+  onEdit,
+  onSave,
+}: {
+  repo: RepoSettings;
+  draft: Draft;
+  changed: boolean;
+  valid: boolean;
+  saving: boolean;
+  failed: boolean;
+  onEdit: (next: Draft) => void;
+  onSave: () => void;
+}) {
   const id = useId();
   const [open, setOpen] = useState(repo.isNew);
-  const [method, setMethod] = useState(repo.defaultMethod);
-  const [rules, setRules] = useState(repo.branchRules);
-  const save = useSaveRepo();
   const branches = useSnapshot((s) => branchesOf(s, repo.id)).data ?? [];
+  const { method, rules } = draft;
 
-  const changed =
-    method !== repo.defaultMethod || JSON.stringify(rules) !== JSON.stringify(repo.branchRules);
-  const valid = rules.length <= MAX_RULES && rules.every((r) => validPattern(r.pattern));
+  const setRules = (next: BranchRule[]) => onEdit({ method, rules: next });
   const edit = (i: number, r: BranchRule) => setRules(rules.map((x, j) => (j === i ? r : x)));
   const move = (from: number, to: number) => {
     const next = [...rules];
@@ -131,11 +169,10 @@ function RepoPanel({ repo }: { repo: RepoSettings }) {
               label={`Default method of ${repo.nameWithOwner}`}
               value={method}
               options={METHOD_CHOICES}
-              onChange={setMethod}
+              onChange={(m) => onEdit({ method: m, rules })}
             />
           </div>
           <h4>Branch rules</h4>
-          <p className={styles.muted}>The first rule that matches the base branch wins.</p>
           <datalist id={`${id}-branches`}>
             {branches.map((b) => (
               <option key={b} value={b} />
@@ -156,26 +193,21 @@ function RepoPanel({ repo }: { repo: RepoSettings }) {
               />
             ))}
           </ol>
-          <div className={styles.actions}>
+          <div className={styles.actions} role="group" aria-label={repo.nameWithOwner}>
             <button
               type="button"
               disabled={rules.length >= MAX_RULES}
               onClick={() => setRules([...rules, { pattern: '', method }])}
             >
-              Add rule to {repo.nameWithOwner}
+              Add rule
             </button>
             <button
               type="button"
               className={styles.primary}
-              disabled={!valid || (!changed && !repo.isNew) || save.isPending}
-              onClick={() =>
-                save.mutate({
-                  id: repo.id,
-                  update: { defaultMethod: method, branchRules: rules, clearNew: true },
-                })
-              }
+              disabled={!valid || (!changed && !repo.isNew) || saving}
+              onClick={onSave}
             >
-              Save {repo.nameWithOwner}
+              Save
             </button>
           </div>
           {!valid && (
@@ -183,7 +215,7 @@ function RepoPanel({ repo }: { repo: RepoSettings }) {
               Patterns use letters, digits and . _ / * - only, up to 200 characters.
             </p>
           )}
-          {save.isError && (
+          {failed && (
             <p className={styles.error} role="alert">
               Could not save the repository.
             </p>
@@ -214,37 +246,129 @@ export function DefaultMethod() {
 
 export function RepositoriesSection() {
   const repos = useRepos();
+  const saveOne = useSaveRepo();
+  const saveAll = useSaveRepos();
+  const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [failed, setFailed] = useState<string | null>(null);
+  const panelId = useId();
+  const list = repos.data?.repos;
   const q = query.trim().toLowerCase();
   const shown = useMemo(
-    () => (repos.data?.repos ?? []).filter((r) => r.nameWithOwner.toLowerCase().includes(q)),
-    [repos.data, q],
+    () => (list ?? []).filter((r) => r.nameWithOwner.toLowerCase().includes(q)),
+    [list, q],
   );
+
+  // Only repositories with a draft are compared, so an untouched list costs nothing.
+  const states = useMemo(() => {
+    const out = new Map<string, { changed: boolean; valid: boolean }>();
+    for (const r of list ?? []) {
+      const d = drafts[r.id];
+      out.set(
+        r.id,
+        d ? { changed: draftChanged(d, r), valid: draftValid(d) } : { changed: false, valid: true },
+      );
+    }
+    return out;
+  }, [list, drafts]);
+
+  const toSave = (list ?? []).filter((r) => states.get(r.id)?.changed || r.isNew);
+  const saving = saveOne.isPending || saveAll.isPending;
+  const canSaveAll = toSave.length > 0 && !saving && toSave.every((r) => states.get(r.id)?.valid);
+
+  const forget = (ids: string[]) =>
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const id of ids) delete next[id];
+      return next;
+    });
+  const draftFor = (r: RepoSettings) => drafts[r.id] ?? draftOf(r);
+
+  const save = (r: RepoSettings) => {
+    setFailed(null);
+    saveOne.mutate(
+      { id: r.id, update: toUpdate(draftFor(r)) },
+      { onSuccess: () => forget([r.id]), onError: () => setFailed(r.id) },
+    );
+  };
+  const saveEvery = () => {
+    setFailed(null);
+    saveAll.mutate(
+      { repos: toSave.map((r) => ({ id: r.id, update: toUpdate(draftFor(r)) })) },
+      { onSuccess: () => forget(toSave.map((r) => r.id)), onError: () => setFailed('all') },
+    );
+  };
+
   return (
     <section className={styles.section} aria-labelledby="set-repos">
-      <h3 id="set-repos">Repositories</h3>
-      <DefaultMethod />
-      <input
-        type="search"
-        aria-label="Search repositories"
-        placeholder="Search repositories"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {repos.isPending && <p className={styles.muted}>Loading repositories</p>}
-      {repos.isError && (
-        <p className={styles.error} role="alert">
-          Could not load the repositories.
-        </p>
+      <h3 id="set-repos" className={styles.foldHead}>
+        <button
+          type="button"
+          className={styles.foldButton}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          Repositories
+        </button>
+      </h3>
+      {expanded && (
+        <div id={panelId} className={styles.group}>
+          <DefaultMethod />
+          <input
+            type="search"
+            aria-label="Search repositories"
+            placeholder="Search repositories"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {repos.isPending && <p className={styles.muted}>Loading repositories</p>}
+          {repos.isError && (
+            <p className={styles.error} role="alert">
+              Could not load the repositories.
+            </p>
+          )}
+          {repos.isSuccess && shown.length === 0 && (
+            <p className={styles.muted}>{q ? 'No repository matches.' : 'No repositories yet.'}</p>
+          )}
+          <ul className={styles.repos}>
+            {shown.map((r) => {
+              const st = states.get(r.id);
+              return (
+                <RepoPanel
+                  key={r.id}
+                  repo={r}
+                  draft={draftFor(r)}
+                  changed={st?.changed ?? false}
+                  valid={st?.valid ?? true}
+                  saving={saving}
+                  failed={failed === r.id}
+                  onEdit={(next) => setDrafts((prev) => ({ ...prev, [r.id]: next }))}
+                  onSave={() => save(r)}
+                />
+              );
+            })}
+          </ul>
+          {repos.isSuccess && (list?.length ?? 0) > 0 && (
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.primary}
+                disabled={!canSaveAll}
+                onClick={saveEvery}
+              >
+                Save all
+              </button>
+            </div>
+          )}
+          {failed === 'all' && (
+            <p className={styles.error} role="alert">
+              Could not save the repositories.
+            </p>
+          )}
+        </div>
       )}
-      {repos.isSuccess && shown.length === 0 && (
-        <p className={styles.muted}>{q ? 'No repository matches.' : 'No repositories yet.'}</p>
-      )}
-      <ul className={styles.repos}>
-        {shown.map((r) => (
-          <RepoPanel key={`${r.id}-${JSON.stringify(r)}`} repo={r} />
-        ))}
-      </ul>
     </section>
   );
 }

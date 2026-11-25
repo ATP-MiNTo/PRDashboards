@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   getActivity: vi.fn(),
   getRetries: vi.fn(),
   getRules: vi.fn(),
+  getJiraOptions: vi.fn(),
   putRules: vi.fn(),
   previewRule: vi.fn(),
   revokeAllSessions: vi.fn(),
@@ -33,6 +34,7 @@ const settings = {
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
   jiraSiteId: null,
+  excludedStatuses: ['Done'],
 };
 
 beforeEach(() => {
@@ -51,6 +53,7 @@ beforeEach(() => {
   api.getActivity.mockResolvedValue({ items: [], nextCursor: null });
   api.getRetries.mockResolvedValue({ retries: [] });
   api.getRules.mockResolvedValue({ rules: [] });
+  api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
 });
 
 const lastSaved = () => api.putSettings.mock.calls.at(-1)?.[0];
@@ -65,8 +68,8 @@ describe('SettingsDrawer', () => {
     renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(within(dialog).queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
     for (const name of [
-      'Connected accounts',
       'Repositories',
       'Delete branch after merge',
       'Polling intervals',
@@ -78,6 +81,38 @@ describe('SettingsDrawer', () => {
     ]) {
       expect(await within(dialog).findByRole('heading', { name })).toBeInTheDocument();
     }
+  });
+
+  it('orders the sections: repositories, preferences, rules, multi-PR, sessions, theme, activity', async () => {
+    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    await within(dialog).findByRole('heading', { name: 'Activity' });
+    await within(dialog).findByRole('heading', { name: 'Polling intervals' });
+    const names = within(dialog)
+      .getAllByRole('heading', { level: 3 })
+      .map((h) => h.textContent);
+    expect(names).toEqual([
+      'Repositories',
+      'Delete branch after merge',
+      'Polling intervals',
+      'Status sync rules',
+      'Multi-PR tickets',
+      'Sessions',
+      'Theme',
+      'Activity',
+    ]);
+  });
+
+  it('puts both polling selects on one line with a hidden separator', async () => {
+    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    const github = await screen.findByLabelText('GitHub');
+    const jira = screen.getByLabelText('Jira');
+    expect(github.closest('div')).toBe(jira.closest('div'));
+    const line = github.closest('div')!;
+    const sep = within(line).getByText('|');
+    expect(sep).toHaveAttribute('aria-hidden', 'true');
+    expect(github.compareDocumentPosition(sep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sep.compareDocumentPosition(jira) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('moves focus into the dialog and gives it back on close', () => {
@@ -96,7 +131,7 @@ describe('SettingsDrawer', () => {
     renderWithClient(<SettingsDrawer open onClose={onClose} />);
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByTestId('settings-scrim'));
+    fireEvent.click(screen.getByTestId('side-panel-scrim'));
     expect(onClose).toHaveBeenCalledTimes(2);
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
     expect(onClose).toHaveBeenCalledTimes(3);
@@ -124,7 +159,7 @@ describe('SettingsDrawer', () => {
     expect(last).toHaveFocus();
   });
 
-  it('saves the delete-branch default, the polling intervals and the theme', async () => {
+  it('saves the delete-branch default and the polling intervals', async () => {
     renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole('checkbox', { name: /Delete the head branch/ }));
     await waitFor(() =>
@@ -137,7 +172,13 @@ describe('SettingsDrawer', () => {
     await waitFor(() =>
       expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 900, jiraSec: 300 } }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+  });
+
+  it('saves a new theme from its own section', async () => {
+    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    await screen.findByRole('checkbox', { name: /Delete the head branch/ });
+    const theme = within(await screen.findByRole('group', { name: 'Theme' }));
+    fireEvent.click(theme.getByRole('button', { name: 'Dark' }));
     await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'dark' }));
   });
 

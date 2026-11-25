@@ -115,6 +115,30 @@ func (h *handlers) GetAssignedTickets(ctx context.Context, _ gen.GetAssignedTick
 	return gen.GetAssignedTickets200JSONResponse(out), nil
 }
 
+// GetJiraOptions serves the choices of the rule form. The projects come from memory. A statuses call
+// that fails for a reason other than the connection still answers 200 with no statuses, so the form
+// falls back to the statuses of the snapshot.
+func (h *handlers) GetJiraOptions(ctx context.Context, _ gen.GetJiraOptionsRequestObject) (gen.GetJiraOptionsResponseObject, error) {
+	site, err := h.jiraSite(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := gen.JiraOptions{Statuses: []string{}, Projects: []string{}}
+	if h.cfg.Poller != nil {
+		out.Projects = append(out.Projects, h.cfg.Poller.ProjectKeys()...)
+	}
+	statuses, err := h.cfg.Jira.Statuses(ctx, site.ID)
+	switch {
+	case err == nil:
+		out.Statuses = append(out.Statuses, statuses...)
+	case errors.Is(err, jira.ErrUnauthorized), errors.Is(err, auth.ErrNotConnected), errors.Is(err, auth.ErrNeedsReconnect):
+		return nil, h.jiraProblem(ctx, err)
+	default:
+		h.cfg.Log.WarnContext(ctx, "jira statuses failed", "err", err)
+	}
+	return gen.GetJiraOptions200JSONResponse(out), nil
+}
+
 func (h *handlers) GetTransitions(ctx context.Context, req gen.GetTransitionsRequestObject) (gen.GetTransitionsResponseObject, error) {
 	site, err := h.jiraSite(ctx)
 	if err != nil {

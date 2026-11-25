@@ -1,17 +1,9 @@
-import Link from 'next/link';
 import type { Snapshot, SourceStatus, SyncStatus } from '@/api/client';
 import { useSyncNow } from '@/api/queries';
 import { countdown, sourceLabel } from '@/lib/snapshot';
-import type { ThemeSetting } from '@/theme/theme';
 import styles from './CommandTable.module.css';
 import { RelativeTime } from './RelativeTime';
 import { useNow } from './useNow';
-
-const THEMES: { value: ThemeSetting; label: string }[] = [
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-  { value: 'auto', label: 'Auto' },
-];
 
 function Countdown({ iso }: { iso: string | null }) {
   const now = useNow(1000);
@@ -32,14 +24,12 @@ function Source({ name, source }: { name: string; source: SourceStatus }) {
 export function TopBar({
   snapshot,
   status,
-  theme,
-  onTheme,
+  onAccount,
   onSettings,
 }: {
   snapshot: Snapshot | undefined;
   status: SyncStatus | null | undefined;
-  theme: ThemeSetting | undefined;
-  onTheme: (t: ThemeSetting) => void;
+  onAccount: () => void;
   onSettings: () => void;
 }) {
   const sync = useSyncNow();
@@ -54,18 +44,6 @@ export function TopBar({
           <span>assigned or opened by you</span>
         </div>
         <div className={styles.tbRight}>
-          <div className={styles.seg} role="group" aria-label="Theme">
-            {THEMES.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                aria-pressed={theme === t.value}
-                onClick={() => onTheme(t.value)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
           <button
             type="button"
             className={running ? `${styles.tbButton} ${styles.spin}` : styles.tbButton}
@@ -74,9 +52,14 @@ export function TopBar({
           >
             {running ? 'Syncing' : 'Sync'}
           </button>
-          <Link className={styles.tbButton} href="/accounts/">
-            Accounts
-          </Link>
+          <button
+            type="button"
+            className={styles.tbButton}
+            aria-haspopup="dialog"
+            onClick={onAccount}
+          >
+            Account
+          </button>
           <button
             type="button"
             className={styles.tbButton}

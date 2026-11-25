@@ -7,6 +7,7 @@ import { renderWithClient } from '@/test-utils';
 const api = vi.hoisted(() => ({
   getRepos: vi.fn(),
   putRepo: vi.fn(),
+  putRepos: vi.fn(),
   getSnapshot: vi.fn(),
   getSettings: vi.fn(),
   putSettings: vi.fn(),
@@ -37,6 +38,7 @@ beforeEach(() => {
     repos: [repo('R1', 'acme/web'), repo('R2', 'acme/api', { isNew: true, openPrs: 1 })],
   });
   api.putRepo.mockImplementation((_id: string, u: unknown) => Promise.resolve(u));
+  api.putRepos.mockImplementation(() => Promise.resolve({ repos: [] }));
   api.getSnapshot.mockResolvedValue(
     snapshot([
       pr('a', 1, { baseRef: 'main', headRef: 'feat/x' }),
@@ -54,13 +56,39 @@ beforeEach(() => {
     defaultMethodForNewRepos: 'squash',
     deleteBranchAfterMerge: false,
     jiraSiteId: null,
+    excludedStatuses: ['Done'],
   });
   api.putSettings.mockImplementation((s: unknown) => Promise.resolve(s));
 });
 
+/** Renders the section and unfolds it. */
+async function renderOpen() {
+  renderWithClient(<RepositoriesSection />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
+}
+
+const group = (repoName: string) => within(screen.getByRole('group', { name: repoName }));
+
 describe('RepositoriesSection', () => {
-  it('lists repositories collapsed, and opens a new one with its badge and note', async () => {
+  it('is folded by default and hides the list and its controls', async () => {
     renderWithClient(<RepositoriesSection />);
+    const fold = await screen.findByRole('button', { name: 'Repositories' });
+    expect(fold).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: /^acme\/web/ })).toBeNull();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Default for new repositories' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save all' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Repositories' })).toContainElement(fold);
+    fireEvent.click(fold);
+    expect(fold).toHaveAttribute('aria-expanded', 'true');
+    expect(await screen.findByRole('button', { name: /^acme\/web/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save all' })).toBeInTheDocument();
+    fireEvent.click(fold);
+    expect(screen.queryByRole('button', { name: /^acme\/web/ })).toBeNull();
+  });
+
+  it('lists repositories collapsed, and opens a new one with its badge and note', async () => {
+    await renderOpen();
     const web = await screen.findByRole('button', { name: /^acme\/web/ });
     const api2 = screen.getByRole('button', { name: /^acme\/api/ });
     expect(web).toHaveAttribute('aria-expanded', 'false');
@@ -72,7 +100,7 @@ describe('RepositoriesSection', () => {
   });
 
   it('filters by the search text', async () => {
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     await screen.findByRole('button', { name: /^acme\/web/ });
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search repositories' }), {
       target: { value: 'API' },
@@ -84,7 +112,7 @@ describe('RepositoriesSection', () => {
   });
 
   it('saves the default for new repositories', async () => {
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     fireEvent.click(await screen.findByRole('combobox', { name: 'Default for new repositories' }));
     fireEvent.click(screen.getByRole('option', { name: 'Rebase' }));
     await waitFor(() => expect(api.putSettings).toHaveBeenCalled());
@@ -94,7 +122,7 @@ describe('RepositoriesSection', () => {
   });
 
   it('edits the ordered rules: add, change, reorder and remove, then saves them in one request', async () => {
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     fireEvent.click(await screen.findByRole('button', { name: /^acme\/web/ }));
     const list = screen.getByRole('list', { name: 'Branch rules of acme/web' });
     expect(
@@ -102,7 +130,7 @@ describe('RepositoriesSection', () => {
         .getAllByRole('combobox', { name: /Branch pattern/ })
         .map((i) => (i as HTMLInputElement).value),
     ).toEqual(['main', 'production']);
-    fireEvent.click(screen.getByRole('button', { name: 'Add rule to acme/web' }));
+    fireEvent.click(group('acme/web').getByRole('button', { name: 'Add rule' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Branch pattern 3 of acme/web' }), {
       target: { value: 'release/*' },
     });
@@ -115,7 +143,7 @@ describe('RepositoriesSection', () => {
     ).toEqual(['release/*', 'production']);
     fireEvent.click(screen.getByRole('combobox', { name: 'Default method of acme/web' }));
     fireEvent.click(screen.getByRole('option', { name: 'Merge commit' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save acme/web' }));
+    fireEvent.click(group('acme/web').getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(api.putRepo).toHaveBeenCalledTimes(1));
     expect(api.putRepo).toHaveBeenCalledWith('R1', {
       defaultMethod: 'merge',
@@ -128,7 +156,7 @@ describe('RepositoriesSection', () => {
   });
 
   it('feeds the pattern combobox from the branches of that repository only', async () => {
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     fireEvent.click(await screen.findByRole('button', { name: /^acme\/web/ }));
     const input = screen.getByRole('combobox', { name: 'Branch pattern 1 of acme/web' });
     const options = [
@@ -138,9 +166,9 @@ describe('RepositoriesSection', () => {
   });
 
   it('rejects a bad pattern and keeps Save disabled', async () => {
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     fireEvent.click(await screen.findByRole('button', { name: /^acme\/web/ }));
-    const save = screen.getByRole('button', { name: 'Save acme/web' });
+    const save = group('acme/web').getByRole('button', { name: 'Save' });
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByRole('combobox', { name: 'Branch pattern 1 of acme/web' }), {
       target: { value: 'a b(' },
@@ -164,14 +192,14 @@ describe('RepositoriesSection', () => {
         }),
       ],
     });
-    renderWithClient(<RepositoriesSection />);
+    await renderOpen();
     fireEvent.click(await screen.findByRole('button', { name: /^acme\/web/ }));
-    expect(screen.getByRole('button', { name: 'Add rule to acme/web' })).toBeDisabled();
+    expect(group('acme/web').getByRole('button', { name: 'Add rule' })).toBeDisabled();
   });
 
   it('lets a new repository be confirmed without changes', async () => {
-    renderWithClient(<RepositoriesSection />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Save acme/api' }));
+    await renderOpen();
+    fireEvent.click(await group('acme/api').findByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(api.putRepo).toHaveBeenCalledWith('R2', expect.objectContaining({ clearNew: true })),
     );
@@ -179,9 +207,112 @@ describe('RepositoriesSection', () => {
 
   it('shows an error when the save fails', async () => {
     api.putRepo.mockRejectedValue(new Error('x'));
-    renderWithClient(<RepositoriesSection />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Save acme/api' }));
+    await renderOpen();
+    fireEvent.click(await group('acme/api').findByRole('button', { name: 'Save' }));
     expect(await screen.findByText('Could not save the repository.')).toBeInTheDocument();
+  });
+});
+
+describe('Save all', () => {
+  const edit = async (name: string, pattern: string) => {
+    const web = await screen.findByRole('button', { name: new RegExp(`^${name}`) });
+    if (web.getAttribute('aria-expanded') === 'false') fireEvent.click(web);
+    fireEvent.change(screen.getByRole('combobox', { name: `Branch pattern 1 of ${name}` }), {
+      target: { value: pattern },
+    });
+  };
+
+  it('is disabled while nothing is changed and no repository is new', async () => {
+    api.getRepos.mockResolvedValue({ repos: [repo('R1', 'acme/web')] });
+    await renderOpen();
+    await screen.findByRole('button', { name: /^acme\/web/ });
+    expect(screen.getByRole('button', { name: 'Save all' })).toBeDisabled();
+  });
+
+  it('saves every changed and every new repository in one request', async () => {
+    api.getRepos.mockResolvedValue({
+      repos: [
+        repo('R1', 'acme/web'),
+        repo('R2', 'acme/api', { isNew: true }),
+        repo('R3', 'acme/docs'),
+      ],
+    });
+    await renderOpen();
+    await edit('acme/web', 'develop');
+    const all = screen.getByRole('button', { name: 'Save all' });
+    expect(all).toBeEnabled();
+    fireEvent.click(all);
+    await waitFor(() => expect(api.putRepos).toHaveBeenCalledTimes(1));
+    expect(api.putRepo).not.toHaveBeenCalled();
+    const { repos } = api.putRepos.mock.calls[0]![0] as {
+      repos: {
+        id: string;
+        update: { defaultMethod: string; branchRules: unknown[]; clearNew: boolean };
+      }[];
+    };
+    expect(repos.map((r) => r.id)).toEqual(['R1', 'R2']);
+    expect(repos[0]!.update).toEqual({
+      defaultMethod: 'squash',
+      branchRules: [
+        { pattern: 'develop', method: 'merge' },
+        { pattern: 'production', method: 'merge' },
+      ],
+      clearNew: true,
+    });
+    expect(repos[1]!.update.clearNew).toBe(true);
+  });
+
+  it('drops the saved drafts and refetches the repositories', async () => {
+    await renderOpen();
+    await edit('acme/web', 'develop');
+    fireEvent.click(screen.getByRole('button', { name: 'Save all' }));
+    await waitFor(() => expect(api.putRepos).toHaveBeenCalled());
+    await waitFor(() => expect(api.getRepos).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('combobox', { name: 'Branch pattern 1 of acme/web' })).toHaveValue(
+      'main',
+    );
+  });
+
+  it('is disabled while a changed draft is invalid', async () => {
+    api.getRepos.mockResolvedValue({ repos: [repo('R1', 'acme/web')] });
+    await renderOpen();
+    await edit('acme/web', 'a b(');
+    expect(screen.getByRole('button', { name: 'Save all' })).toBeDisabled();
+    await edit('acme/web', 'main2');
+    expect(screen.getByRole('button', { name: 'Save all' })).toBeEnabled();
+  });
+
+  it('is disabled while a save is pending', async () => {
+    api.putRepos.mockReturnValue(new Promise(() => undefined));
+    api.getRepos.mockResolvedValue({ repos: [repo('R1', 'acme/web')] });
+    await renderOpen();
+    await edit('acme/web', 'develop');
+    fireEvent.click(screen.getByRole('button', { name: 'Save all' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save all' })).toBeDisabled());
+    expect(group('acme/web').getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  it('keeps the drafts and says so when the request fails', async () => {
+    api.putRepos.mockRejectedValue(new Error('x'));
+    api.getRepos.mockResolvedValue({ repos: [repo('R1', 'acme/web')] });
+    await renderOpen();
+    await edit('acme/web', 'develop');
+    fireEvent.click(screen.getByRole('button', { name: 'Save all' }));
+    expect(await screen.findByText('Could not save the repositories.')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Branch pattern 1 of acme/web' })).toHaveValue(
+      'develop',
+    );
+  });
+
+  it('keeps the drafts of one repository when another is saved on its own', async () => {
+    await renderOpen();
+    await edit('acme/web', 'develop');
+    fireEvent.click(await group('acme/api').findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(api.putRepo).toHaveBeenCalledWith('R2', expect.anything()));
+    await waitFor(() => expect(api.getRepos).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('combobox', { name: 'Branch pattern 1 of acme/web' })).toHaveValue(
+      'develop',
+    );
   });
 });
 

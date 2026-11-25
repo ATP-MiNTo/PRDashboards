@@ -52,7 +52,8 @@ test("moves INP-105 only after the third approval", async ({
   await drawer.getByRole("button", { name: "Add rule", exact: true }).click();
   const form = drawer.getByRole("form", { name: "New rule" });
   await form.getByLabel("When").selectOption("review_approved");
-  await form.getByLabel("Move the ticket to").fill("Ready to Merge");
+  await form.getByRole("combobox", { name: "Move the ticket to" }).click();
+  await page.getByRole("option", { name: "Ready to Merge" }).click();
   await form.getByRole("button", { name: "Preview" }).click();
   await expect(form.getByRole("region", { name: "Preview" })).toBeVisible();
   // The approved fixture pull requests already match, and they must stay where they are.

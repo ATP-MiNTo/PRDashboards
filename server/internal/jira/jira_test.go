@@ -227,6 +227,49 @@ func TestProjectsFollowsPages(t *testing.T) {
 	}
 }
 
+func TestStatusesAreDistinctSortedAndCachedFor10Minutes(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, nil, "statuses")
+	got, err := r.c.Statuses(ctx, site)
+	if err != nil || !slices.Equal(got, []string{"Blocked", "done", "In Progress", "To Do"}) {
+		t.Fatalf("case-insensitive duplicates and blanks are dropped, the rest sorted: %v %v", got, err)
+	}
+	calls := r.seen()
+	if len(calls) != 1 || calls[0].Method != "GET" || calls[0].Path != "/ex/jira/cloud-1/rest/api/3/status" || calls[0].Auth != "Bearer tok" {
+		t.Fatalf("%+v", calls)
+	}
+	got[0] = "changed"
+	r.clock.Advance(jira.StatusesTTL - time.Second)
+	again, err := r.c.Statuses(ctx, site)
+	if err != nil || again[0] != "Blocked" || len(r.seen()) != 1 {
+		t.Fatalf("a cache hit makes no call and returns a copy: %v %v %d", again, err, len(r.seen()))
+	}
+	if _, err := r.c.Statuses(ctx, "cloud-2"); err != nil || len(r.seen()) != 2 {
+		t.Fatalf("the cache is per site: %v %d", err, len(r.seen()))
+	}
+	r.clock.Advance(2 * time.Second)
+	if _, err := r.c.Statuses(ctx, site); err != nil || len(r.seen()) != 3 {
+		t.Fatalf("expired after 10 minutes: %v %d", err, len(r.seen()))
+	}
+}
+
+func TestStatusesErrors(t *testing.T) {
+	ctx := context.Background()
+	if _, err := newRig(t, nil, "unauthorized").c.Statuses(ctx, site); !errors.Is(err, jira.ErrUnauthorized) {
+		t.Fatalf("401: %v", err)
+	}
+	if _, err := newRig(t, nil, "statuses").c.Statuses(ctx, "bad site"); !errors.Is(err, jira.ErrBadInput) {
+		t.Fatalf("site: %v", err)
+	}
+	r := newRig(t, func(_ call, w http.ResponseWriter) bool { _, _ = io.WriteString(w, "not json"); return true })
+	if _, err := r.c.Statuses(ctx, site); err == nil {
+		t.Fatal("bad body")
+	}
+	if _, err := r.c.Statuses(ctx, site); err == nil || len(r.seen()) != 2 {
+		t.Fatalf("a failure is not cached: %d", len(r.seen()))
+	}
+}
+
 func TestAssignedIsCachedForTheTTL(t *testing.T) {
 	r := newRig(t, nil, "assigned")
 	ctx := context.Background()

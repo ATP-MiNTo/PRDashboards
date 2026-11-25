@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +35,7 @@ type stubPoller struct {
 	baselined     []rules.Rule
 	preview       poller.RulePreview
 	baseline      []store.Firing
+	projects      []string
 }
 
 func newStubPoller(prs ...gen.SnapshotPr) *stubPoller {
@@ -89,6 +91,7 @@ func (s *stubPoller) Reschedule() {
 	defer s.mu.Unlock()
 	s.reschedules++
 }
+func (s *stubPoller) ProjectKeys() []string { return s.projects }
 func (s *stubPoller) counts() (triggers, relinks, reschedules int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -99,6 +102,8 @@ type stubJira struct {
 	issues      []jira.Issue
 	transitions []jira.Transition
 	err         error
+	statuses    []string
+	statusErr   error
 	gotTTL      time.Duration
 	gotSite     string
 }
@@ -106,6 +111,11 @@ type stubJira struct {
 func (j *stubJira) Assigned(_ context.Context, site string, ttl time.Duration) ([]jira.Issue, error) {
 	j.gotSite, j.gotTTL = site, ttl
 	return j.issues, j.err
+}
+
+func (j *stubJira) Statuses(_ context.Context, site string) ([]string, error) {
+	j.gotSite = site
+	return j.statuses, j.statusErr
 }
 
 func (j *stubJira) Transitions(_ context.Context, site, _ string) ([]jira.Transition, error) {
@@ -291,7 +301,7 @@ func TestTransitionsAreMappedAndErrorsBecomeProblems(t *testing.T) {
 func TestConnectionAndSettingChangesWakeThePoller(t *testing.T) {
 	g := newSnapRig(t)
 	put := func(site string) {
-		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"squash","deleteBranchAfterMerge":true,"jiraSiteId":` + site + `}`
+		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"squash","deleteBranchAfterMerge":true,"jiraSiteId":` + site + `,"excludedStatuses":["Done","QA"]}`
 		if w := g.do(http.MethodPut, "/api/settings", body, g.l.write()...); w.Code != http.StatusOK {
 			t.Fatalf("%d %s", w.Code, w.Body)
 		}
@@ -299,6 +309,13 @@ func TestConnectionAndSettingChangesWakeThePoller(t *testing.T) {
 	put("null")
 	if tr, _, rs := g.p.counts(); tr != 0 || rs != 1 {
 		t.Fatalf("a settings change reschedules only: triggers %d reschedules %d", tr, rs)
+	}
+	if g.p.reevaluations != 1 {
+		t.Fatalf("changing the excluded statuses evaluates the rules again: %d", g.p.reevaluations)
+	}
+	put("null")
+	if g.p.reevaluations != 1 {
+		t.Fatalf("saving the same excluded statuses does not: %d", g.p.reevaluations)
 	}
 	if w := g.do(http.MethodPut, "/api/github/pat", `{"token":"ghp_pat"}`, g.l.write()...); w.Code != http.StatusOK {
 		t.Fatalf("%d %s", w.Code, w.Body)
@@ -338,5 +355,38 @@ func TestEventsStreamWithAHeartbeat(t *testing.T) {
 	if w.Code != http.StatusOK || w.Header().Get("Content-Type") != "text/event-stream" || w.Header().Get("Cache-Control") != "no-store" ||
 		!strings.Contains(body, ": heartbeat") {
 		t.Fatalf("%d %v %q", w.Code, w.Header(), body)
+	}
+}
+
+func TestJiraOptionsReturnStatusesAndProjectsAndDegradeToProjects(t *testing.T) {
+	g := newSnapRig(t)
+	g.p.projects = []string{"INP", "OPS"}
+	g.j.statuses = []string{"Done", "To Do"}
+	w := g.do(http.MethodGet, "/api/jira/options", "", cookie(g.l.cookie))
+	var out gen.JiraOptions
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &out) != nil ||
+		!slices.Equal(out.Statuses, []string{"Done", "To Do"}) || !slices.Equal(out.Projects, []string{"INP", "OPS"}) || g.j.gotSite != "cloud-1" {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+
+	g.j.statuses, g.p.projects = nil, nil
+	if w := g.do(http.MethodGet, "/api/jira/options", "", cookie(g.l.cookie)); !strings.Contains(w.Body.String(), `"statuses":[]`) || !strings.Contains(w.Body.String(), `"projects":[]`) {
+		t.Fatalf("empty lists are arrays: %s", w.Body)
+	}
+
+	g.p.projects = []string{"INP"}
+	g.j.statusErr = &jira.StatusError{Status: 503}
+	w = g.do(http.MethodGet, "/api/jira/options", "", cookie(g.l.cookie))
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"statuses":[]`) || !strings.Contains(w.Body.String(), `"projects":["INP"]`) {
+		t.Fatalf("a failing statuses call still gives the projects: %d %s", w.Code, w.Body)
+	}
+	g.j.statusErr = jira.ErrUnauthorized
+	wantProblem(t, g.do(http.MethodGet, "/api/jira/options", "", cookie(g.l.cookie)), http.StatusConflict, "not_connected")
+	g.j.statusErr = nil
+	g.a.err = auth.ErrNotConnected
+	wantProblem(t, g.do(http.MethodGet, "/api/jira/options", "", cookie(g.l.cookie)), http.StatusConflict, "not_connected")
+	g.a.err = nil
+	if triggers, _, _ := g.p.counts(); triggers != 0 {
+		t.Fatal("reading the options must not refresh")
 	}
 }

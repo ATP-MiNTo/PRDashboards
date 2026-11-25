@@ -1,11 +1,20 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { SyncRule } from '@/api/client';
-import { useRules, useSaveRules, useSnapshot } from '@/api/queries';
+import {
+  useJiraOptions,
+  useRules,
+  useSaveRules,
+  useSaveSettings,
+  useSettings,
+  useSnapshot,
+} from '@/api/queries';
 import {
   describeFilters,
   MAX_RULES,
   modeLabel,
   newRule,
+  preferList,
+  projectsOf,
   ruleName,
   statusesOf,
   triggerLabel,
@@ -22,10 +31,73 @@ function summary(r: SyncRule): string {
   return `${when}, then move to ${r.target}${filters.length ? ` (${filters.join(', ')})` : ''}`;
 }
 
+const MAX_EXCLUDED = 50;
+
+/** Chip toggles of the statuses whose tickets no rule moves. A status that is excluded but unknown to Jira stays visible. */
+function ExcludeStatuses({
+  statuses,
+  excluded,
+  pending,
+  onChange,
+}: {
+  statuses: string[];
+  excluded: string[];
+  pending: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  const names = useMemo(() => {
+    const known = new Set(statuses.map((s) => s.toLowerCase()));
+    return [...statuses, ...excluded.filter((e) => !known.has(e.toLowerCase()))];
+  }, [statuses, excluded]);
+  const isOn = (name: string) => excluded.some((e) => e.toLowerCase() === name.toLowerCase());
+  const toggle = (name: string) =>
+    onChange(
+      isOn(name)
+        ? excluded.filter((e) => e.toLowerCase() !== name.toLowerCase())
+        : [...excluded, name],
+    );
+  return (
+    <div className={styles.group} role="group" aria-label="Exclude statuses">
+      <b>Exclude statuses</b>
+      <p className={styles.hint}>Tickets in these statuses are never moved.</p>
+      <ul className={styles.chips}>
+        {names.map((name) => {
+          const on = isOn(name);
+          return (
+            <li key={name}>
+              <button
+                type="button"
+                className={styles.chip}
+                aria-pressed={on}
+                disabled={pending || (!on && excluded.length >= MAX_EXCLUDED)}
+                onClick={() => toggle(name)}
+              >
+                {name}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 export function RulesSection() {
   const rules = useRules();
   const save = useSaveRules();
-  const statuses = useSnapshot(statusesOf).data ?? [];
+  const settings = useSettings();
+  const saveSettings = useSaveSettings();
+  const options = useJiraOptions(true);
+  const snapshotStatuses = useSnapshot(statusesOf).data;
+  const snapshotProjects = useSnapshot(projectsOf).data;
+  const statuses = useMemo(
+    () => preferList(options.data?.statuses, snapshotStatuses ?? []),
+    [options.data, snapshotStatuses],
+  );
+  const projects = useMemo(
+    () => preferList(options.data?.projects, snapshotProjects ?? []),
+    [options.data, snapshotProjects],
+  );
   const [form, setForm] = useState<SyncRule | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const from = useRef<number | null>(null);
@@ -48,10 +120,6 @@ export function RulesSection() {
   return (
     <section className={styles.section} aria-labelledby="set-rules">
       <h3 id="set-rules">Status sync rules</h3>
-      <p className={styles.muted}>
-        The first enabled rule that matches a ticket moves it, once, when something new happens on
-        its pull requests.
-      </p>
       {rules.isPending && <p className={styles.muted}>Loading rules</p>}
       {rules.isError && (
         <p className={styles.error} role="alert">
@@ -139,12 +207,28 @@ export function RulesSection() {
           Could not save the rules.
         </p>
       )}
+      {settings.data && (
+        <ExcludeStatuses
+          statuses={statuses}
+          excluded={settings.data.excludedStatuses}
+          pending={saveSettings.isPending}
+          onChange={(excludedStatuses) =>
+            saveSettings.mutate({ ...settings.data, excludedStatuses })
+          }
+        />
+      )}
+      {saveSettings.isError && (
+        <p className={styles.error} role="alert">
+          Could not save the excluded statuses.
+        </p>
+      )}
       {form ? (
         <RuleForm
           key={form.id}
           initial={form}
           others={list}
           statuses={statuses}
+          projects={projects}
           onClose={() => setForm(null)}
         />
       ) : (
