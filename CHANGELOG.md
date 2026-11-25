@@ -6,6 +6,12 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.3.0] - 2026-11-25
+
+### Added
+
+- Enabled Merge buttons show a coloured aura (`--merge-aura`); disabled ones show none.
+
 ## [1.2.1] - 2026-11-25
 
 ### Changed
