@@ -4,7 +4,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 ## Purpose
 
-The dashboard at `/`: one row per open pull request assigned to the user, with the merge method,
+The dashboard at `/`: one row per open pull request assigned to the user or opened by the user, with the merge method,
 the merge panel under the row and the settings drawer.
 
 Differences from the spec:

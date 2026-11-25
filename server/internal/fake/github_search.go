@@ -25,6 +25,26 @@ type fixturePR struct {
 	totalChecks    int
 	reviewApproved bool
 	requested      bool
+	// authored and unassigned say how the viewer relates to the pull request. By default it is
+	// assigned to the viewer and opened by someone else. authored marks one the viewer opened
+	// (assignee:@me and author:@me both match when it is also assigned), and unassigned drops
+	// the assignment (only author:@me matches).
+	authored, unassigned bool
+}
+
+// matchesViewer reports whether the search query selects the pull request for the viewer.
+// A query with neither assignee:@me nor author:@me matches everything.
+func (p fixturePR) matchesViewer(query string) bool {
+	assignee, author := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me")
+	switch {
+	case assignee && author:
+		return !p.unassigned || p.authored
+	case assignee:
+		return !p.unassigned
+	case author:
+		return p.authored
+	}
+	return true
 }
 
 func checkRun(name, app, status, conclusion, url string, started, completed time.Time) map[string]any {
@@ -92,6 +112,7 @@ func basePRs(now time.Time) []fixturePR {
 		{
 			repo: "acme/web", org: "acme", number: 102, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 90 * time.Minute, rollup: "SUCCESS", requested: true,
+			authored: true, // assigned and opened by the viewer: both searches find it
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme/web", 1002)+"/job/1", ago(30*time.Minute), ago(28*time.Minute)),
 				checkRun("lint", "GitHub Actions", "COMPLETED", "NEUTRAL", run("acme/web", 1002)+"/job/2", ago(30*time.Minute), ago(29*time.Minute)),
@@ -108,6 +129,7 @@ func basePRs(now time.Time) []fixturePR {
 		{
 			repo: "acme/api", org: "acme", number: 7, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
 			mergeable: "UNKNOWN", mergeState: "DRAFT", decision: "", committedAgo: 5 * 24 * time.Hour, rollup: "",
+			authored: true, unassigned: true, // opened by the viewer, assigned to nobody: only author:@me finds it
 		},
 		{
 			repo: "acme/api", org: "acme", number: 8, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
@@ -199,7 +221,8 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 	}
 }
 
-// searchBody answers the open and merged pull request searches. With the sso option the pull
+// searchBody answers the open and merged pull request searches, honouring assignee:@me and
+// author:@me, so the dashboard's union of the two searches is exercised. With the sso option the pull
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
 func searchBody(query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
@@ -209,7 +232,7 @@ func searchBody(query string, cfg githubConfig, merged []string, now time.Time) 
 	}
 	nodes := []any{}
 	for _, p := range fixturePRs(now, cfg) {
-		if sso && p.org == "acme-corp" {
+		if (sso && p.org == "acme-corp") || !p.matchesViewer(query) {
 			continue
 		}
 		switch isMerged := slices.Contains(merged, p.id()); {

@@ -111,7 +111,7 @@ export function manifest(themeColor, backgroundColor) {
   return {
     name: 'PR Dashboards',
     short_name: 'PR Dash',
-    description: 'Open pull requests assigned to you, linked to Jira.',
+    description: 'Open pull requests assigned or opened by you, linked to Jira.',
     start_url: '/',
     scope: '/',
     display: 'standalone',

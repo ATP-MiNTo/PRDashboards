@@ -5,7 +5,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'PR Dashboards',
-  description: 'Open pull requests assigned to you, linked to Jira.',
+  description: 'Open pull requests assigned or opened by you, linked to Jira.',
   referrer: 'no-referrer',
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icons/icon-192.png', apple: '/icons/icon-192.png' },

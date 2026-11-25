@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
@@ -37,8 +39,12 @@ var (
 var mergedPRsQuery string
 
 const (
-	// OpenQuery is the search of TECH_SPEC 10.2.
-	OpenQuery = "is:pr is:open assignee:@me archived:false"
+	// OpenAssignedQuery is the search for open pull requests assigned to the viewer. With
+	// OpenAuthoredQuery it makes the two searches of TECH_SPEC 10.2, and the dashboard lists the
+	// union.
+	OpenAssignedQuery = "is:pr is:open assignee:@me archived:false"
+	// OpenAuthoredQuery is the search for open pull requests opened by the viewer.
+	OpenAuthoredQuery = "is:pr is:open author:@me archived:false"
 	// SearchCap is the number of results GitHub's search returns at most.
 	SearchCap = 1000
 
@@ -106,7 +112,7 @@ type Repo struct {
 	RebaseAllowed bool
 }
 
-// PR is an open pull request assigned to the viewer.
+// PR is an open pull request assigned to the viewer or opened by the viewer.
 type PR struct {
 	ID               string
 	Number           int
@@ -262,12 +268,37 @@ type rawCheck struct {
 	CreatedAt *time.Time `json:"createdAt"`
 }
 
-// SearchOpen runs the paginated search for open pull requests assigned to the token's user, 50
-// per page, following the cursor until the last page or the 1,000 result cap. Pull requests of
-// organizations that blocked the token are left out and listed in Blocked.
+// SearchOpen runs the open pull request searches, assigned to the token's user and opened by the
+// token's user, concurrently (two requests in flight), and merges them. Each search is paginated,
+// 50 per page, following the cursor until the last page or the 1,000 result cap. Pull requests
+// of organizations that blocked the token are left out and listed in Blocked.
+//
+// A pull request found by both searches appears once, in the position of the assigned search.
+// Total is the larger of the unique pull requests returned and the biggest count GitHub reported
+// for either search, so it is never below what the dashboard shows. Capped is set when either
+// search is capped. If a search fails on its first page, SearchOpen returns that error.
 func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, error) {
+	var res [2]SearchResult
+	var errs [2]error
+	var wg sync.WaitGroup
+	for i, q := range []string{OpenAssignedQuery, OpenAuthoredQuery} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res[i], errs[i] = c.searchOpenQuery(ctx, token, q)
+		}()
+	}
+	wg.Wait()
+	if err := pickError(errs[:]); err != nil {
+		return SearchResult{}, err
+	}
+	return mergeSearches(res[0], res[1]), nil
+}
+
+// searchOpenQuery runs one paginated open pull request search.
+func (c *Client) searchOpenQuery(ctx context.Context, token, q string) (SearchResult, error) {
 	var res SearchResult
-	err := c.paginate(ctx, token, openPRsQuery, OpenQuery, &res.Requests, &res.RateLimit, func(p *searchPage, status int, h http.Header) error {
+	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, status int, h http.Header) error {
 		res.Total = p.Data.Search.IssueCount
 		res.Blocked = mergeBlocked(res.Blocked, blockedOf(status, h, p.Errors))
 		res.Errors = append(res.Errors, otherErrors(p.Errors)...)
@@ -284,11 +315,90 @@ func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, er
 	return res, err
 }
 
-// SearchMerged finds pull requests assigned to the token's user that were merged since the given
-// time. One search resolves every pull request that left the open list.
+// pickError returns the error of a set of concurrent searches: a rejected token first, then a
+// rate limit, then the first other error, so the outcome does not depend on timing.
+func pickError(errs []error) error {
+	for _, e := range errs {
+		if errors.Is(e, ErrBadCredentials) {
+			return e
+		}
+	}
+	for _, e := range errs {
+		var rl *RateLimitedError
+		if errors.As(e, &rl) {
+			return e
+		}
+	}
+	for _, e := range errs {
+		if e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
+// mergeSearches unions two search results, deduplicating pull requests by node id in O(n).
+func mergeSearches(a, b SearchResult) SearchResult {
+	out := SearchResult{
+		PRs:        make([]PR, 0, len(a.PRs)+len(b.PRs)),
+		Capped:     a.Capped || b.Capped,
+		Incomplete: a.Incomplete || b.Incomplete,
+		Requests:   a.Requests + b.Requests,
+		Errors:     append(slices.Clone(a.Errors), b.Errors...),
+		Blocked:    mergeBlocked(slices.Clone(a.Blocked), b.Blocked),
+		RateLimit:  mergeRateLimit(a.RateLimit, b.RateLimit),
+	}
+	seen := make(map[string]struct{}, len(a.PRs)+len(b.PRs))
+	for _, list := range [][]PR{a.PRs, b.PRs} {
+		for _, p := range list {
+			if _, dup := seen[p.ID]; dup {
+				continue
+			}
+			seen[p.ID] = struct{}{}
+			out.PRs = append(out.PRs, p)
+		}
+	}
+	out.Total = max(len(out.PRs), a.Total, b.Total)
+	return out
+}
+
+// mergeRateLimit sums the cost. Limit, Remaining and ResetAt come from the answer with the lowest
+// remaining budget, the latest view of the budget the searches share.
+func mergeRateLimit(a, b RateLimit) RateLimit {
+	out := a
+	if a.Limit == 0 || (b.Limit > 0 && b.Remaining < a.Remaining) {
+		out = b
+	}
+	out.Cost = a.Cost + b.Cost
+	return out
+}
+
+// SearchMerged finds pull requests assigned to the token's user or opened by the token's user that
+// were merged since the given time, with two concurrent searches. One pair of searches resolves
+// every pull request that left the open list. Either search failing is an error.
 func (c *Client) SearchMerged(ctx context.Context, token string, since time.Time) (MergedResult, error) {
+	stamp := " is:merged updated:>=" + since.UTC().Format("2006-01-02T15:04:05Z")
+	var res [2]MergedResult
+	var errs [2]error
+	var wg sync.WaitGroup
+	for i, q := range []string{"is:pr assignee:@me" + stamp, "is:pr author:@me" + stamp} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res[i], errs[i] = c.searchMergedQuery(ctx, token, q)
+		}()
+	}
+	wg.Wait()
+	if err := pickError(errs[:]); err != nil {
+		return MergedResult{}, err
+	}
+	out := MergedResult{Merged: res[0].Merged, RateLimit: mergeRateLimit(res[0].RateLimit, res[1].RateLimit), Requests: res[0].Requests + res[1].Requests}
+	maps.Copy(out.Merged, res[1].Merged)
+	return out, nil
+}
+
+func (c *Client) searchMergedQuery(ctx context.Context, token, q string) (MergedResult, error) {
 	res := MergedResult{Merged: map[string]time.Time{}}
-	q := "is:pr assignee:@me is:merged updated:>=" + since.UTC().Format("2006-01-02T15:04:05Z")
 	var incomplete bool
 	err := c.paginate(ctx, token, mergedPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, _ int, _ http.Header) error {
 		for _, raw := range p.Data.Search.Nodes {

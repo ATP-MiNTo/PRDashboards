@@ -344,7 +344,7 @@ rule fires once, when the last PR meets the trigger.
   ticket cell.
 - Which PRs count: every PR the dashboard has linked to the ticket, including merged ones kept in
   `prs`. PRs that leave the open list are resolved as merged or closed with one extra search per
-  refresh (`is:pr assignee:@me is:merged updated:>=<last refresh>`), never per PR. A closed
+  refresh (`is:pr assignee:@me is:merged ...` and `is:pr author:@me is:merged ...`, both `updated:>=<last refresh>`), never per PR. A closed
   (unmerged) PR stops counting.
 
 ### 7.6 Merge method
@@ -537,8 +537,10 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
 
 ### 10.2 GitHub calls per refresh
 
-1. One paginated GraphQL search, 50 per page:
-   `search(query: "is:pr is:open assignee:@me archived:false", type: ISSUE, first: 50, after: $c)`.
+1. Two paginated GraphQL searches, 50 per page, run concurrently and merged by PR id (a PR that is
+   assigned to me and opened by me appears once):
+   `search(query: "is:pr is:open assignee:@me archived:false", type: ISSUE, first: 50, after: $c)` and
+   the same with `author:@me`.
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
    mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate
@@ -553,7 +555,7 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
    pending, skipped, neutral or cancelled. `app` is the check suite's app name, or null for a
    commit status. When `totalCount` is larger than the 50 returned, the snapshot keeps `total`
    and the UI shows "+N more" linking to the PR's checks page.
-2. One search for recently merged PRs (7.5), only when PRs left the open list.
+2. Two searches (assigned and authored) for recently merged PRs (7.5), only when PRs left the open list.
 
 No per-PR follow-up calls. The only single-PR call is the re-check right before a merge.
 
@@ -575,7 +577,7 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
 - At most 4 parallel outbound requests per provider (`netguard`). The retry loop is the shared
   package `internal/backoff`: honours `Retry-After` and the GitHub reset header, otherwise
   exponential backoff with jitter, with an injectable clock and sleep for tests.
-- The search cap of 1,000 results shows a warning when reached.
+- The search cap of 1,000 results (per search) shows a warning when either search reaches it.
 
 ### 10.4a Concrete choices (milestones 4 and 5)
 
@@ -583,7 +585,7 @@ No per-PR follow-up calls. The only single-PR call is the re-check right before 
   stale when its last commit is older than 3 days.
 - The snapshot is encoded once, stored gzip-compressed in the `snapshot` table and loaded at start.
   `version` continues after a restart. The ETag is the quoted version.
-- The merged search is `is:pr assignee:@me is:merged updated:>=<since>`, where `since` is the
+- The merged searches are `is:pr assignee:@me is:merged updated:>=<since>` and `is:pr author:@me is:merged updated:>=<since>`, run concurrently and united, where `since` is the
   oldest last-seen time of the PRs that left the list, minus one minute. It runs only when the open
   search was complete (no cap, no errors, no blocked organization).
 - SSE: heartbeat comment every 25 s, buffer of 16 events per client, a full buffer drops the client,

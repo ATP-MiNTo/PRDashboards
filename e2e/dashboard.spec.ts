@@ -29,6 +29,8 @@ test("an SSO-blocked organization shows the banner while the other rows load", a
   await page.goto(APP + "/");
   await expect(page.getByText("INP-104 Invoice export")).toBeVisible();
   await expect(page.getByText("has not authorized")).toHaveCount(0);
+  // Opened by the user and assigned to nobody: only the author search finds it.
+  await expect(page.getByText("WIP schema cleanup")).toBeVisible();
 
   await configure(request, "github", { sso: true });
   await page.getByRole("button", { name: "Sync", exact: true }).click();

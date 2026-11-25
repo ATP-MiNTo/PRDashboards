@@ -40,7 +40,7 @@ func n1Node(i int) map[string]any {
 // TestRefreshOfManyPullRequestsMakesNoPerRowCalls runs the real GitHub and Jira clients against
 // local servers and counts every request: 120 pull requests with 120 distinct tickets.
 func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
-	var graphql, merged, search, projects, other atomic.Int32
+	var graphql, merged, assigned, authored, search, projects, other atomic.Int32
 	var searchedKeys atomic.Int32
 
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -50,8 +50,13 @@ func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		graphql.Add(1)
-		if strings.Contains(body.Variables["q"].(string), "is:merged") {
+		switch q := body.Variables["q"].(string); {
+		case strings.Contains(q, "is:merged"):
 			merged.Add(1)
+		case q == github.OpenAssignedQuery:
+			assigned.Add(1)
+		case q == github.OpenAuthoredQuery:
+			authored.Add(1)
 		}
 		start := 0
 		if c, ok := body.Variables["cursor"].(string); ok {
@@ -137,10 +142,13 @@ func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
 		}
 	}
 	wantSearches := (n1PRs + jira.ChunkSize - 1) / jira.ChunkSize
-	t.Logf("outbound requests for %d pull requests: GitHub GraphQL %d (merged searches %d), Jira search %d, Jira project %d",
-		n1PRs, graphql.Load(), merged.Load(), search.Load(), projects.Load())
-	if graphql.Load() != 3 || merged.Load() != 0 {
-		t.Fatalf("GitHub: %d GraphQL requests (%d merged), want 3 search pages and no merged search", graphql.Load(), merged.Load())
+	t.Logf("outbound requests for %d pull requests: GitHub GraphQL %d (assigned pages %d, authored pages %d, merged searches %d), Jira search %d, Jira project %d",
+		n1PRs, graphql.Load(), assigned.Load(), authored.Load(), merged.Load(), search.Load(), projects.Load())
+	// Two open searches (assigned and authored), each 3 pages of 50, and no merged search. Both
+	// return the same 120 pull requests here, so the union must still be 120 rows.
+	if graphql.Load() != 6 || assigned.Load() != 3 || authored.Load() != 3 || merged.Load() != 0 {
+		t.Fatalf("GitHub: %d GraphQL requests (assigned %d, authored %d, merged %d), want 2 searches of 3 pages and no merged search",
+			graphql.Load(), assigned.Load(), authored.Load(), merged.Load())
 	}
 	if int(search.Load()) != wantSearches || projects.Load() != 1 || other.Load() != 0 || searchedKeys.Load() != n1PRs {
 		t.Fatalf("Jira: search %d (want %d), projects %d, other %d, keys %d", search.Load(), wantSearches, projects.Load(), other.Load(), searchedKeys.Load())

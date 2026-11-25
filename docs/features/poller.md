@@ -4,7 +4,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 ## Purpose
 
-Refreshes the list of open pull requests assigned to the user from GitHub and the tickets from Jira,
+Refreshes the list of open pull requests assigned to the user or opened by the user from GitHub and the tickets from Jira,
 builds one immutable snapshot, stores it and tells the browser. One refresh runs at a time, and a
 Sync click during a refresh joins it. Browser tabs never cause outside calls.
 
@@ -36,7 +36,7 @@ Differences from the spec:
 
 1. Start: `Load` restores the stored snapshot (a corrupt one is ignored), then `Run` refreshes at once.
 2. `Run` reads the settings, `plan` computes when GitHub and Jira are due (interval, doubled while the rate limit is low, or the backoff, whichever is later), runs a refresh when due and otherwise waits for the timer or `Reschedule`.
-3. `refresh`: GitHub search (`SearchOpen`), merged search when PRs left, user links, Jira site, project keys, ticket lookup, repo states, `runRules`, `build`, encode and compress, `SaveRefresh` (one transaction), publish `snapshot` then `sync-status`.
+3. `refresh`: GitHub searches (`SearchOpen`: assigned and authored, in parallel, merged by PR id), merged searches when PRs left, user links, Jira site, project keys, ticket lookup, repo states, `runRules`, `build`, encode and compress, `SaveRefresh` (one transaction), publish `snapshot` then `sync-status`.
 4. A fetch failure never fails the refresh. GitHub rate limits (`403` or `429` with `Retry-After` or `x-ratelimit-reset`, and a `403` whose body names a secondary rate limit, which backs off exponentially from 2 s up to 5 min) and errors keep the last list and record `rate_limited` or `error` with `resetAt`. The web shows the state in the top bar, a banner with the age of the data and a "Last data" mark on every row ([command-table.md](command-table.md)). A rejected token or missing connection clears the list and records `disconnected`. Jira failures mark rows `ticketLookup: unreachable` and keep the last tickets.
 5. Sync button: `POST /api/sync` calls `Trigger` (202, joins the running refresh). Connecting or disconnecting an account and changing the Jira site also call `Trigger`. Saving settings calls `Reschedule`.
 6. Manual link changes: `PUT /api/prs/{id}/tickets` stores them and `Relink` rebuilds the snapshot from memory, asking Jira only for keys it has not seen ([ticket-linking.md](ticket-linking.md)).
@@ -46,7 +46,7 @@ Differences from the spec:
 
 Per refresh, independent of the number of PRs:
 
-- GitHub: one GraphQL search per 50 PRs (120 PRs are 3 requests), plus one merged search only when PRs left the open list. The same query returns the per-check CI.
+- GitHub: two GraphQL searches, `assignee:@me` and `author:@me`, run concurrently (two requests in flight) and merged by PR id, so a PR that is both assigned and authored is one row. Each search is one request per 50 PRs (120 PRs found by both are 6 requests). Plus two merged searches (`assignee:@me` and `author:@me`, also concurrent) only when PRs left the open list. The same query returns the per-check CI. `Capped` is set when either search is capped, and `Total` is the larger of the unique PRs returned and the biggest count GitHub reported. If either search fails on its first page the whole GitHub fetch fails with that error (a rejected token first, then a rate limit, then any other). Rate limit: costs add up, the remaining budget is the lowest one seen.
 - Jira (on the Jira interval): one project search page per 50 projects, one JQL per 100 ticket keys (120 keys are 2 requests). Between Jira intervals only keys not looked up before are asked.
 - Rule firings add one transitions lookup (cached 60 s) and one move per ticket that fires, nothing else.
 - Backoff: GitHub rate limits wait for `Retry-After` or `resetAt`, other errors use `internal/backoff`. Jira honours `Retry-After` on `429` and `503`.
@@ -65,10 +65,10 @@ Per refresh, independent of the number of PRs:
 
 ## Tests
 
-- [server/internal/poller/poller_test.go](../../server/internal/poller/poller_test.go) and [n1_test.go](../../server/internal/poller/n1_test.go): snapshot content and schema conformance, single flight, persistence and reload, one transaction per refresh, merged search rules, failures and recovery, interval adaptation, `Run` scheduling, relink, and the no-N+1 check with 120 PRs (3 GitHub requests, 2 Jira searches, 1 project call).
+- [server/internal/poller/poller_test.go](../../server/internal/poller/poller_test.go) and [n1_test.go](../../server/internal/poller/n1_test.go): snapshot content and schema conformance, single flight, persistence and reload, one transaction per refresh, merged search rules, failures and recovery, interval adaptation, `Run` scheduling, relink, and the no-N+1 check with 120 PRs (two open searches of 3 pages each, no merged search, 2 Jira searches, 1 project call).
 - [server/internal/poller/sync_test.go](../../server/internal/poller/sync_test.go): rule moves and call counts. The secondary limit and Jira `429` cases are in poller_test.go, and the `403` fixtures with a reset time or a secondary limit body in [search_test.go](../../server/internal/github/search_test.go).
 - [e2e/ratelimit.spec.ts](../../e2e/ratelimit.spec.ts): a `403` with a reset time and a `429` show the waiting state and recover on the next sync.
 - [server/internal/events/events_test.go](../../server/internal/events/events_test.go): replay, heartbeat, slow client dropped, close.
-- [server/internal/store/refresh_test.go](../../server/internal/store/refresh_test.go), [server/internal/github/search_test.go](../../server/internal/github/search_test.go).
+- [server/internal/store/refresh_test.go](../../server/internal/store/refresh_test.go), [server/internal/github/search_test.go](../../server/internal/github/search_test.go): both queries sent, union deduped by id, cap, incomplete, blocked, errors and rate limit merging, one search failing, the merged search union.
 - [server/internal/api/snapshot_api_test.go](../../server/internal/api/snapshot_api_test.go): ETag and 304, sync, SSE needs a session and heartbeats.
-- [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts).
+- [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts): includes a PR the user opened that is assigned to nobody (the fake GitHub honours `assignee:@me` and `author:@me`, [github_search.go](../../server/internal/fake/github_search.go)).

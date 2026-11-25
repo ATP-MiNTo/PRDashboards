@@ -6,11 +6,11 @@ Technical design: [TECH_SPEC.md](TECH_SPEC.md)
 
 ## 1. Overview
 
-A local web dashboard that lists every open pull request assigned to me, across all GitHub repositories, with review status, CI status and a merge button. Each PR is linked to its Jira ticket. Merging a PR also moves the ticket to a Jira status chosen by configurable rules, or picked by me when no rule matches.
+A local web dashboard that lists every open pull request assigned to me or opened by me, across all GitHub repositories, with review status, CI status and a merge button. Each PR is linked to its Jira ticket. Merging a PR also moves the ticket to a Jira status chosen by configurable rules, or picked by me when no rule matches.
 
 ## 2. Goals
 
-- See all open PRs assigned to me in one place, regardless of repository or organization.
+- See all open PRs assigned to me or opened by me in one place, regardless of repository or organization.
 - Know at a glance whether a PR is ready to merge (review, CI, conflicts).
 - Link each PR to the Jira ticket I am working on.
 - Merge and update the ticket status in one action.
@@ -40,7 +40,7 @@ A local web dashboard that lists every open pull request assigned to me, across 
 
 ### 5.2 PR List
 
-Source: all open PRs where I am an assignee, across every repo I can access.
+Source: all open PRs where I am an assignee or the author (GitHub never assigns the author on its own), across every repo I can access.
 
 Each row shows:
 
@@ -136,11 +136,11 @@ Matching:
 
 ### 6.1 Performance
 
-- Fetch the full PR list with one paginated GitHub GraphQL search query (`is:pr is:open assignee:@me`). The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
+- Fetch the full PR list with two paginated GitHub GraphQL search queries (`is:pr is:open assignee:@me` and `is:pr is:open author:@me`), run in parallel and merged by PR, so a PR that is both assigned and authored is one row. The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
 - Resolve all Jira tickets with one batched JQL query. No per-PR Jira calls.
 - Cache Jira transition lists per ticket and fetch them only when needed.
 - Respect GitHub and Atlassian rate limits. Back off on 403 and 429 responses.
-- Search results are capped at 1,000 items, which is acceptable for assigned PRs.
+- Search results are capped at 1,000 items, which is acceptable for PRs assigned to or opened by one person.
 
 ### 6.2 Security
 
@@ -163,7 +163,7 @@ Matching:
 | Jira workflows differ per project and transitions may require fields | Transition failures | Fetch transitions per ticket, show required-field form, retry on failure |
 | Repos disallow certain merge methods | Merge rejected | Check allowed methods, fall back with warning |
 | Branch names without a ticket key | PR not linked | Title fallback, then manual picker |
-| Search cap of 1,000 results | Truncated list | Not expected to be reached for assigned PRs, show a warning if hit |
+| Search cap of 1,000 results | Truncated list | Not expected to be reached for assigned or authored PRs, show a warning if hit |
 
 ## 8. Milestones (to be refined)
 
@@ -178,7 +178,7 @@ Matching:
 
 ## 9. Success Criteria
 
-- All open PRs assigned to me appear in one view, across all repos I can access.
+- All open PRs assigned to me or opened by me appear in one view, across all repos I can access.
 - Review and CI status match what GitHub shows.
 - A merge with a matching rule moves the ticket to the correct status in one click.
 - No per-PR API calls are made when loading the list.
@@ -198,7 +198,7 @@ Matching:
 | Jira required fields | Show a small form |
 | Refresh | Polling (GitHub 1 min, Jira 5 min) plus Sync |
 | Merge method | Per repo default and branch rules, per-PR override |
-| Repo scope | All repos with assigned PRs, no allowlist |
+| Repo scope | All repos with assigned or authored PRs, no allowlist |
 | Stack | Go server with embedded Next.js static export, SQLite, OS keychain |
 | GitHub auth fallback | Personal access token |
 | Rules | Status sync rules over the whole lifecycle, fire on change |
