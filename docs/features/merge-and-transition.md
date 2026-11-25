@@ -20,12 +20,12 @@ Differences from the spec:
 - `activity` (now with `summary`), `pending_retries` (now with `pr_id` and `to_status`), `rule_firings` ([storage.md](storage.md)).
 - API: `POST /api/prs/{id}/merge` (`MergeRequest {method, expectedHeadSha, deleteBranch, tickets[{key, transitionId|null, fields}]}`, at most 20 tickets, header `Idempotency-Key` UUID) answers `MergeResult {prId, method, sha, steps[]}`. A step is `{kind: merge|delete_branch|transition, ticket, state: ok|failed|skipped, message, toStatus, retryId}`. A refusal is `MergeProblem` (a problem with `pr`, the fresh state, for 409).
 - `GET /api/retries`, `POST /api/retries/{id}` (answers `RetryResult {step}`), `DELETE /api/retries/{id}`, `GET /api/activity?limit&cursor` (newest first, limit 1 to 100, `nextCursor` is the last id of the page or null).
-- Problem codes: 409 `head_moved`, `not_mergeable`, `stack_base_open`, `draft`, `not_open`, `transition_unavailable`, `not_connected`; 404 `not_found`; 422 `method_not_allowed`, `ticket_not_linked`, `missing_field`, `invalid_field`, `idempotency_key_reused`; 429 `rate_limited`; 403 `org_blocked`; 502 `upstream_error`.
+- Problem codes: 409 `head_moved`, `not_mergeable`, `stack_base_open`, `draft`, `not_open`, `transition_unavailable`, `not_connected`; 404 `not_found`; 422 `method_not_allowed`, `ticket_not_linked`, `missing_field`, `invalid_field`, `idempotency_key_reused`; 429 `rate_limited`; 403 `org_blocked`, `missing_permission`; 502 `upstream_error`.
 
 ## Code map
 
 - [server/internal/merge/flow.go](../../server/internal/merge/flow.go): `Service.Merge`, `once`, `run`, `check`, `prepare`, `deleteBranch`, `transition`, `Retry`. [fields.go](../../server/internal/merge/fields.go): `encodeFields`. [types.go](../../server/internal/merge/types.go): requests, results, errors and the interfaces it needs.
-- [server/internal/github/pr.go](../../server/internal/github/pr.go): `PullRequest` (node query), `Merge` (REST, 405 and 409 mapped), `DeleteBranch`. [pull_request.graphql](../../server/internal/github/pull_request.graphql) shares `PullRequestFields` with the search.
+- [server/internal/github/pr.go](../../server/internal/github/pr.go): `PullRequest` (node query), `Merge` (REST, 405, 409 and 403 mapped), `DeleteBranch`. [pull_request.graphql](../../server/internal/github/pull_request.graphql) shares `PullRequestFields` with the search.
 - [server/internal/jira/jira.go](../../server/internal/jira/jira.go): `Transition` (POST, drops the cached transitions of the ticket).
 - [server/internal/store/merges.go](../../server/internal/store/merges.go): `RecordMerge`, `Idempotent`, `Retries`, `Retry`, `DeleteRetry`, `FinishRetry`, `Activity`.
 - [server/internal/api/handlers_merge.go](../../server/internal/api/handlers_merge.go): `MergePr`, `ListRetries`, `RetryTransition`, `DismissRetry`, `GetActivity`.
@@ -59,9 +59,22 @@ Differences from the spec:
 - All the database writes of one merge are one transaction.
 - Field values are shaped by the transition's own metadata (`{"id"}` for options, `{"accountId"}` for users, text as is). Unknown ids and unsupported types are refused.
 
+### Refusals by GitHub
+
+GitHub says no in three different ways, and the client tells them apart ([github.go](../../server/internal/github/github.go) `classifyForbidden`):
+
+- SAML SSO (`X-GitHub-SSO: required`, or a message with "SAML"): `*OrgBlocked{Reason: "sso"}`, 403 `org_blocked`, authorize link when the organization is known.
+- Organization policy (OAuth App access restrictions, a ban on classic or fine-grained tokens, a token lifetime limit, an IP allow list; a small table of message fragments, `policyMatchers`): `*OrgBlocked{Reason: "policy"}`, 403 `org_blocked` with the detail "The <org> organization policy does not allow this token". GitHub's own text is kept in the error and the log, never sent to the browser.
+- Anything else FORBIDDEN or 403, such as "Resource not accessible by personal access token": `*PermissionError{Message, Accepted}`, 403 `missing_permission`. `Accepted` comes from `X-Accepted-GitHub-Permissions` (only entries shaped `name=read|write|admin`). The detail reads "The token needs the GitHub permission contents: write" (or "needs one of these ..."; without the header, "The token lacks a GitHub permission this action needs: <message>"). The web shows this detail as plain text.
+- A secondary rate limit 403 stays a `RateLimitedError` (checked first).
+
+Where it applies: `PullRequest` (the re-check) returns OrgBlocked for SSO and policy always. A permission error is returned only when no node came back; with the node present (for example a FORBIDDEN on `reviewRequests` because the token has no organization Members permission) the pull request is returned and the merge call itself reports a missing permission. REST `Merge` and `DeleteBranch` classify a 403 the same way. A `PermissionError` from the merge stops the flow; from the branch delete it is a failed step with the same sentence and the merge stays. Search records permission errors in `SearchResult.Errors` and adds no blocked-organization banner ([poller.md](poller.md)).
+
+Every refusal by GitHub is logged at WARN by the client (`github refused a call`): operation, status, message (200 characters), GraphQL error type and path, accepted permissions. Never the token, the request or the whole response.
+
 ## Tests
 
 - [server/internal/merge](../../server/internal/merge): `flow_test.go` (every refusal, partial failure, retry, idempotent replay, concurrent same key, parallelism of 4, branch rules), `calls_test.go` (outbound call counts and one `RecordMerge`), `resolve_test.go`.
-- [server/internal/github/pr_test.go](../../server/internal/github/pr_test.go), [server/internal/jira/jira_test.go](../../server/internal/jira/jira_test.go), [server/internal/store/merges_test.go](../../server/internal/store/merges_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go).
+- [server/internal/github/pr_test.go](../../server/internal/github/pr_test.go), [permission_test.go](../../server/internal/github/permission_test.go) (classification, header parsing, REST and node refusals, logging), [server/internal/jira/jira_test.go](../../server/internal/jira/jira_test.go), [server/internal/store/merges_test.go](../../server/internal/store/merges_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go).
 - [MergePanel.test.tsx](../../web/src/components/CommandTable/MergePanel.test.tsx), [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx).
-- [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge and move with a required field, a failed move that is retried, a head that moved.
+- [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge and move with a required field, a failed move that is retried, a head that moved, a token without Contents write (fake `github_pat_contents_read`).

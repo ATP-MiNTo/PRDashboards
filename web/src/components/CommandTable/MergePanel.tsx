@@ -284,7 +284,10 @@ export function MergePanel({
       )}
       {error && (
         <p className={styles.errorText} role="alert">
-          {describeProblem(error instanceof ApiError ? error.code : undefined)}
+          {describeProblem(
+            error instanceof ApiError ? error.code : undefined,
+            error instanceof ApiError ? error.detail : undefined,
+          )}
         </p>
       )}
       <div className={styles.mergeLine}>

@@ -1,7 +1,9 @@
 const MESSAGES: Record<string, string> = {
   invalid_token: 'GitHub rejected the token.',
   insufficient_scopes: 'The token lacks scopes the app needs (repo and read:org).',
-  org_blocked: 'An organization blocked access. Authorize the token for it in GitHub.',
+  org_blocked:
+    'An organization requires SAML SSO or blocks this kind of token. Authorize it for the organization in GitHub.',
+  missing_permission: 'The token lacks a GitHub permission this action needs.',
   upstream_error: 'The provider could not be reached. Try again.',
   not_connected: 'Not connected.',
   unknown_site: 'That Jira site is not available for the connected account.',
@@ -24,7 +26,15 @@ const MESSAGES: Record<string, string> = {
   unauthenticated: 'Your session ended. Open the app with scripts/start.sh',
 };
 
-/** Turns a problem code into text for the person. The code itself is never shown. */
-export function describeProblem(code: string | undefined): string {
+/** Codes whose server detail is shown, as plain text, because it names what the person must change. */
+const SHOWS_DETAIL = new Set(['missing_permission']);
+
+/**
+ * Turns a problem code into text for the person. The code itself is never shown. For a code in
+ * SHOWS_DETAIL the server's detail replaces the fixed text when there is one. It is only ever
+ * rendered as text.
+ */
+export function describeProblem(code: string | undefined, detail?: string): string {
+  if (code && SHOWS_DETAIL.has(code) && detail) return detail;
   return (code && MESSAGES[code]) || 'Something went wrong. Try again.';
 }

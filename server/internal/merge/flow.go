@@ -146,6 +146,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	case notConnected(err):
 		return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}
 	case err != nil:
+		s.cfg.Log.WarnContext(ctx, "pull request re-check failed", "pr", req.PRID, "err", err)
 		return Result{}, err
 	}
 	if e := check(pr, req, s.cfg.Snapshot.Refs(pr.Repo.ID)); e != nil {
@@ -170,6 +171,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	case notConnected(err):
 		return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}
 	case err != nil:
+		s.cfg.Log.WarnContext(ctx, "github merge call failed", "pr", req.PRID, "err", err)
 		return Result{}, err
 	}
 
@@ -371,6 +373,11 @@ func (s *Service) deleteBranch(ctx context.Context, token string, pr github.PR, 
 	if err := s.cfg.GitHub.DeleteBranch(ctx, token, pr.Repo.NameWithOwner, pr.HeadRef); err != nil {
 		s.cfg.Log.WarnContext(ctx, "delete branch", "pr", pr.ID, "err", err)
 		step.State, step.Message = StateFailed, "The branch could not be deleted"
+		var perm *github.PermissionError
+		if errors.As(err, &perm) {
+			// The merge stays; only the person can fix the token, so say how.
+			step.Message += ". " + perm.Detail()
+		}
 		act.Result, act.Summary, act.Error = StateFailed, "Delete branch "+pr.HeadRef, step.Message
 		return step, &act
 	}

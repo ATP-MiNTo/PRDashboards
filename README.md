@@ -314,7 +314,8 @@ The Settings button opens a panel on the right with these sections:
 | "port 4317 is busy" | Another program uses the port. Stop it, or pass `--port` (sign-in needs 4317) |
 | The browser shows "Open the app with scripts/start.sh" | Your session ended. Run the start script again; it opens a fresh sign-in link |
 | "The launch link expired or was already used" | Launch links last 2 minutes and work once. Run the start script again |
-| "access blocked, authorize org" banner | Click Authorize and approve the app for that organization |
+| "access blocked, authorize org" banner | Click Authorize and approve the app for that organization. If the organization blocks this kind of token (policy), use a token type it allows |
+| "The token needs the GitHub permission contents: write" | Edit the token (or the GitHub App's permissions): Contents must be Read and write to merge and delete branches, with Pull requests Read and write |
 | A pull request is missing | The repository is not part of the GitHub App's installation. Ask the organization owner to add it to the installation's repositories |
 | GitHub shows "Reconnect GitHub" | GitHub refused to refresh the sign-in. Click Reconnect GitHub in Connected accounts |
 | Jira shows "Reconnect" | The Jira sign-in expired. Click Reconnect |

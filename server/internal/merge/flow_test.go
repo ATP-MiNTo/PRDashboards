@@ -344,6 +344,38 @@ func TestGitHubMergeFailuresAreRefusalsAndNothingElseRuns(t *testing.T) {
 	}
 }
 
+func TestMergePermissionErrorStopsTheFlow(t *testing.T) {
+	r := newRig(t, "INP-1")
+	r.gh.mergeErr = &github.PermissionError{Message: "Resource not accessible", Accepted: []string{"contents=write"}}
+	req := request(done("INP-1"))
+	req.DeleteBranch = true
+	var perm *github.PermissionError
+	if err := merge2(r, req); !errors.As(err, &perm) {
+		t.Fatalf("%v", err)
+	}
+	if r.jira.moveCount() != 0 || len(r.gh.deletes) != 0 || r.store.records.Load() != 0 {
+		t.Error("steps ran after a refused merge")
+	}
+}
+
+func TestDeleteBranchPermissionErrorIsAStepFailure(t *testing.T) {
+	r := newRig(t, "INP-1")
+	r.gh.deleteErr = &github.PermissionError{Message: "Resource not accessible", Accepted: []string{"contents=write"}}
+	req := request(done("INP-1"))
+	req.DeleteBranch = true
+	res, err := r.svc.Merge(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := stepOf(t, res, merge.StepDeleteBranch, "")
+	if s.State != merge.StateFailed || s.Message != "The branch could not be deleted. The token needs the GitHub permission contents: write" {
+		t.Fatalf("%+v", s)
+	}
+	if stepOf(t, res, merge.StepMerge, "").State != merge.StateOK || stepOf(t, res, merge.StepTransition, "INP-1").State != merge.StateOK {
+		t.Fatal("the merge and the move stay")
+	}
+}
+
 func TestPartialTransitionFailureKeepsTheMergeAndQueuesARetry(t *testing.T) {
 	r := newRig(t, "INP-1", "INP-2", "INP-3")
 	r.jira.moveErr["INP-2"] = &jira.StatusError{Status: 400, Detail: "Resolution is required"}

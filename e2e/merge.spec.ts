@@ -192,3 +192,35 @@ test("a head that moved is refused and the row is refreshed", async ({
   expect(github.merges).toBe(1);
   expect(github.lastMerge.sha).toBe(headOf(9, true));
 });
+
+test("a token without Contents write says which permission is missing", async ({
+  page,
+  request,
+}) => {
+  const useToken = async (token: string) => {
+    await page.goto(APP + "/setup/");
+    await page.getByLabel("Personal access token").fill(token);
+    await page.getByRole("button", { name: "Validate and save" }).click();
+    await expect(page.getByText("Connected as octocat")).toBeVisible();
+  };
+  await useToken("github_pat_contents_read");
+  try {
+    await page.goto(APP + "/");
+    const row = rowOf(page, "Bump dependencies");
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "Merge", exact: true }).click();
+    const panel = page.getByRole("group", { name: "Merge #9" });
+    await panel
+      .getByRole("checkbox", { name: "Merge without moving any ticket" })
+      .check();
+    await panel.getByRole("button", { name: "Merge without ticket" }).click();
+
+    await expect(panel.getByRole("alert")).toContainText(
+      "The token needs the GitHub permission contents: write",
+    );
+    expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
+    await expect(row).toBeVisible();
+  } finally {
+    await useToken("ghp_classic_ok");
+  }
+});

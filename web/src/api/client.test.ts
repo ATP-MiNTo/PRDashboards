@@ -64,6 +64,26 @@ describe('api client', () => {
     expect(error).toMatchObject({ status: 401, code: 'unauthenticated' });
   });
 
+  it('keeps the detail of the problem', async () => {
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          type: '/problems/x',
+          title: 'Forbidden',
+          status: 403,
+          code: 'missing_permission',
+          detail: 'contents: write',
+        },
+        403,
+        'application/problem+json',
+      ),
+    );
+    await expect(getSession()).rejects.toMatchObject({
+      code: 'missing_permission',
+      detail: 'contents: write',
+    });
+  });
+
   it('falls back to an unknown code for non-problem errors', async () => {
     fetchMock.mockResolvedValueOnce(new Response('<html>', { status: 502 }));
     await expect(getSession()).rejects.toMatchObject({ status: 502, code: 'unknown' });

@@ -43,7 +43,10 @@ type nodePage struct {
 }
 
 // PullRequest re-fetches one pull request by node id with the same fields the search selects. It
-// is the single-PR call made right before a merge. ErrPRNotFound means no such pull request.
+// is the single-PR call made right before a merge. ErrPRNotFound means no such pull request. SAML
+// and organization policy refusals are *OrgBlocked, also when a node came back. A FORBIDDEN error
+// about a missing token permission is a *PermissionError only when the node is nil: with the node
+// present the pull request is returned and the merge call reports the missing permission.
 func (c *Client) PullRequest(ctx context.Context, token, id string) (PR, error) {
 	body, status, h, err := c.graphql(ctx, token, pullRequestQuery, map[string]any{"id": id})
 	if err != nil {
@@ -58,8 +61,30 @@ func (c *Client) PullRequest(ctx context.Context, token, id string) (PR, error) 
 			return PR{}, &RateLimitedError{}
 		}
 	}
-	if blocked := blockedOf(status, h, p.Errors); len(blocked) > 0 {
+	if status == http.StatusForbidden && len(p.Errors) == 0 {
+		// A REST-shaped refusal: {"message": "..."}.
+		var m struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(body, &m) == nil && m.Message != "" {
+			p.Errors = []graphQLError{{Type: "FORBIDDEN", Message: m.Message}}
+		}
+	}
+	if len(p.Errors) > 0 {
+		c.logRefusal(ctx, "pull_request", status, h, "", p.Errors)
+	}
+	if blocked := blockedOf(h, p.Errors); len(blocked) > 0 {
 		return PR{}, &blocked[0]
+	}
+	// A missing token permission is an error only when no node came back. When the node is there,
+	// the permission error belongs to a field the merge does not need, and the merge call itself
+	// reports a missing permission.
+	if p.Data.Node == nil {
+		for _, e := range p.Errors {
+			if e.Type == "FORBIDDEN" {
+				return PR{}, classifyForbidden(h, e.Message)
+			}
+		}
 	}
 	switch {
 	case status != http.StatusOK:
@@ -109,7 +134,8 @@ func restMessage(body []byte) string {
 
 // Merge merges a pull request with PUT /repos/{o}/{r}/pulls/{n}/merge. GitHub rejects the merge
 // when sha is no longer the head commit, which is ErrHeadMoved. A 405 is ErrNotMergeable. Both wrap
-// GitHub's message.
+// GitHub's message. A 403 is *OrgBlocked (SSO or policy) or *PermissionError (the token lacks a
+// permission, usually Contents: write); a secondary rate limit is *RateLimitedError.
 func (c *Client) Merge(ctx context.Context, token, nameWithOwner string, number int, method, sha string) (MergeResult, error) {
 	path, err := repoPath(nameWithOwner)
 	if err != nil {
@@ -119,7 +145,7 @@ func (c *Client) Merge(ctx context.Context, token, nameWithOwner string, number 
 	if err != nil {
 		return MergeResult{}, err
 	}
-	body, status, _, err := c.send(ctx, token, http.MethodPut, fmt.Sprintf("%s%s/pulls/%d/merge", c.base(), path, number), payload)
+	body, status, h, err := c.send(ctx, token, http.MethodPut, fmt.Sprintf("%s%s/pulls/%d/merge", c.base(), path, number), payload)
 	if err != nil {
 		return MergeResult{}, err
 	}
@@ -140,12 +166,14 @@ func (c *Client) Merge(ctx context.Context, token, nameWithOwner string, number 
 		return MergeResult{}, fmt.Errorf("%w: %s", ErrHeadMoved, restMessage(body))
 	case http.StatusNotFound:
 		return MergeResult{}, ErrPRNotFound
+	case http.StatusForbidden:
+		return MergeResult{}, forbiddenError(h, body)
 	}
 	return MergeResult{}, &APIError{Status: status, Message: restMessage(body)}
 }
 
 // DeleteBranch deletes a branch with DELETE /repos/{o}/{r}/git/refs/heads/{branch}. A branch that
-// is already gone is not an error.
+// is already gone is not an error. A 403 is classified as in Merge.
 func (c *Client) DeleteBranch(ctx context.Context, token, nameWithOwner, branch string) error {
 	path, err := repoPath(nameWithOwner)
 	if err != nil {
@@ -158,13 +186,15 @@ func (c *Client) DeleteBranch(ctx context.Context, token, nameWithOwner, branch 
 	for i, p := range parts {
 		parts[i] = url.PathEscape(p)
 	}
-	body, status, _, err := c.send(ctx, token, http.MethodDelete, c.base()+path+"/git/refs/heads/"+strings.Join(parts, "/"), nil)
+	body, status, h, err := c.send(ctx, token, http.MethodDelete, c.base()+path+"/git/refs/heads/"+strings.Join(parts, "/"), nil)
 	if err != nil {
 		return err
 	}
 	switch status {
 	case http.StatusNoContent, http.StatusNotFound:
 		return nil
+	case http.StatusForbidden:
+		return forbiddenError(h, body)
 	case http.StatusUnprocessableEntity:
 		if strings.Contains(strings.ToLower(restMessage(body)), "does not exist") {
 			return nil

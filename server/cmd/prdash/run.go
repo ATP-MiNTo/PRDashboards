@@ -141,7 +141,7 @@ func run(ctx context.Context, o options, e env) error {
 	defer func() { _ = launcher.Close() }()
 
 	httpClient := guard.Client()
-	ghClient := &github.Client{HTTP: httpClient, APIBase: githubAPI}
+	ghClient := &github.Client{HTTP: httpClient, APIBase: githubAPI, Log: log}
 	oauth := auth.NewOAuth(auth.Config{
 		Secrets:   sec,
 		States:    db,

@@ -13,6 +13,30 @@ describe('describeProblem', () => {
     );
   });
 
+  it('words the organization block for SSO and token policies', () => {
+    expect(describeProblem('org_blocked')).toBe(
+      'An organization requires SAML SSO or blocks this kind of token. Authorize it for the organization in GitHub.',
+    );
+  });
+
+  it('shows the server detail of a missing permission as text', () => {
+    expect(
+      describeProblem(
+        'missing_permission',
+        'The token needs the GitHub permission contents: write',
+      ),
+    ).toBe('The token needs the GitHub permission contents: write');
+    expect(describeProblem('missing_permission')).toBe(
+      'The token lacks a GitHub permission this action needs.',
+    );
+  });
+
+  it('ignores the detail of other codes', () => {
+    expect(describeProblem('upstream_error', '<b>x</b>')).toBe(
+      'The provider could not be reached. Try again.',
+    );
+  });
+
   it('falls back for unknown or missing codes', () => {
     for (const code of ['nope', undefined, '']) {
       expect(describeProblem(code)).toBe('Something went wrong. Try again.');
