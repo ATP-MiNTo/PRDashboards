@@ -1,7 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import type { RuleFilters, RulePreview, RuleTrigger, SyncRule } from '@/api/client';
 import { usePreviewRule, useSaveRules } from '@/api/queries';
-import { withCurrent, MAX_HOURS, refText, ruleProblem, TRIGGERS } from '@/lib/rules';
+import { withCurrent, projectKey, MAX_HOURS, refText, ruleProblem, TRIGGERS } from '@/lib/rules';
 import { Dropdown, type DropdownOption } from '../Dropdown/Dropdown';
 import styles from './Settings.module.css';
 
@@ -103,7 +103,11 @@ export function RuleForm({
     [statuses, rule.filters.status],
   );
   const projectOptions = useMemo(
-    () => toOptions(withCurrent(projects, rule.filters.project), { value: '', label: ANY_PROJECT }),
+    () =>
+      toOptions(withCurrent(projects, rule.filters.project, projectKey), {
+        value: '',
+        label: ANY_PROJECT,
+      }),
     [projects, rule.filters.project],
   );
   const textFilter = (key: TextFilter) => (

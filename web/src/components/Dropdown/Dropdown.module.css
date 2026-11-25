@@ -33,16 +33,45 @@
   border-left: 4px solid transparent;
 }
 
-.list {
+.popover {
   position: fixed;
   z-index: 80;
-  margin: 0;
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: 0 4px 12px var(--shadow);
+}
+
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.list {
+  max-height: 280px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
   list-style: none;
+}
+
+.empty {
+  margin: 0;
+  padding: 5px 8px;
+  color: var(--sub);
 }
 
 .option {

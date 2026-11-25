@@ -92,11 +92,30 @@ export function ruleProblem(r: SyncRule): string | null {
   return null;
 }
 
+/**
+ * The comparison key of a status name: lower case with everything but letters and digits dropped,
+ * so "Re-open", "re open" and "REOPEN" match. A name with no letter or digit keeps its trimmed lower case form. The same rule as `rules.StatusKey` on the server.
+ */
+export const statusKey = (s: string): string => {
+  const lower = s.trim().toLowerCase();
+  return lower.replace(/[^\p{L}\p{N}]/gu, '') || lower;
+};
+
+/** The names without near-duplicates (by `statusKey`), the first spelling kept, sorted. */
+function distinctStatuses(names: Iterable<string>): string[] {
+  const byKey = new Map<string, string>();
+  for (const n of names) {
+    const key = statusKey(n);
+    if (!byKey.has(key)) byKey.set(key, n);
+  }
+  return [...byKey.values()].sort((a, b) => a.localeCompare(b));
+}
+
 /** The Jira statuses seen on the tickets of the snapshot, as suggestions for a target status. */
 export function statusesOf(s: Snapshot | undefined): string[] {
-  const names = new Set<string>();
-  for (const pr of s?.prs ?? []) for (const t of pr.tickets) if (t.status) names.add(t.status);
-  return [...names].sort((a, b) => a.localeCompare(b));
+  const names: string[] = [];
+  for (const pr of s?.prs ?? []) for (const t of pr.tickets) if (t.status) names.push(t.status);
+  return distinctStatuses(names);
 }
 
 /** The Jira project keys seen on the tickets of the snapshot, sorted, as a fallback for the project filter. */
@@ -106,9 +125,24 @@ export function projectsOf(s: Snapshot | undefined): string[] {
   return [...keys].sort((a, b) => a.localeCompare(b));
 }
 
-/** The names with the current value added when it is missing, so a dropdown can still show it. */
-export function withCurrent(names: readonly string[], current: string): string[] {
-  return current !== '' && !names.includes(current) ? [...names, current] : [...names];
+/** Case-insensitive key of a Jira project key. */
+export const projectKey = (s: string): string => s.toLowerCase();
+
+/**
+ * The names with the current value shown by its own spelling, so a dropdown can display it: an
+ * option with the same `key` is replaced by `current`, and when there is none `current` is added.
+ * Statuses compare by `statusKey` (the default), project keys by `projectKey`.
+ */
+export function withCurrent(
+  names: readonly string[],
+  current: string,
+  key: (name: string) => string = statusKey,
+): string[] {
+  if (current === '') return [...names];
+  const want = key(current);
+  const at = names.findIndex((n) => key(n) === want);
+  if (at < 0) return [...names, current];
+  return names.map((n, i) => (i === at ? current : n));
 }
 
 /** The list to offer: the Jira list when it has names, else the names the snapshot shows. */

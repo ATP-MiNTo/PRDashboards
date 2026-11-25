@@ -8,6 +8,12 @@
     { "id": "5", "name": "Done", "statusCategory": { "key": "done" } },
     { "id": "6", "name": " In Progress ", "statusCategory": { "key": "indeterminate" } },
     { "id": "7", "name": "", "statusCategory": { "key": "new" } },
-    { "id": "8", "name": "Blocked", "statusCategory": { "key": "indeterminate" } }
+    { "id": "8", "name": "Blocked", "statusCategory": { "key": "indeterminate" } },
+    { "id": "9", "name": "Re open", "statusCategory": { "key": "indeterminate" } },
+    { "id": "10", "name": "Re-open", "statusCategory": { "key": "indeterminate" } },
+    { "id": "11", "name": "REOPEN", "statusCategory": { "key": "indeterminate" } },
+    { "id": "12", "name": "Re-open", "statusCategory": { "key": "indeterminate" } },
+    { "id": "13", "name": "Reopened", "statusCategory": { "key": "indeterminate" } },
+    { "id": "14", "name": "---", "statusCategory": { "key": "new" } }
   ]
 }

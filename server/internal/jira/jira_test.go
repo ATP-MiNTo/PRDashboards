@@ -231,8 +231,8 @@ func TestStatusesAreDistinctSortedAndCachedFor10Minutes(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t, nil, "statuses")
 	got, err := r.c.Statuses(ctx, site)
-	if err != nil || !slices.Equal(got, []string{"Blocked", "done", "In Progress", "To Do"}) {
-		t.Fatalf("case-insensitive duplicates and blanks are dropped, the rest sorted: %v %v", got, err)
+	if err != nil || !slices.Equal(got, []string{"---", "Blocked", "done", "In Progress", "Re-open", "Reopened", "To Do"}) {
+		t.Fatalf("near-duplicates by StatusKey and blanks are dropped, a punctuation-only status such as --- is kept, the most frequent spelling (else the first) kept, the rest sorted: %v %v", got, err)
 	}
 	calls := r.seen()
 	if len(calls) != 1 || calls[0].Method != "GET" || calls[0].Path != "/ex/jira/cloud-1/rest/api/3/status" || calls[0].Auth != "Bearer tok" {
@@ -241,7 +241,7 @@ func TestStatusesAreDistinctSortedAndCachedFor10Minutes(t *testing.T) {
 	got[0] = "changed"
 	r.clock.Advance(jira.StatusesTTL - time.Second)
 	again, err := r.c.Statuses(ctx, site)
-	if err != nil || again[0] != "Blocked" || len(r.seen()) != 1 {
+	if err != nil || again[0] != "---" || len(r.seen()) != 1 {
 		t.Fatalf("a cache hit makes no call and returns a copy: %v %v %d", again, err, len(r.seen()))
 	}
 	if _, err := r.c.Statuses(ctx, "cloud-2"); err != nil || len(r.seen()) != 2 {

@@ -300,7 +300,8 @@ func (p *Poller) move(ctx context.Context, site jira.Site, j job) result {
 		p.cfg.Log.WarnContext(ctx, "rule transitions lookup failed", "ticket", j.f.Ticket, "err", err)
 		return result{skip: true}
 	}
-	i := slices.IndexFunc(list, func(t jira.Transition) bool { return strings.EqualFold(t.ToStatus, j.f.Target) })
+	target := rules.StatusKey(j.f.Target)
+	i := slices.IndexFunc(list, func(t jira.Transition) bool { return rules.StatusKey(t.ToStatus) == target })
 	if i < 0 {
 		act.Result = "skipped"
 		act.Summary = j.f.Ticket + " was not moved to " + j.f.Target + " by rule " + label

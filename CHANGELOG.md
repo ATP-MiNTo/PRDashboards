@@ -6,6 +6,21 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.2.1] - 2026-11-25
+
+### Changed
+
+- "Exclude statuses" is a searchable multi-select with removable chips instead of one button per
+  status, so a site with about 90 statuses stays readable.
+- Dropdowns scroll after about 280px, keep the active option in view, and lists of more than 12
+  options (statuses, projects) have a search box.
+
+### Fixed
+
+- Near-duplicate statuses such as "Re-open", "re open" and "Reopen" are one status: the Jira status
+  list shows each once, and the exclude list, the Status filter, the target check and the choice of
+  the Jira transition ignore case, spaces and punctuation. "Reopened" stays a different status.
+
 ## [1.2.0] - 2026-11-25
 
 ### Added

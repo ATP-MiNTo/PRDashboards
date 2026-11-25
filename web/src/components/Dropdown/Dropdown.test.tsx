@@ -190,4 +190,97 @@ describe('Dropdown', () => {
     act(() => void vi.advanceTimersByTime(1));
     expect(screen.queryByRole('listbox')).toBeNull();
   });
+
+  it('has no search box for 12 options or fewer', () => {
+    const { box } = setup();
+    fireEvent.click(box);
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+});
+
+describe('Dropdown with a long list', () => {
+  const MANY: DropdownOption<string>[] = Array.from({ length: 30 }, (_, i) => ({
+    value: `s${i}`,
+    label: i === 7 ? 'Re-open' : `Status ${i}`,
+  }));
+
+  function many() {
+    const onChange = vi.fn();
+    render(<Dropdown label="Status" value="s0" options={MANY} onChange={onChange} />);
+    return { onChange, box: screen.getByRole('combobox', { name: 'Status' }) };
+  }
+
+  it('shows a search box that filters by substring and stays open while focused', () => {
+    vi.useFakeTimers();
+    const { box } = many();
+    box.focus();
+    fireEvent.click(box);
+    const search = screen.getByRole('searchbox', { name: 'Search Status' });
+    expect(search).toHaveFocus();
+    fireEvent.blur(box);
+    act(() => void vi.advanceTimersByTime(1));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: ' OPEN' } });
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Re-open']);
+    expect(search).toHaveAttribute('aria-activedescendant', screen.getByRole('option').id);
+    fireEvent.change(search, { target: { value: 'zzz' } });
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(screen.getByText('No matches')).toBeInTheDocument();
+  });
+
+  it('moves with the arrow keys and picks with Enter from the search box', () => {
+    const { onChange, box } = many();
+    fireEvent.click(box);
+    const search = screen.getByRole('searchbox');
+    fireEvent.change(search, { target: { value: 'status 2' } });
+    press(search, 'ArrowDown');
+    press(search, 'Enter');
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('s20');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(box).toHaveFocus();
+  });
+
+  it('keeps Space and Home for typing, closes on Escape and refocuses the button', () => {
+    const outer = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <div onKeyDown={(e) => outer(e.key)}>
+        <Dropdown label="Status" value="s0" options={MANY} onChange={onChange} />
+      </div>,
+    );
+    const box = screen.getByRole('combobox', { name: 'Status' });
+    fireEvent.click(box);
+    const search = screen.getByRole('searchbox');
+    press(search, ' ');
+    press(search, 'Home');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    press(search, 'Escape');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(box).toHaveFocus();
+    expect(outer).not.toHaveBeenCalledWith('Escape');
+  });
+
+  it('does not steal the focus on a click on an option, and scrolls the active one into view', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const { box } = many();
+    box.focus();
+    fireEvent.click(box);
+    const option = screen.getByRole('option', { name: 'Status 3' });
+    expect(fireEvent.mouseDown(option)).toBe(false);
+    fireEvent.mouseMove(option);
+    expect(scroll).toHaveBeenLastCalledWith({ block: 'nearest' });
+    expect(scroll.mock.contexts.at(-1)).toBe(option);
+    expect(screen.getByRole('listbox')).toHaveClass(/list/);
+  });
+
+  it('stays open when the list itself scrolls', () => {
+    const { box } = many();
+    fireEvent.click(box);
+    fireEvent.scroll(screen.getByRole('listbox'));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.scroll(window);
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
 });

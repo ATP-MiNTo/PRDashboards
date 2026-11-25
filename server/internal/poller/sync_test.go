@@ -127,6 +127,20 @@ func TestMergedRuleMovesTheTicketOfAMergedPR(t *testing.T) {
 	}
 }
 
+func TestTransitionIsChosenByStatusKey(t *testing.T) {
+	a := pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a")
+	r := newRig(t, a)
+	r.putRules(syncRule("done", "merged", "D-one", "all"))
+	r.allowTransitions("INP-1")
+	r.sync()
+	r.merge("PR_a")
+	r.clock.Advance(time.Minute)
+	r.sync()
+	if got := r.jira.moveLog(); !slices.Equal(got, []string{"INP-1:31"}) {
+		t.Fatalf("a target that differs from the status only in punctuation still picks its transition: %v", got)
+	}
+}
+
 func TestRuleFiringsMakeNoCallsForTicketsThatDoNotFire(t *testing.T) {
 	var prs []github.PR
 	for i, k := range []string{"INP-1", "INP-2", "INP-1", "OPS-9"} {
