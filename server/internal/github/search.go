@@ -39,9 +39,11 @@ var (
 var mergedPRsQuery string
 
 const (
-	// OpenAssignedQuery and OpenAuthoredQuery are the two searches of TECH_SPEC 10.2. The
-	// dashboard lists the union: pull requests assigned to the viewer or opened by the viewer.
+	// OpenAssignedQuery is the search for open pull requests assigned to the viewer. With
+	// OpenAuthoredQuery it makes the two searches of TECH_SPEC 10.2, and the dashboard lists the
+	// union.
 	OpenAssignedQuery = "is:pr is:open assignee:@me archived:false"
+	// OpenAuthoredQuery is the search for open pull requests opened by the viewer.
 	OpenAuthoredQuery = "is:pr is:open author:@me archived:false"
 	// SearchCap is the number of results GitHub's search returns at most.
 	SearchCap = 1000
