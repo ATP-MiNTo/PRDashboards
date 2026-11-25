@@ -6,6 +6,16 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [1.1.3] - 2026-11-25
+
+### Fixed
+
+- A fine-grained token no longer makes the list show "GitHub reported errors for part of the list:
+  FORBIDDEN Resource not accessible by personal access token". GitHub refuses to show check runs to
+  such tokens, which is harmless: the pull requests, their overall CI state and the "N checks" link
+  are all still there. Merged pull requests are now also resolved as having left the list with these
+  tokens.
+
 ## [1.1.2] - 2026-11-25
 
 ### Fixed

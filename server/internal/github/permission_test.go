@@ -262,6 +262,17 @@ func TestPullRequestWithHiddenCheckRuns(t *testing.T) {
 	}
 }
 
+// searchWithErrors runs SearchOpen against pages that carry the given errors array.
+func searchWithErrors(t *testing.T, errs string) (github.SearchResult, error) {
+	t.Helper()
+	c := serveBodies(t, func(string) fixtureBody {
+		var extra map[string]any
+		_ = json.Unmarshal([]byte(`{"errors":`+errs+`}`), &extra)
+		return page([]string{"A"}, 1, 4900, 1, extra)
+	})
+	return c.SearchOpen(context.Background(), "tok")
+}
+
 func TestSearchWithHiddenCheckRunsHasNoBanner(t *testing.T) {
 	c := serveBodies(t, func(string) fixtureBody {
 		var extra map[string]any
@@ -269,12 +280,31 @@ func TestSearchWithHiddenCheckRunsHasNoBanner(t *testing.T) {
 		return page([]string{"A"}, 1, 4900, 1, extra)
 	})
 	res, err := c.SearchOpen(context.Background(), "tok")
-	if err != nil || len(res.PRs) != 1 || len(res.Blocked) != 0 {
+	if err != nil || len(res.PRs) != 1 || len(res.Blocked) != 0 || len(res.Errors) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
-	// One line per search (the assigned and the authored one), not one per hidden check.
-	if len(res.Errors) != 2 || !strings.Contains(res.Errors[0], "Resource not accessible by personal access token") {
-		t.Fatalf("errors %v", res.Errors)
+}
+
+func TestSearchErrorsAroundHiddenChecks(t *testing.T) {
+	flags := `"extensions":{"saml_failure":false,"ip_allow_list_failure":false}`
+	const msg = `"message":"Resource not accessible by personal access token"`
+	check := `"path":["search","nodes",0,"commits","nodes",0,"commit","statusCheckRollup","contexts","nodes",1]`
+	cases := []struct {
+		name        string
+		errs        string
+		wantErrors  int // two searches (assigned and authored) each report the error once
+		wantBlocked int
+	}{
+		{"hidden checks only", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `}]`, 0, 0},
+		{"permission error off the check path stays", `[{"type":"FORBIDDEN","path":["search","nodes",1],` + flags + `,` + msg + `}]`, 2, 0},
+		{"hidden check next to a real error", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `},{"type":"INTERNAL","message":"boom"}]`, 2, 0},
+		{"saml flag on a check path is SSO", `[{"type":"FORBIDDEN",` + check + `,"extensions":{"saml_failure":true,"ip_allow_list_failure":false},"message":"Resource protected by organization SAML enforcement. You must grant your token access to \"acme\""}]`, 0, 1},
+	}
+	for _, tc := range cases {
+		res, err := searchWithErrors(t, tc.errs)
+		if err != nil || len(res.PRs) != 1 || len(res.Errors) != tc.wantErrors || len(res.Blocked) != tc.wantBlocked {
+			t.Errorf("%s: %+v %v", tc.name, res, err)
+		}
 	}
 }
 

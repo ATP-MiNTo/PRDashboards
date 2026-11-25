@@ -59,9 +59,18 @@ func (c *Client) logRefusal(ctx context.Context, op string, status int, h http.H
 		c.Log.WarnContext(ctx, "github refused a call", args...)
 		return
 	}
+	hidden := 0
 	for _, e := range errs {
+		if hiddenCheckError(e) {
+			hidden++
+			continue
+		}
 		c.Log.WarnContext(ctx, "github refused a call", append(slices.Clone(args),
 			"error_type", e.Type, "error_path", truncate(fmt.Sprint(e.Path), 200), "error_message", truncate(e.Message, 200))...)
+	}
+	if hidden > 0 {
+		// A token that cannot read check runs repeats one error per check: one DEBUG line per answer.
+		c.Log.DebugContext(ctx, "github hid check runs from this token", "op", op, "count", hidden)
 	}
 }
 
@@ -315,6 +324,31 @@ func classifyForbidden(h http.Header, message string, x errorExtensions) error {
 		b.Message = truncate(message, 200)
 	}
 	return b
+}
+
+// hiddenCheckError reports whether e is the known, harmless refusal of a fine-grained token that
+// cannot read check runs: a FORBIDDEN permission error (not SSO or an organization policy) whose
+// path runs through statusCheckRollup and then contexts. The pull request and its rollup state
+// still arrive, so such an error is no failure.
+func hiddenCheckError(e graphQLError) bool {
+	if e.Type != "FORBIDDEN" {
+		return false
+	}
+	if _, ok := classifyForbidden(nil, e.Message, e.Extensions).(*PermissionError); !ok {
+		return false
+	}
+	rollup := false
+	for _, el := range e.Path {
+		switch fmt.Sprint(el) {
+		case "statusCheckRollup":
+			rollup = true
+		case "contexts":
+			if rollup {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // PermissionError says GitHub refused an action because the token lacks a permission, for
