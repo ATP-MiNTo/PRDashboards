@@ -96,6 +96,7 @@ beforeEach(() => {
   });
   vi.stubGlobal('EventSource', FakeEventSource);
   document.documentElement.removeAttribute('data-mode');
+  document.documentElement.removeAttribute('data-theme');
 });
 
 describe('CommandTable', () => {
@@ -255,6 +256,7 @@ describe('CommandTable', () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
     await waitFor(() => expect(document.documentElement.dataset.mode).toBe('dark'));
+    expect(document.documentElement.dataset.theme).toBe('night');
     expect(screen.queryByRole('group', { name: 'Theme' })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
