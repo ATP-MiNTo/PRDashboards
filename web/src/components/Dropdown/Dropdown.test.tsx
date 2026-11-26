@@ -275,11 +275,24 @@ describe('Dropdown with a long list', () => {
     expect(screen.getByRole('listbox')).toHaveClass(/list/);
   });
 
-  it('stays open when the list itself scrolls', () => {
+  it('stays open and follows its anchor when the page scrolls, and closes once the anchor is off screen', () => {
     const { box } = many();
+    let top = 100;
+    vi.spyOn(box, 'getBoundingClientRect').mockImplementation(
+      () => ({ top, bottom: top + 30, left: 10, right: 110, width: 100, height: 30 }) as DOMRect,
+    );
     fireEvent.click(box);
+    const pop = () => screen.getByRole('listbox').closest('[style]') as HTMLElement;
+    expect(pop().style.top).toBe('132px');
     fireEvent.scroll(screen.getByRole('listbox'));
+    expect(pop().style.top).toBe('132px');
+    top = 60;
+    fireEvent.scroll(window);
     expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(pop().style.top).toBe('92px');
+    fireEvent(window, new Event('resize'));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    top = -80;
     fireEvent.scroll(window);
     expect(screen.queryByRole('listbox')).toBeNull();
   });

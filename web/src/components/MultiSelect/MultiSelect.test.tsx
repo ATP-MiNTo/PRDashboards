@@ -153,11 +153,22 @@ describe('MultiSelect', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  it('closes when the page scrolls but not when the list does', () => {
+  it('follows its anchor when the page scrolls and closes once the anchor is off screen', () => {
     const { box } = setup();
+    let top = 100;
+    vi.spyOn(box, 'getBoundingClientRect').mockImplementation(
+      () => ({ top, bottom: top + 30, left: 10, right: 110, width: 100, height: 30 }) as DOMRect,
+    );
     fireEvent.click(box);
+    const list = screen.getByRole('listbox').closest('[style]') as HTMLElement;
+    expect(list.style.top).toBe('132px');
     fireEvent.scroll(screen.getByRole('listbox'));
+    expect(list.style.top).toBe('132px');
+    top = 60;
+    fireEvent.scroll(window);
     expect(screen.getByRole('listbox')).toBeInTheDocument();
+    expect(list.style.top).toBe('92px');
+    top = -80;
     fireEvent.scroll(window);
     expect(screen.queryByRole('listbox')).toBeNull();
     fireEvent.click(box);
