@@ -208,6 +208,8 @@ const optionsLoaded = async () => {
   await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalled());
   await act(async () => {
     await api.getJiraOptions.mock.results[0]?.value?.catch(() => {});
+    // TanStack Query hands the result to its observers on a zero-delay timer; wait for it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 };
 
