@@ -6,7 +6,7 @@
   z-index: 25;
   flex: none;
   align-self: flex-start;
-  width: 28rem;
+  width: 24rem;
   max-width: 40vw;
   height: 100dvh;
   padding-block: 12px;
@@ -42,7 +42,7 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: min(28rem, 92vw);
+  width: min(24rem, 92vw);
   border-radius: 0 18px 18px 0;
 }
 
