@@ -158,7 +158,7 @@ sequenceDiagram
 | GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
 | Poller and snapshot | [features/poller.md](features/poller.md) | Built |
 | Command Table | [features/command-table.md](features/command-table.md) | Built |
-| Toolbar, hidden pull requests, pager and footer | [features/toolbar-pager-footer.md](features/toolbar-pager-footer.md) | Built |
+| Toolbar, show by role, hidden pull requests, pager and footer | [features/toolbar-pager-footer.md](features/toolbar-pager-footer.md) | Built |
 | Ticket linking | [features/ticket-linking.md](features/ticket-linking.md) | Built |
 | Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |

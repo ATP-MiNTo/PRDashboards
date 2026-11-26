@@ -11,7 +11,8 @@ Differences from the spec:
 
 - The Merge column shows why a PR cannot be merged, computed in the browser from the snapshot (`blockOf`). The server checks the same things again when merging ([merge-and-transition.md](merge-and-transition.md)).
 - Settings is not in the top bar. A floating burger button toggles the left sidebar that holds it ([sidebar-shell.md](sidebar-shell.md)).
-- Under the stat strip the status chips (All, Ready, Blocked, Draft, Stale) stay, with the sort and "Hidden PRs" toolbar next to them in the same row. Rows can be hidden, the list is paged at the bottom of the table, and a footer with a GitHub button ends the page. All of it is client-side over the snapshot and is described in [toolbar-pager-footer.md](toolbar-pager-footer.md).
+- Under the stat strip the status chips (All, Ready, Blocked, Draft, Stale) stay, with the sort, "Show" and "Hidden PRs" toolbar and the legend next to them in the same row. Rows can be hidden, the list is paged at the bottom of the table, and a footer with a GitHub button ends the page. All of it is client-side over the snapshot and is described in [toolbar-pager-footer.md](toolbar-pager-footer.md).
+- Rows are tinted by why the PR is listed (`SnapshotPr.roles`): cyan for assigned only, pink for opened by the user only, split half and half when both. A stack keeps its purple cue (border and header). See the rules below.
 - The Account button opens a side panel with the Connected accounts content. The Accounts page (`/accounts/`) stays for OAuth returns and shows the same content.
 
 ## Data model
@@ -32,6 +33,7 @@ Reads `Snapshot` from `GET /api/snapshot` ([poller.md](poller.md)) and `Settings
 - [CiCell.tsx](../../web/src/components/CommandTable/CiCell.tsx): rollup pill and per-check rows. [TicketCell.tsx](../../web/src/components/CommandTable/TicketCell.tsx): see [ticket-linking.md](ticket-linking.md).
 - [useSnapshotEvents.ts](../../web/src/components/CommandTable/useSnapshotEvents.ts): `EventSource` client. [useNow.ts](../../web/src/components/CommandTable/useNow.ts) and [RelativeTime.tsx](../../web/src/components/CommandTable/RelativeTime.tsx): shared tickers.
 - [CommandTable.module.css](../../web/src/components/CommandTable/CommandTable.module.css): styles on the palette tokens in [globals.css](../../web/src/app/globals.css).
+- [web/src/lib/show.ts](../../web/src/lib/show.ts): the roles of a row and the Show filter ([toolbar-pager-footer.md](toolbar-pager-footer.md)).
 - [web/src/lib/snapshot.ts](../../web/src/lib/snapshot.ts): `blockOf`, `statsOf`, `groupsOf`, `safeLink`, URL builders and time helpers. [sort.ts](../../web/src/lib/sort.ts) and [view.ts](../../web/src/lib/view.ts) hold the sort, hide and paging logic.
 - [web/src/api/queries.ts](../../web/src/api/queries.ts): `useSnapshot`, `useSnapshotPr`, `useSyncNow`, `useSaveTickets`, and the merge, repo and activity hooks.
 
@@ -56,6 +58,7 @@ None from the browser to a provider. It calls only `/api/*` and `/events` on its
 - Links come from `safeLink` or the URL builders: https only, no credentials, github.com links rebuilt from the path alone, external hosts shown as host text, `target="_blank"` with `rel="noopener noreferrer"`. The Authorize link is built from a validated organization name (`https://github.com/orgs/<org>/sso`), never from a server URL.
 - No inline styles (CSS Modules and custom properties), no `dangerouslySetInnerHTML`. `pnpm -C web build` writes the CSP hashes and must pass.
 - Times are relative with the absolute time as tooltip. Animations stop under `prefers-reduced-motion`.
+- Role cue: `Row` adds `role_assigned`, `role_authored` or `role_both` (from `roleKind`) to the row. The classes set a soft background from the `--role-assigned-*` and `--role-authored-*` tokens in globals.css (light and dark values), a darker hover, and a 4px bar on the first cell; `role_both` splits the background left and right and the bar top and bottom. Classes only, no `style` attribute. Text contrast against every tint, hover included, is at least 4.5:1 in the light (winter) and dark (night) modes (body text 10.6:1 or more, muted text 4.7:1 or more). Dimmed hidden rows keep their intentionally lower opacity.
 - A PR is stale when its last commit is older than 3 days. Ready, blocked and draft come from `blockOf`.
 - Per-check states: passing, failing, running, pending, skipped, neutral, cancelled.
 
@@ -63,6 +66,7 @@ None from the browser to a provider. It calls only `/api/*` and `/events` on its
 
 - [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): columns and rows, stats and filters, org banner, source banners, sync and events, theme applied, Account panel, row isolation, method cell, merge panel toggle, the burger opening the Settings sidebar.
 - [CiCell.test.tsx](../../web/src/components/CommandTable/CiCell.test.tsx): checks list, links, https only, "+N more".
+- Role cues, Show switch and legend: [ListControls.test.tsx](../../web/src/components/CommandTable/ListControls.test.tsx), [web/src/lib/show.test.ts](../../web/src/lib/show.test.ts).
 - [web/src/lib/snapshot.test.ts](../../web/src/lib/snapshot.test.ts).
 - Sort, hide, paging and footer: [toolbar-pager-footer.md](toolbar-pager-footer.md) lists their tests, among them [ListControls.test.tsx](../../web/src/components/CommandTable/ListControls.test.tsx).
 - [TopBar.test.tsx](../../web/src/components/CommandTable/TopBar.test.tsx): source status, the rate limit countdown, the Account button, the brand name followed by its icon, no Settings button, no theme control.
