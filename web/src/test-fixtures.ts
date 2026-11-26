@@ -32,6 +32,7 @@ export function pr(id: string, number: number, over: Partial<SnapshotPr> = {}): 
       mergeAllowed: true,
       rebaseAllowed: true,
     },
+    roles: ['assigned'],
     isDraft: false,
     mergeable: 'MERGEABLE',
     mergeStateStatus: 'CLEAN',
