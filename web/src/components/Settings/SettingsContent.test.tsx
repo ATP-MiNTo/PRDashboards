@@ -281,3 +281,14 @@ describe('SettingsContent', () => {
     expect(screen.getByText(/Jira asks for fields on this move/)).toBeInTheDocument();
   });
 });
+
+describe('Settings content on mount', () => {
+  it('makes no Jira options request until a rule form opens', async () => {
+    renderWithClient(<SettingsContent />);
+    await screen.findByRole('heading', { name: 'Activity' });
+    await screen.findByText('No rules yet.');
+    expect(api.getJiraOptions).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalledTimes(1));
+  });
+});

@@ -41,11 +41,13 @@ function ExcludeStatuses({
   excluded,
   pending,
   onChange,
+  onOpen,
 }: {
   statuses: string[];
   excluded: string[];
   pending: boolean;
   onChange: (next: string[]) => void;
+  onOpen: () => void;
 }) {
   const { names, values } = useMemo(() => {
     // Near-duplicates (by `statusKey`) count as one: an excluded "reopen" selects the listed "Reopen".
@@ -71,6 +73,7 @@ function ExcludeStatuses({
         max={MAX_EXCLUDED}
         disabled={pending}
         onChange={onChange}
+        onOpen={onOpen}
       />
     </div>
   );
@@ -81,7 +84,11 @@ export function RulesSection() {
   const save = useSaveRules();
   const settings = useSettings();
   const saveSettings = useSaveSettings();
-  const options = useJiraOptions(true);
+  const [form, setForm] = useState<SyncRule | null>(null);
+  // Jira statuses and projects cost a server-side Jira call, so they load only when the rule form
+  // opens or the Exclude statuses list is first opened, never on mount.
+  const [wantOptions, setWantOptions] = useState(false);
+  const options = useJiraOptions(wantOptions || form !== null);
   const snapshotStatuses = useSnapshot(statusesOf).data;
   const snapshotProjects = useSnapshot(projectsOf).data;
   const statuses = useMemo(
@@ -92,7 +99,6 @@ export function RulesSection() {
     () => preferList(options.data?.projects, snapshotProjects ?? []),
     [options.data, snapshotProjects],
   );
-  const [form, setForm] = useState<SyncRule | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const from = useRef<number | null>(null);
   const list = rules.data?.rules ?? [];
@@ -206,6 +212,7 @@ export function RulesSection() {
           statuses={statuses}
           excluded={settings.data.excludedStatuses}
           pending={saveSettings.isPending}
+          onOpen={() => setWantOptions(true)}
           onChange={(excludedStatuses) =>
             saveSettings.mutate({ ...settings.data, excludedStatuses })
           }

@@ -27,6 +27,14 @@ const press = (el: HTMLElement, key: string) => fireEvent.keyDown(el, { key });
 const search = () => screen.getByRole('searchbox', { name: 'Search Exclude statuses' });
 
 describe('MultiSelect', () => {
+  it('calls onOpen each time the popover opens', () => {
+    const onOpen = vi.fn();
+    const { box } = setup({ onOpen });
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(box);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
   it('summarises the picks on the trigger', () => {
     const { box } = setup();
     expect(box).toHaveTextContent('None');
