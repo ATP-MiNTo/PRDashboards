@@ -6,6 +6,14 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.3.1] - 2026-11-26
+
+### Fixed
+
+- Dropdown and multi-select lists no longer close when the page scrolls right after they open. They now
+  follow their button and close only when the button leaves the screen. This fixes lists that vanished
+  under a slow browser, which made the merge e2e specs time out.
+
 ## [2.3.0] - 2026-11-26
 
 ### Added
