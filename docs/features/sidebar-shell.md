@@ -43,6 +43,7 @@ None from the shell. The sidebar content mounts when the sidebar first opens (pa
 - Classes only: no `style` attribute and no `<style>` block, because the CSP is `style-src 'self'` ([security.md](security.md)). Dynamic state is a class or a data attribute.
 - The blur is on a `::before` layer of the sidebar, not on the sidebar: `backdrop-filter` on an ancestor would become the containing block of the fixed popovers in the Dropdown and MultiSelect.
 - The burger and the collapse chevron are buttons with accessible names ("Settings sidebar", "Collapse sidebar") and `aria-expanded`; the burger has `aria-controls`.
+- The sidebar column is 24rem wide (at most 40vw), and the overlay is at most 24rem or 92vw. The table is sized to fit beside it at 1280px ([command-table.md](command-table.md)).
 - The burger wrapper has height 0, so it adds no scroll space. The page adds no bottom padding for the shell.
 - The Account side panel keeps its own shell ([settings.md](settings.md)) and is not part of the sidebar.
 
