@@ -131,6 +131,126 @@ describe('sorting', () => {
   });
 });
 
+const mixed = () => [
+  pr('a1', 1, { title: 'Assigned one', roles: ['assigned'] }),
+  pr('a2', 2, { title: 'Assigned two', roles: ['assigned'] }),
+  pr('o1', 3, { title: 'Opened one', roles: ['authored'] }),
+  pr('b1', 4, { title: 'Both one', roles: ['assigned', 'authored'] }),
+];
+
+describe('show switch', () => {
+  const sw = () => screen.getByRole('button', { name: /^Show, now/ });
+
+  it('sits before the Hidden PRs switch and cycles Everything, Assigned to me, Opened by me', async () => {
+    load(mixed());
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned one');
+    const hidden = screen.getByRole('button', { name: /^Hidden PRs, now/ });
+    expect(sw().compareDocumentPosition(hidden) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(sw()).toHaveAccessibleName(/now Everything, 4/);
+    expect(rowOrder()).toEqual(['a1', 'a2', 'o1', 'b1']);
+
+    fireEvent.click(sw());
+    expect(sw()).toHaveAccessibleName(/now Assigned to me, 3/);
+    expect(rowOrder()).toEqual(['a1', 'a2', 'b1']);
+    expect(localStorage.getItem('prd-show')).toBe('assigned');
+
+    fireEvent.click(sw());
+    expect(sw()).toHaveAccessibleName(/now Opened by me, 2/);
+    expect(rowOrder()).toEqual(['o1', 'b1']);
+    expect(localStorage.getItem('prd-show')).toBe('authored');
+
+    fireEvent.click(sw());
+    expect(sw()).toHaveAccessibleName(/now Everything, 4/);
+  });
+
+  it('counts the whole snapshot, not the status filter or the hidden pull requests', async () => {
+    localStorage.setItem('prd-hidden', JSON.stringify(['a1']));
+    load([...mixed(), pr('d1', 5, { isDraft: true, roles: ['authored'] })]);
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned two');
+    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
+    expect(sw()).toHaveAccessibleName(/now Everything, 5/);
+    fireEvent.click(sw());
+    fireEvent.click(sw());
+    expect(sw()).toHaveAccessibleName(/now Opened by me, 3/);
+  });
+
+  it('restores the saved state and ignores a bad one', async () => {
+    localStorage.setItem('prd-show', 'authored');
+    load(mixed());
+    const first = renderWithClient(<CommandTable />);
+    await screen.findByText('Opened one');
+    expect(sw()).toHaveAccessibleName(/now Opened by me/);
+    expect(rowOrder()).toEqual(['o1', 'b1']);
+    first.unmount();
+
+    localStorage.setItem('prd-show', 'nope');
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Opened one');
+    expect(sw()).toHaveAccessibleName(/now Everything/);
+  });
+
+  it('lists a pull request without roles under every state', async () => {
+    const old = { ...pr('old', 9, { title: 'Older snapshot' }), roles: undefined };
+    load([old as unknown as SnapshotPr]);
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Older snapshot');
+    fireEvent.click(sw());
+    expect(rowOrder()).toEqual(['old']);
+    fireEvent.click(sw());
+    expect(rowOrder()).toEqual(['old']);
+  });
+
+  it('goes back to the first page when it changes', async () => {
+    load(many(25));
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Item 25');
+    fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+    fireEvent.click(sw());
+    expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('has a hint on the label that opens on keyboard focus and explains each state', async () => {
+    load(mixed());
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned one');
+    const label = screen.getByText('Show', { selector: 'span[tabindex]' });
+    act(() => label.focus());
+    const tip = screen.getByRole('tooltip');
+    expect(tip).toHaveTextContent(/Everything.*Assigned to me.*Opened by me/);
+    expect(label).toHaveAttribute('aria-describedby', tip.id);
+  });
+});
+
+describe('role cues', () => {
+  it('gives each row the class of its role, and none of them a style attribute', async () => {
+    load(mixed());
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned one');
+    const cls = (id: string) => document.querySelector(`tr[data-pr="${id}"]`)!.className;
+    expect(cls('a1')).toMatch(/role_assigned/);
+    expect(cls('o1')).toMatch(/role_authored/);
+    expect(cls('b1')).toMatch(/role_both/);
+    expect(cls('o1')).not.toMatch(/role_assigned|role_both/);
+    expect(document.querySelector('table [style]')).toBeNull();
+  });
+
+  it('shows a legend with Assigned, Opened by me and Stack at the end of the toolbar', async () => {
+    load(mixed());
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned one');
+    const legend = screen.getByRole('list', { name: 'Legend' });
+    expect(
+      within(legend)
+        .getAllByRole('listitem')
+        .map((li) => li.textContent),
+    ).toEqual(['Assigned', 'Opened by me', 'Stack']);
+    expect(legend.parentElement!.lastElementChild).toBe(legend);
+    expect(legend.querySelector('[style]')).toBeNull();
+  });
+});
+
 describe('hidden pull requests', () => {
   it('has a Hide checkbox on each row, named after the pull request', async () => {
     load(many(3));

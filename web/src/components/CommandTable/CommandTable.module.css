@@ -272,6 +272,47 @@
   transition: opacity 0.3s;
 }
 
+.role_assigned {
+  background: var(--role-assigned-bg);
+}
+
+.role_assigned:hover {
+  background: var(--role-assigned-hover);
+}
+
+.role_authored {
+  background: var(--role-authored-bg);
+}
+
+.role_authored:hover {
+  background: var(--role-authored-hover);
+}
+
+.role_both {
+  background: linear-gradient(to right, var(--role-assigned-bg) 50%, var(--role-authored-bg) 50%);
+}
+
+.role_both:hover {
+  background: linear-gradient(
+    to right,
+    var(--role-assigned-hover) 50%,
+    var(--role-authored-hover) 50%
+  );
+}
+
+.role_assigned td:first-child {
+  box-shadow: inset 4px 0 0 var(--role-assigned);
+}
+
+.role_authored td:first-child {
+  box-shadow: inset 4px 0 0 var(--role-authored);
+}
+
+.role_both td:first-child {
+  background: linear-gradient(to bottom, var(--role-assigned) 50%, var(--role-authored) 50%) left /
+    4px 100% no-repeat;
+}
+
 .dim td {
   opacity: 0.45;
 }

@@ -2,6 +2,7 @@ import { memo, useState } from 'react';
 import type { MergeMethodName, SnapshotPr } from '@/api/client';
 import { useSnapshot, useSnapshotPr } from '@/api/queries';
 import { effectiveMethod } from '@/lib/merge';
+import { roleKind } from '@/lib/show';
 import { blockOf, githubPrUrl, isStale, lastGoodGithub } from '@/lib/snapshot';
 import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
@@ -70,7 +71,7 @@ function RowView({ id, hidden, dim, leaving, onHide }: RowProps) {
   const url = githubPrUrl(pr.repo.nameWithOwner, pr.number);
   const block = blockOf(pr);
   const child = pr.stack !== null && pr.stack.parentId !== null;
-  const rowClass = [styles.row];
+  const rowClass = [styles.row, styles[`role_${roleKind(pr)}`]];
   if (child) rowClass.push(styles.child);
   if (dim) rowClass.push(styles.dim);
   if (leaving) rowClass.push(styles.ghost);
