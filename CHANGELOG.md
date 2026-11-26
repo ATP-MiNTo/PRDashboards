@@ -6,6 +6,18 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.3.0] - 2026-11-26
+
+### Added
+
+- Every pull request in the snapshot says why it is listed (`roles`: `assigned`, `authored`, or both). The server
+  takes it from which of the two existing GitHub searches returned the PR, with no new GitHub call. A snapshot
+  stored by an older version loads with both roles.
+- A "Show" switch in the toolbar, before "Hidden PRs": Everything, Assigned to me and Opened by me, each with a
+  count and a hint that opens on hover and keyboard focus. The choice is kept in this browser.
+- Rows are tinted by role: cyan for assigned, pink for opened by you, split in two when both. Stacks keep their
+  purple cue. A legend at the right end of the toolbar names the colours.
+
 ## [2.2.0] - 2026-11-26
 
 ### Added
