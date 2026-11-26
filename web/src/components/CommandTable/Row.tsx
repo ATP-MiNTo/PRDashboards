@@ -49,7 +49,18 @@ function Commit({ pr }: { pr: SnapshotPr }) {
   );
 }
 
-function RowView({ id }: { id: string }) {
+interface RowProps {
+  id: string;
+  /** Whether the "Hide" box is checked. */
+  hidden: boolean;
+  /** Hidden rows shown among the others in the "All" mode. */
+  dim: boolean;
+  /** Fading out before it leaves the list. */
+  leaving: boolean;
+  onHide: (id: string) => void;
+}
+
+function RowView({ id, hidden, dim, leaving, onHide }: RowProps) {
   const pr = useSnapshotPr(id);
   const lastGood = useSnapshot(lastGoodGithub).data ?? null;
   const [chosen, setChosen] = useState<MergeMethodName | null>(null);
@@ -59,9 +70,13 @@ function RowView({ id }: { id: string }) {
   const url = githubPrUrl(pr.repo.nameWithOwner, pr.number);
   const block = blockOf(pr);
   const child = pr.stack !== null && pr.stack.parentId !== null;
+  const rowClass = [styles.row];
+  if (child) rowClass.push(styles.child);
+  if (dim) rowClass.push(styles.dim);
+  if (leaving) rowClass.push(styles.ghost);
   return (
     <>
-      <tr className={child ? `${styles.row} ${styles.child}` : styles.row} data-pr={pr.id}>
+      <tr className={rowClass.join(' ')} data-pr={pr.id}>
         <td className={styles.prCell}>
           <div className={styles.repo}>
             {pr.repo.nameWithOwner}
@@ -71,6 +86,15 @@ function RowView({ id }: { id: string }) {
                 Last data <RelativeTime iso={lastGood.syncedAt} />
               </Pill>
             )}
+            <label className={styles.hide}>
+              <input
+                type="checkbox"
+                checked={hidden}
+                aria-label={`Hide #${pr.number}`}
+                onChange={() => onHide(pr.id)}
+              />
+              Hide
+            </label>
           </div>
           <div className={styles.prTitle}>
             {url ? (
