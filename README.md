@@ -294,7 +294,9 @@ Changing a mode never moves tickets by itself.
 
 ### Settings
 
-The Settings button opens a panel on the right with these sections:
+The burger button at the top left opens the Settings sidebar on the left (it is open by default on wide
+screens, remembers whether you folded it, and folds itself after 30 seconds without the pointer on it).
+It has these sections:
 
 - **Connected accounts**: GitHub and Jira status, connect, reconnect, disconnect, and the Jira site
   to use.

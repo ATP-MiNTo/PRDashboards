@@ -13,7 +13,7 @@ Differences from the spec:
 
 - `GET /events` streams server-sent events ([poller.md](poller.md)). The web app manifest and
   service worker are described in [installable-app.md](installable-app.md).
-- The dashboard has a shared side panel ([settings.md](settings.md)) used by the Account and Settings buttons of the top bar.
+- The dashboard has a left sidebar with the Settings content, toggled by a floating burger ([sidebar-shell.md](sidebar-shell.md)), and a right-hand side panel for the Account button of the top bar ([settings.md](settings.md)).
 - The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
 - Tailwind CSS 3.4 and daisyUI 4.12 are build-time dev dependencies of the web app. Preflight is off and daisyUI's root styles are off, so the existing CSS Modules and `globals.css` render unchanged. Components built later use Tailwind utilities and daisyUI classes. Only the `winter` (light) and `night` (dark) themes are generated ([theme.md](theme.md)).

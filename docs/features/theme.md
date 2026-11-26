@@ -18,13 +18,13 @@ stored on the server in the settings, so it follows the user across browsers.
 - [web/tailwind.config.ts](../../web/tailwind.config.ts): the daisyUI plugin with the `winter` and `night` themes only. Its Tailwind and daisyUI setup is described in [app-shell.md](app-shell.md).
 - [web/src/app/globals.css](../../web/src/app/globals.css): palette tokens for light and `[data-mode='dark']`, taken from the prototype, plus the names used by the older pages.
 - [web/src/components/Settings/ThemeSwap.tsx](../../web/src/components/Settings/ThemeSwap.tsx): the rotating sun/moon toggle, a visually hidden checkbox named "Dark mode" (checked is dark) with two decorative SVGs, styled in `Settings.module.css`. The rotation is a CSS transition that `prefers-reduced-motion` turns off.
-- [web/src/components/Settings/SettingsDrawer.tsx](../../web/src/components/Settings/SettingsDrawer.tsx): the Theme section (a sun/moon swap and an Auto checkbox), after Sessions and before Activity. The top bar has no theme control. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) keeps `useTheme` mounted, so the mode is applied while the panel is closed.
+- [web/src/components/Settings/SettingsContent.tsx](../../web/src/components/Settings/SettingsContent.tsx): the Theme section (a sun/moon swap and an Auto checkbox), after Sessions and before Activity. The top bar has no theme control. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) keeps `useTheme` mounted, so the mode is applied while the Settings sidebar is closed.
 
 ## Key flows
 
 1. The dashboard reads the settings, `useTheme` sets `data-mode` and `data-theme` on `<html>`.
 2. In Auto it sets a timer for the next 07:00 or 19:00 and switches then.
-3. Toggling the swap in Settings is an explicit choice: it sends the full settings with `dark` or `light` to `PUT /api/settings` (this turns Auto off), then the query refetches and the mode follows. The swap shows the resolved `mode`, so in Auto it shows what the clock gives.
+3. Toggling the swap in the Settings sidebar is an explicit choice: it sends the full settings with `dark` or `light` to `PUT /api/settings` (this turns Auto off), then the query refetches and the mode follows. The swap shows the resolved `mode`, so in Auto it shows what the clock gives.
 4. The "Auto (light from 07:00 to 19:00)" checkbox is checked while the theme is `auto`. Checking it saves `auto`. Unchecking it saves the mode in effect, so the look does not jump.
 5. Both controls are disabled until the settings load.
 
@@ -42,4 +42,4 @@ None.
 ## Tests
 
 - [web/src/theme/theme.test.ts](../../web/src/theme/theme.test.ts): Auto at each hour, explicit choices, time to the next switch, and the light/dark to `winter`/`night` mapping.
-- [web/src/components/CommandTable/CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): applying the stored theme (both `data-mode` and `data-theme`), no theme control in the top bar. [SettingsDrawer.test.tsx](../../web/src/components/Settings/SettingsDrawer.test.tsx): the swap reflecting the theme, saving an explicit dark or light, turning Auto on and off, disabled while loading.
+- [web/src/components/CommandTable/CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): applying the stored theme (both `data-mode` and `data-theme`), no theme control in the top bar. [SettingsContent.test.tsx](../../web/src/components/Settings/SettingsContent.test.tsx): the swap reflecting the theme, saving an explicit dark or light, turning Auto on and off, disabled while loading.

@@ -163,7 +163,8 @@ sequenceDiagram
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |
 | Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
 | Status sync rules and Multi-PR tickets | [features/status-sync-rules.md](features/status-sync-rules.md) | Built |
-| Settings drawer | [features/settings.md](features/settings.md) | Built |
+| Sidebar shell and floating burger | [features/sidebar-shell.md](features/sidebar-shell.md) | Built |
+| Settings | [features/settings.md](features/settings.md) | Built |
 | Theme | [features/theme.md](features/theme.md) | Built |
 | Installable app (PWA) | [features/installable-app.md](features/installable-app.md) | Built |
 
