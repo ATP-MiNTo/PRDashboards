@@ -59,7 +59,7 @@ test("moves INP-105 only after the third approval", async ({
     () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
   );
   await target.click();
-  await page.getByRole("option", { name: "Ready to Merge" }).click();
+  await page.getByRole("option", { name: "Ready to Merge", exact: true }).click();
   await form.getByRole("button", { name: "Preview" }).click();
   await expect(form.getByRole("region", { name: "Preview" })).toBeVisible();
   // The approved fixture pull requests already match, and they must stay where they are.
