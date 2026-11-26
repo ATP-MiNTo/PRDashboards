@@ -6,7 +6,6 @@ import { TopBar } from './TopBar';
 
 const base = snapshot([]);
 const onAccount = vi.fn();
-const onSettings = vi.fn();
 
 function bar(over: Partial<typeof base.sources>) {
   renderWithClient(
@@ -14,7 +13,6 @@ function bar(over: Partial<typeof base.sources>) {
       snapshot={{ ...base, sources: { ...base.sources, ...over } }}
       status={null}
       onAccount={onAccount}
-      onSettings={onSettings}
     />,
   );
 }
@@ -52,13 +50,26 @@ describe('TopBar buttons', () => {
     expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
   });
 
-  it('opens the account panel and the settings from their buttons', () => {
+  it('opens the account panel from its button', () => {
     bar({});
     const account = screen.getByRole('button', { name: 'Account' });
     expect(account).toHaveAttribute('aria-haspopup', 'dialog');
     fireEvent.click(account);
     expect(onAccount).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(onSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('has no Settings button: the burger opens the sidebar', () => {
+    bar({});
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+  });
+});
+
+describe('TopBar brand', () => {
+  it('shows the name followed by a decorative icon', () => {
+    bar({});
+    const name = screen.getByText('PR Dashboards');
+    const icon = name.nextElementSibling!;
+    expect(icon.tagName.toLowerCase()).toBe('svg');
+    expect(icon).toHaveAttribute('aria-hidden', 'true');
   });
 });

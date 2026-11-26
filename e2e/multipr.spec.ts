@@ -4,6 +4,7 @@ import {
   configure,
   connectAccounts,
   fakeState,
+  openSettings,
   resetFakes,
   signIn,
   syncUntil,
@@ -47,12 +48,17 @@ test("moves INP-105 only after the third approval", async ({
   request,
 }) => {
   const before = (await fakeState<JiraState>(request, "atlassian")).jira;
-  await page.getByRole("button", { name: "Settings" }).click();
-  const drawer = page.getByRole("dialog", { name: "Settings" });
+  const drawer = await openSettings(page);
   await drawer.getByRole("button", { name: "Add rule", exact: true }).click();
   const form = drawer.getByRole("form", { name: "New rule" });
   await form.getByLabel("When").selectOption("review_approved");
-  await form.getByRole("combobox", { name: "Move the ticket to" }).click();
+  const target = form.getByRole("combobox", { name: "Move the ticket to" });
+  // The popover closes on any scroll, so let the sidebar finish scrolling before opening it.
+  await target.scrollIntoViewIfNeeded();
+  await page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+  await target.click();
   await page.getByRole("option", { name: "Ready to Merge" }).click();
   await form.getByRole("button", { name: "Preview" }).click();
   await expect(form.getByRole("region", { name: "Preview" })).toBeVisible();
@@ -65,7 +71,7 @@ test("moves INP-105 only after the third approval", async ({
   await expect(
     drawer.getByRole("button", { name: /: All$/ }),
   ).toHaveAttribute("aria-pressed", "true");
-  await drawer.getByRole("button", { name: "Close settings" }).click();
+  await drawer.getByRole("button", { name: "Collapse sidebar" }).click();
 
   await approve(page, request, [34]);
   await expect(
@@ -91,10 +97,9 @@ test("moves INP-105 only after the third approval", async ({
   expect(jira.jira.moves - before.moves).toBe(1);
   await expect(page.getByText(/Waiting on/)).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Settings" }).click();
-  const log = page
-    .getByRole("dialog", { name: "Settings" })
-    .getByRole("list", { name: "Activity" });
+  const log = (await openSettings(page)).getByRole("list", {
+    name: "Activity",
+  });
   await expect(log.getByText(/INP-105/).first()).toBeVisible();
   await expect(log.getByText(/by a status sync rule/).first()).toBeVisible();
 });

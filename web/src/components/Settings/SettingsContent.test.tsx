@@ -26,7 +26,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
   ...api,
 }));
 
-import { SettingsDrawer } from './SettingsDrawer';
+import { SettingsContent } from './SettingsContent';
 
 const settings = {
   polling: { githubSec: 60, jiraSec: 300 },
@@ -58,17 +58,11 @@ beforeEach(() => {
 
 const lastSaved = () => api.putSettings.mock.calls.at(-1)?.[0];
 
-describe('SettingsDrawer', () => {
-  it('renders nothing while closed', () => {
-    renderWithClient(<SettingsDrawer open={false} onClose={vi.fn()} />);
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('is a modal dialog with every section', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
-    const dialog = screen.getByRole('dialog', { name: 'Settings' });
-    expect(dialog).toHaveAttribute('aria-modal', 'true');
-    expect(within(dialog).queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
+describe('SettingsContent', () => {
+  it('has every section', async () => {
+    renderWithClient(<SettingsContent />);
+    const page = document.body;
+    expect(within(page).queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
     for (const name of [
       'Repositories',
       'Delete branch after merge',
@@ -79,16 +73,16 @@ describe('SettingsDrawer', () => {
       'Sessions',
       'Activity',
     ]) {
-      expect(await within(dialog).findByRole('heading', { name })).toBeInTheDocument();
+      expect(await within(page).findByRole('heading', { name })).toBeInTheDocument();
     }
   });
 
   it('orders the sections: repositories, preferences, rules, multi-PR, sessions, theme, activity', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
-    const dialog = screen.getByRole('dialog', { name: 'Settings' });
-    await within(dialog).findByRole('heading', { name: 'Activity' });
-    await within(dialog).findByRole('heading', { name: 'Polling intervals' });
-    const names = within(dialog)
+    renderWithClient(<SettingsContent />);
+    const page = document.body;
+    await within(page).findByRole('heading', { name: 'Activity' });
+    await within(page).findByRole('heading', { name: 'Polling intervals' });
+    const names = within(page)
       .getAllByRole('heading', { level: 3 })
       .map((h) => h.textContent);
     expect(names).toEqual([
@@ -104,7 +98,7 @@ describe('SettingsDrawer', () => {
   });
 
   it('puts both polling selects on one line with a hidden separator', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     const github = await screen.findByLabelText('GitHub');
     const jira = screen.getByLabelText('Jira');
     expect(github.closest('div')).toBe(jira.closest('div'));
@@ -115,52 +109,8 @@ describe('SettingsDrawer', () => {
     expect(sep.compareDocumentPosition(jira) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('moves focus into the dialog and gives it back on close', () => {
-    const opener = document.createElement('button');
-    document.body.append(opener);
-    opener.focus();
-    const { rerender } = renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
-    expect(screen.getByRole('dialog')).toHaveFocus();
-    rerender(<SettingsDrawer open={false} onClose={vi.fn()} />);
-    expect(opener).toHaveFocus();
-    opener.remove();
-  });
-
-  it('closes on Escape and on the scrim', () => {
-    const onClose = vi.fn();
-    renderWithClient(<SettingsDrawer open onClose={onClose} />);
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByTestId('side-panel-scrim'));
-    expect(onClose).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-    expect(onClose).toHaveBeenCalledTimes(3);
-  });
-
-  it('keeps Tab inside the dialog', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
-    const dialog = screen.getByRole('dialog');
-    await within(dialog).findByRole('heading', { name: 'Activity' });
-    const items = [
-      ...dialog.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])',
-      ),
-    ];
-    const first = items[0]!;
-    const last = items[items.length - 1]!;
-    last.focus();
-    fireEvent.keyDown(last, { key: 'Tab' });
-    expect(first).toHaveFocus();
-    first.focus();
-    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
-    expect(last).toHaveFocus();
-    dialog.focus();
-    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
-    expect(last).toHaveFocus();
-  });
-
   it('saves the delete-branch default and the polling intervals', async () => {
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     fireEvent.click(await screen.findByRole('checkbox', { name: /Delete the head branch/ }));
     await waitFor(() =>
       expect(api.putSettings).toHaveBeenLastCalledWith({
@@ -188,7 +138,7 @@ describe('SettingsDrawer', () => {
 
     it('reflects the stored theme in the swap', async () => {
       withTheme('dark');
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       const swap = await darkMode();
       await waitFor(() => expect(swap).toBeChecked());
       expect(await auto()).not.toBeChecked();
@@ -196,7 +146,7 @@ describe('SettingsDrawer', () => {
 
     it('saves an explicit dark from a light start', async () => {
       withTheme('light');
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       const swap = await darkMode();
       await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
       expect(swap).not.toBeChecked();
@@ -206,21 +156,21 @@ describe('SettingsDrawer', () => {
 
     it('saves an explicit light from a dark start', async () => {
       withTheme('dark');
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       fireEvent.click(await darkMode());
       await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'light' }));
     });
 
     it('turns Auto on and saves it', async () => {
       withTheme('dark');
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       fireEvent.click(await auto());
       await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'auto' }));
     });
 
     it('turns Auto off by saving the mode in effect', async () => {
       withTheme('auto');
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       const swap = await darkMode();
       const box = await auto();
       await waitFor(() => expect(box).toBeChecked());
@@ -233,7 +183,7 @@ describe('SettingsDrawer', () => {
 
     it('disables both controls until the settings load', async () => {
       api.getSettings.mockReturnValue(new Promise(() => {}));
-      renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+      renderWithClient(<SettingsContent />);
       expect(await screen.findByRole('checkbox', { name: 'Dark mode' })).toBeDisabled();
       expect(await screen.findByRole('checkbox', { name: /^Auto/ })).toBeDisabled();
     });
@@ -257,7 +207,7 @@ describe('SettingsDrawer', () => {
         nextCursor: 2,
       })
       .mockResolvedValueOnce({ items: [item(1, 'Merged #1')], nextCursor: null });
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     const log = await screen.findByRole('list', { name: 'Activity' });
     expect(await within(log).findByText('Move INP-2 failed', { exact: false })).toBeInTheDocument();
     expect(within(log).getByText('Jira answered 503')).toBeInTheDocument();
@@ -293,7 +243,7 @@ describe('SettingsDrawer', () => {
       },
     });
     api.dismissRetry.mockResolvedValue(undefined);
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     fireEvent.click(await screen.findByRole('button', { name: 'Retry the move of INP-1' }));
     await waitFor(() => expect(api.retryTransition).toHaveBeenCalled());
     expect(api.retryTransition.mock.calls[0]?.[0]).toBe(7);
@@ -304,7 +254,7 @@ describe('SettingsDrawer', () => {
 
   it('signs out every browser', async () => {
     api.revokeAllSessions.mockResolvedValue(undefined);
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     fireEvent.click(await screen.findByRole('button', { name: 'Sign out all browsers' }));
     await waitFor(() => expect(api.revokeAllSessions).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Signed out everywhere/)).toBeInTheDocument();
@@ -325,7 +275,7 @@ describe('SettingsDrawer', () => {
       ],
       nextCursor: null,
     });
-    renderWithClient(<SettingsDrawer open onClose={vi.fn()} />);
+    renderWithClient(<SettingsContent />);
     expect(await screen.findByText('needs input')).toBeInTheDocument();
     expect(screen.getByText(/by a status sync rule/)).toBeInTheDocument();
     expect(screen.getByText(/Jira asks for fields on this move/)).toBeInTheDocument();

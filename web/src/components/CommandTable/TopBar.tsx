@@ -1,6 +1,7 @@
 import type { Snapshot, SourceStatus, SyncStatus } from '@/api/client';
 import { useSyncNow } from '@/api/queries';
 import { countdown, sourceLabel } from '@/lib/snapshot';
+import { BrandIcon } from '../Shell/BrandIcon';
 import styles from './CommandTable.module.css';
 import { RelativeTime } from './RelativeTime';
 import { useNow } from './useNow';
@@ -25,12 +26,13 @@ export function TopBar({
   snapshot,
   status,
   onAccount,
-  onSettings,
+  scrolled = false,
 }: {
   snapshot: Snapshot | undefined;
   status: SyncStatus | null | undefined;
   onAccount: () => void;
-  onSettings: () => void;
+  /** True once the page has scrolled: the floating pill shows the name instead. */
+  scrolled?: boolean;
 }) {
   const sync = useSyncNow();
   const running = status?.running === true || sync.isPending;
@@ -39,8 +41,9 @@ export function TopBar({
   return (
     <header className={styles.topbar}>
       <div className={styles.topbarIn}>
-        <div className={styles.brand}>
+        <div className={scrolled ? `${styles.brand} ${styles.brandAway}` : styles.brand}>
           <b>PR Dashboards</b>
+          <BrandIcon className={styles.brandIcon} />
           <span>assigned or opened by you</span>
         </div>
         <div className={styles.tbRight}>
@@ -59,14 +62,6 @@ export function TopBar({
             onClick={onAccount}
           >
             Account
-          </button>
-          <button
-            type="button"
-            className={styles.tbButton}
-            aria-haspopup="dialog"
-            onClick={onSettings}
-          >
-            Settings
           </button>
         </div>
         <div className={styles.tbNote}>

@@ -1,5 +1,12 @@
 .page {
+  display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
 }
 
 .muted {
@@ -32,8 +39,20 @@
 
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  /* Room for the floating burger, which sits over the start of the bar. */
+  padding-left: 48px;
+  transition: opacity 0.2s;
+}
+
+.brandAway {
+  opacity: 0;
+}
+
+.brandIcon {
+  flex: none;
+  align-self: center;
 }
 
 .brand b {
@@ -101,6 +120,10 @@
 @media (prefers-reduced-motion: reduce) {
   .spin::before {
     animation: none;
+  }
+
+  .brand {
+    transition: none;
   }
 }
 
