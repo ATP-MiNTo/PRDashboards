@@ -6,6 +6,18 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.1.0] - 2026-11-26
+
+### Changed
+
+- Settings moved from a panel on the right to a left sidebar. On screens 1024px wide or more it is a column
+  that is open by default, remembers whether you folded it, and folds itself after 30 seconds without the
+  pointer on it. On narrow screens it is an overlay that closes with Escape or a click on the scrim.
+- The Settings button is gone from the top bar. A floating burger button at the top left, which stays on
+  screen while you scroll, opens and closes the sidebar. After scrolling it becomes a frosted pill that also
+  shows the app name.
+- The app name in the top bar is followed by the repo and branch icon.
+
 ## [2.0.0] - 2026-11-26
 
 ### Added
