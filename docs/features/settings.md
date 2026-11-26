@@ -34,7 +34,7 @@ Reads and writes `Settings` (`deleteBranchAfterMerge`, `defaultMethodForNewRepos
 
 ## Outside calls
 
-Showing the Settings content reads `GET /api/jira/options`: at most one Jira call (`GET /rest/api/3/status`, cached 10 minutes on the server), made when the sidebar content first mounts (the first time it opens, which on a wide screen is page load) and never on a timer. The content stays mounted after a collapse, so unsaved drafts survive. Saving a repo, or several, makes the server rebuild the snapshot from cached data, with one Jira lookup for tickets it has not seen.
+The Settings content mounts when the sidebar first opens, which on a wide screen is page load, so only local calls may run then. On mount it reads `GET /api/settings`, `GET /api/repos`, `GET /api/rules`, `GET /api/activity`, `GET /api/retries` and the snapshot from the query cache. These handlers read the database and make no GitHub or Jira call. `GET /api/jira/options` is the only Settings request that reaches Jira (`GET /rest/api/3/status`, cached 10 minutes on the server). `RulesSection` enables it only when the rule form opens (Add rule, Edit, or enabling a rule) or the Exclude statuses list is first opened (`MultiSelect` `onOpen`), never on mount and never on a timer. The content stays mounted after a collapse, so unsaved drafts survive. Saving a repo, or several, makes the server rebuild the snapshot from cached data, with one Jira lookup for tickets it has not seen.
 
 ## Rules and invariants
 
@@ -49,4 +49,4 @@ Showing the Settings content reads `GET /api/jira/options`: at most one Jira cal
 - [RulesSection.test.tsx](../../web/src/components/Settings/RulesSection.test.tsx) and [MultiPrSection.test.tsx](../../web/src/components/Settings/MultiPrSection.test.tsx): list, reorder by buttons and drag, preview and baseline choice, validation, the Jira dropdowns and their fallback, Exclude statuses (open, search, toggle, remove a chip, fallback, save failure), chips and their keys, hint text.
 - [RepositoriesSection.test.tsx](../../web/src/components/Settings/RepositoriesSection.test.tsx): fold, list and search, new repo, rule editor, validation, save, Save all (one request, disabled states, drafts kept).
 - [Dropdown.test.tsx](../../web/src/components/Dropdown/Dropdown.test.tsx): hover delay, click, keyboard, typeahead, disabled options, ARIA, the search box of long lists, scrolling the active option into view, Escape.
-- [MultiSelect.test.tsx](../../web/src/components/MultiSelect/MultiSelect.test.tsx): summary, click to open, search, toggle order, `max`, keys (arrows, Enter, Space, Escape, Tab), outside click, chips.
+- [MultiSelect.test.tsx](../../web/src/components/MultiSelect/MultiSelect.test.tsx): summary, click to open, search, toggle order, `max`, keys (arrows, Enter, Space, Escape, Tab), outside click, chips, `onOpen`.

@@ -36,7 +36,7 @@ auto-collapse are not saved. Scroll position and the wide-screen media query are
 
 ## Outside calls
 
-None. The Settings content makes its own calls when it first mounts ([settings.md](settings.md)); the sidebar content mounts when the sidebar first opens and stays mounted after a collapse (hidden with the `hidden` attribute).
+None from the shell. The sidebar content mounts when the sidebar first opens (page load on a wide screen) and stays mounted after a collapse (hidden with the `hidden` attribute). On mount it runs only local queries (settings, repos, rules, activity, retries); the Jira options request, the one that reaches Jira, waits until a rule form or the Exclude statuses list opens ([settings.md](settings.md)). Browser tabs therefore make no outside call by loading the dashboard.
 
 ## Rules and invariants
 
@@ -49,6 +49,7 @@ None. The Settings content makes its own calls when it first mounts ([settings.m
 ## Tests
 
 - [Shell.test.tsx](../../web/src/components/Shell/Shell.test.tsx): open and close from the burger and the chevron, saved and restored state, blocked storage, overlay (dialog, Escape, scrim, focus return, Tab wrap), auto-collapse with fake timers (pointer, focus, hold), the pill's stuck state after a scroll.
+- [SettingsContent.test.tsx](../../web/src/components/Settings/SettingsContent.test.tsx) and [RulesSection.test.tsx](../../web/src/components/Settings/RulesSection.test.tsx): no Jira options request on mount, one when the rule form or the Exclude statuses list opens.
 - [idleTimer.test.ts](../../web/src/components/Shell/idleTimer.test.ts): fire, cancel, restart, held.
 - [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx) and [TopBar.test.tsx](../../web/src/components/CommandTable/TopBar.test.tsx): the burger opens the sidebar, no Settings button, name followed by the icon.
 - [e2e/multipr.spec.ts](../../e2e/multipr.spec.ts): the rule is created and the activity read in the sidebar, opened with the burger (`openSettings` in [e2e/helpers.ts](../../e2e/helpers.ts)).
