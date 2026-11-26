@@ -1,4 +1,5 @@
 import { effectiveDir, SORT_OPTIONS, type SortKey } from '@/lib/sort';
+import type { ShowMode } from '@/lib/show';
 import type { HideMode } from '@/lib/view';
 import { Hint } from './Hint';
 import { RollSwitch, type RollOption } from './RollSwitch';
@@ -10,18 +11,45 @@ const HIDE_OPTIONS: RollOption<HideMode>[] = [
   { id: 'hidden', label: 'Hidden' },
 ];
 
+const SHOW_OPTIONS: RollOption<ShowMode>[] = [
+  { id: 'everything', label: 'Everything' },
+  { id: 'assigned', label: 'Assigned to me' },
+  { id: 'authored', label: 'Opened by me' },
+];
+
+const LEGEND = [
+  { id: 'assigned', label: 'Assigned' },
+  { id: 'authored', label: 'Opened by me' },
+  { id: 'stack', label: 'Stack' },
+] as const;
+
 export interface ToolbarProps {
   sort: SortKey;
   reversed: boolean;
   onSort: (key: SortKey) => void;
   onReverse: () => void;
+  show: ShowMode;
+  onShow: (show: ShowMode) => void;
+  /** Pull requests each Show state lists, across the whole snapshot, for the badge. */
+  showCounts: Record<ShowMode, number>;
   mode: HideMode;
   onMode: (mode: HideMode) => void;
   /** Pull requests each hide mode would show, for the badge. */
   counts: Record<HideMode, number>;
 }
 
-export function Toolbar({ sort, reversed, onSort, onReverse, mode, onMode, counts }: ToolbarProps) {
+export function Toolbar({
+  sort,
+  reversed,
+  onSort,
+  onReverse,
+  show,
+  onShow,
+  showCounts,
+  mode,
+  onMode,
+  counts,
+}: ToolbarProps) {
   const dir = effectiveDir(sort, reversed);
   return (
     <div className={styles.toolbar}>
@@ -68,6 +96,28 @@ export function Toolbar({ sort, reversed, onSort, onReverse, mode, onMode, count
       </div>
       <span className={styles.divider} aria-hidden="true" />
       <div className={styles.group}>
+        <Hint label="Show">
+          <b>Show</b>
+          <span>
+            <b>Everything</b> lists every pull request.
+          </span>
+          <span>
+            <b>Assigned to me</b> lists the ones you are an assignee of.
+          </span>
+          <span>
+            <b>Opened by me</b> lists the ones you opened.
+          </span>
+          <span className={styles.hintNote}>Activate the button to switch to the next state.</span>
+        </Hint>
+        <RollSwitch
+          name="Show"
+          options={SHOW_OPTIONS}
+          value={show}
+          onChange={onShow}
+          count={showCounts[show]}
+        />
+      </div>
+      <div className={styles.group}>
         <Hint label="Hidden PRs">
           <b>Hidden PRs</b>
           <span>
@@ -89,6 +139,14 @@ export function Toolbar({ sort, reversed, onSort, onReverse, mode, onMode, count
           count={counts[mode]}
         />
       </div>
+      <ul className={styles.legend} aria-label="Legend">
+        {LEGEND.map((l) => (
+          <li key={l.id} className={styles.legendItem}>
+            <span className={`${styles.legendDot} ${styles[`dot_${l.id}`]}`} aria-hidden="true" />
+            {l.label}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

@@ -2,15 +2,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { readStored, readStringList, writeStored } from '@/lib/storage';
 import { DEFAULT_SORT, type SortKey } from '@/lib/sort';
 import type { Filter } from '@/lib/snapshot';
+import { isShowMode, type ShowMode } from '@/lib/show';
 import { DEFAULT_PAGE_SIZE, isHideMode, isPageSize, pruneHidden, type HideMode } from '@/lib/view';
 
 export const HIDDEN_KEY = 'prd-hidden';
 export const HIDE_MODE_KEY = 'prd-hidef';
 export const PAGE_SIZE_KEY = 'prd-pagesize';
+export const SHOW_KEY = 'prd-show';
 
 function storedMode(): HideMode {
   const v = readStored(HIDE_MODE_KEY);
   return isHideMode(v) ? v : 'visible';
+}
+
+function storedShow(): ShowMode {
+  const v = readStored(SHOW_KEY);
+  return isShowMode(v) ? v : 'everything';
 }
 
 function storedPageSize(): number {
@@ -19,7 +26,7 @@ function storedPageSize(): number {
 }
 
 /**
- * How the list is viewed: filter, sort, hidden pull requests, page size and page. Everything is
+ * How the list is viewed: filter, sort, show, hidden pull requests, page size and page. Everything is
  * client-side. The page goes back to the first whenever what it lists changes.
  * @param existing ids in the snapshot; hidden ids that are not among them are ignored.
  */
@@ -28,6 +35,7 @@ export function useListPrefs(existing: readonly string[]) {
   const [sort, setSortState] = useState<SortKey>(DEFAULT_SORT);
   const [reversed, setReversed] = useState(false);
   const [mode, setModeState] = useState<HideMode>(storedMode);
+  const [show, setShowState] = useState<ShowMode>(storedShow);
   const [pageSize, setPageSizeState] = useState(storedPageSize);
   const [page, setPage] = useState(0);
   const [stored, setStored] = useState(() => new Set(readStringList(HIDDEN_KEY)));
@@ -57,6 +65,7 @@ export function useListPrefs(existing: readonly string[]) {
     sort,
     reversed,
     mode,
+    show,
     pageSize,
     page,
     hidden,
@@ -77,6 +86,11 @@ export function useListPrefs(existing: readonly string[]) {
     setMode: (m: HideMode) => {
       setModeState(m);
       writeStored(HIDE_MODE_KEY, m);
+      setPage(0);
+    },
+    setShow: (m: ShowMode) => {
+      setShowState(m);
+      writeStored(SHOW_KEY, m);
       setPage(0);
     },
     setPageSize: (n: number) => {

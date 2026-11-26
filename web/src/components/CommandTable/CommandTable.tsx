@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot, useSyncStatus } from '@/api/queries';
+import { showCounts } from '@/lib/show';
 import { useTheme } from '@/theme/useTheme';
 import styles from './CommandTable.module.css';
 import { OrgBanner } from './OrgBanner';
@@ -23,12 +24,14 @@ import { useSnapshotEvents } from './useSnapshotEvents';
 
 const NO_IDS: string[] = [];
 const selectIds = (s: Snapshot) => s.prs.map((p) => p.id);
+const NO_SHOW_COUNTS = { everything: 0, assigned: 0, authored: 0 };
 
 export function CommandTable() {
   const snapshot = useSnapshot();
   const status = useSyncStatus();
   useTheme(); // keeps the mode on <html> in step with the setting
   const ids = useSnapshot(selectIds).data ?? NO_IDS;
+  const shown = useSnapshot(showCounts).data ?? NO_SHOW_COUNTS;
   const prefs = useListPrefs(ids);
   const [account, setAccount] = useState(false);
   const sidebar = useSidebar({ hold: account });
@@ -77,6 +80,9 @@ export function CommandTable() {
                   reversed={prefs.reversed}
                   onSort={prefs.setSort}
                   onReverse={prefs.reverse}
+                  show={prefs.show}
+                  onShow={prefs.setShow}
+                  showCounts={shown}
                   mode={prefs.mode}
                   onMode={prefs.setMode}
                   counts={{

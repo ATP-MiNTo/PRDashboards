@@ -11,6 +11,7 @@
 
 .toolbar {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
@@ -29,6 +30,43 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  color: var(--sub);
+  font-size: 12px;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot_assigned {
+  background: var(--role-assigned);
+}
+
+.dot_authored {
+  background: var(--role-authored);
+}
+
+.dot_stack {
+  background: var(--stack);
 }
 
 .divider {
@@ -81,7 +119,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-width: 8.5rem;
+  min-width: 10rem;
   min-height: 28px;
   padding: 2px 6px 2px 10px;
 }
