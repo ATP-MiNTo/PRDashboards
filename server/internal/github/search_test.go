@@ -392,6 +392,17 @@ func TestSearchOpenSendsBothQueriesAndMergesByID(t *testing.T) {
 	if got := ids(res.PRs); !slices.Equal(got, []string{"A", "B", "C", "D", "E"}) {
 		t.Fatalf("assigned first, then authored ones not yet seen: %v", got)
 	}
+	roles := map[string][]string{}
+	for _, p := range res.PRs {
+		roles[p.ID] = p.Roles
+	}
+	assigned, authored, both := []string{github.RoleAssigned}, []string{github.RoleAuthored}, []string{github.RoleAssigned, github.RoleAuthored}
+	want := map[string][]string{"A": both, "B": assigned, "C": both, "D": authored, "E": authored}
+	for id, w := range want {
+		if !slices.Equal(roles[id], w) {
+			t.Errorf("roles of %s: got %v, want %v", id, roles[id], w)
+		}
+	}
 	if res.Total != 5 || res.Capped || res.Incomplete || res.Requests != 2 || len(res.Errors) != 0 || len(res.Blocked) != 0 {
 		t.Fatalf("%+v", res)
 	}

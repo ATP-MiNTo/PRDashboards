@@ -217,6 +217,11 @@ func (p *Poller) Load(ctx context.Context) error {
 		p.cfg.Log.WarnContext(ctx, "stored snapshot is unreadable, starting empty", "err", err)
 		return nil
 	}
+	if fillRoles(&snap) {
+		if raw, err = encode(snap); err != nil {
+			return err
+		}
+	}
 	p.mu.Lock()
 	p.version = stored.Version
 	p.ghSrc, p.jira.state = snap.Sources.Github, snap.Sources.Jira.State

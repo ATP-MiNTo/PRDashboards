@@ -679,6 +679,8 @@ export interface components {
             number: number;
             title: string;
             repo: components["schemas"]["SnapshotRepo"];
+            /** @description Why the pull request is listed. Both can be present, and the list is never empty. */
+            roles: ("assigned" | "authored")[];
             isDraft: boolean;
             /** @enum {string} */
             mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";

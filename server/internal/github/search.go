@@ -113,6 +113,12 @@ type Repo struct {
 	RebaseAllowed bool
 }
 
+// Roles say why a pull request is listed.
+const (
+	RoleAssigned = "assigned"
+	RoleAuthored = "authored"
+)
+
 // PR is an open pull request assigned to the viewer or opened by the viewer.
 type PR struct {
 	ID               string
@@ -133,6 +139,9 @@ type PR struct {
 	CI               CI
 	Reviews          []Review
 	ReviewRequests   []string
+	// Roles holds RoleAssigned when the assigned search returned the pull request and RoleAuthored
+	// when the authored search did. SearchOpen sets it; it is never empty there.
+	Roles []string
 }
 
 // RateLimit is the budget GitHub reports with every GraphQL answer.
@@ -338,7 +347,8 @@ func pickError(errs []error) error {
 	return nil
 }
 
-// mergeSearches unions two search results, deduplicating pull requests by node id in O(n).
+// mergeSearches unions the assigned (a) and authored (b) results in one pass, deduplicating pull
+// requests by node id in O(n) and recording in Roles which search found each.
 func mergeSearches(a, b SearchResult) SearchResult {
 	out := SearchResult{
 		PRs:        make([]PR, 0, len(a.PRs)+len(b.PRs)),
@@ -349,13 +359,20 @@ func mergeSearches(a, b SearchResult) SearchResult {
 		Blocked:    mergeBlocked(slices.Clone(a.Blocked), b.Blocked),
 		RateLimit:  mergeRateLimit(a.RateLimit, b.RateLimit),
 	}
-	seen := make(map[string]struct{}, len(a.PRs)+len(b.PRs))
-	for _, list := range [][]PR{a.PRs, b.PRs} {
-		for _, p := range list {
-			if _, dup := seen[p.ID]; dup {
+	at := make(map[string]int, len(a.PRs)+len(b.PRs))
+	for _, src := range []struct {
+		prs  []PR
+		role string
+	}{{a.PRs, RoleAssigned}, {b.PRs, RoleAuthored}} {
+		for _, p := range src.prs {
+			if i, dup := at[p.ID]; dup {
+				if !slices.Contains(out.PRs[i].Roles, src.role) {
+					out.PRs[i].Roles = append(out.PRs[i].Roles, src.role)
+				}
 				continue
 			}
-			seen[p.ID] = struct{}{}
+			at[p.ID] = len(out.PRs)
+			p.Roles = []string{src.role}
 			out.PRs = append(out.PRs, p)
 		}
 	}
