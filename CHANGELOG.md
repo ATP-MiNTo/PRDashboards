@@ -6,6 +6,26 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.2.0] - 2026-11-26
+
+### Added
+
+- A toolbar under the stat strip, next to the status filters: a Sort select (Recently updated, Title,
+  Repository, PR number, Ready to merge first) with a button that reverses the direction, and a
+  "Hidden PRs" switch. A stack is one unit when sorting: it sorts by its best member and keeps its order.
+- A Hide checkbox on every row. The switch cycles Visible, All (hidden rows dimmed) and Hidden (only the
+  hidden ones), shows a count, rolls its label when it changes, and has a hint that opens on hover and on
+  keyboard focus. Hidden pull requests and the mode are kept in this browser only.
+- Paging at the bottom of the table: "Showing X to Y of N", a page size of 10, 15 or 20, and page
+  buttons. A stack is never split across pages.
+- A footer with a credit line, and a floating GitHub button that moves into the footer when it scrolls into view.
+
+### Changed
+
+- The sidebar is 24rem wide instead of 28rem and the table cells are tighter, so the table no longer scrolls
+  sideways at 1280px or 1440px with the sidebar open.
+- The page ends at the footer: the extra space under the table is gone.
+
 ## [2.1.0] - 2026-11-26
 
 ### Changed
