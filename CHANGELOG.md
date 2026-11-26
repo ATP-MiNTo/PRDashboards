@@ -6,6 +6,15 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.0.0] - 2026-11-26
+
+### Added
+
+- v2 starts here. The web app builds with Tailwind CSS 3.4 and daisyUI 4.12 so later v2 screens can use
+  daisyUI components. Existing screens look the same: Tailwind's preflight and daisyUI's root styles are off.
+- The theme setting also sets `data-theme` on the page (`winter` for light, `night` for dark) next to
+  `data-mode`.
+
 ## [1.3.0] - 2026-11-25
 
 ### Added

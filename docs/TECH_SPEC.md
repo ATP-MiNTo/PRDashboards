@@ -29,7 +29,7 @@ server. The browser and the backend are treated as if they were on different mac
 | Jira client | Hand-written REST v3 client | Jira Cloud via `api.atlassian.com/ex/jira/{cloudId}` |
 | Storage | SQLite via `modernc.org/sqlite` | Pure Go, no cgo. WAL mode. Migrations embedded and versioned |
 | Secrets | `github.com/zalando/go-keyring` | The keychain holds one 32-byte key that seals an AES-256-GCM vault file. Fallback: the same kind of file with a key from Argon2id over a user passphrase |
-| Frontend | Next.js 16, React 19, TypeScript, `output: 'export'` | App Router, client components only. No Next server at runtime |
+| Frontend | Next.js 16, React 19, TypeScript, `output: 'export'` | App Router, client components only. Styling is CSS Modules plus Tailwind CSS 3.4 and daisyUI 4 compiled at build time. No Next server at runtime |
 | Frontend data | TanStack Query 5 | Mutations and cache. SSE pushes invalidations |
 | Frontend styling | CSS Modules + CSS custom properties | Theme tokens from the prototype |
 | Package manager | pnpm 10 (web), Go modules (server) | Lockfiles committed, versions pinned |
