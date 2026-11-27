@@ -22,6 +22,8 @@
 
 .tip::before {
   content: attr(data-tip);
+  /* The tip is also read from the control's description: give the generated text an empty alternative so it is not read twice. */
+  content: attr(data-tip) / '';
   width: max-content;
   max-width: 20rem;
   padding: 0.25rem 0.5rem;
