@@ -6,7 +6,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 Connects the app to GitHub (a GitHub App with user access tokens, or a pasted personal access token)
 and to Jira (Atlassian OAuth 2.0 3LO), keeps the Jira and GitHub App tokens fresh, and shows the state
-in a "Connected accounts" panel. A GitHub App is used because an org admin can install it on selected
+in the Accounts dialog of the dashboard and on the `/accounts/` page. A GitHub App is used because an org admin can install it on selected
 repositories only, which an OAuth App with the `repo` scope cannot do. The token only sees the
 repositories where the App is installed and the person has access.
 PR and ticket data are fetched by the poller ([poller.md](poller.md)).
@@ -22,8 +22,10 @@ Differences from the spec:
   signs in again.
 - No private key, app ID or JWT: only user access tokens are used. GitHub ignores `scope` for a
   GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup). Approving, requesting changes and marking a draft ready need Pull requests: write on a fine-grained token or the App (a classic token needs `repo`); without it the API answers `missing_permission` naming `pull_requests: write` ([review-actions.md](review-actions.md)).
-- Setup is under `/setup`. The PAT form is on the same page. The Connected accounts panel is also
-  in the Account side panel of the dashboard, opened from the Account button ([settings.md](settings.md)).
+- Setup is under `/setup`. The PAT form is on the same page. The dashboard has the Accounts dialog
+  ([AccountsModal.tsx](../../web/src/components/Accounts/AccountsModal.tsx)), opened by "Manage accounts" at the bottom
+  of the sidebar ([sidebar-shell.md](sidebar-shell.md)). The old right-hand Account side panel is gone. The `/accounts/`
+  page stays for the returns of the OAuth flows and for the e2e specs, with the older Connected accounts content.
 
 ## Data model
 
@@ -78,7 +80,8 @@ Web:
 - [web/src/lib/githubApp.ts](../../web/src/lib/githubApp.ts): `isAppSlug`, `appInstallUrl` (the install link is rebuilt from the validated slug in the server URL, otherwise none).
 - [web/src/app/oauth/finish/page.tsx](../../web/src/app/oauth/finish/page.tsx) and [web/src/lib/oauthFinish.ts](../../web/src/lib/oauthFinish.ts): clear the query, post to `/api/oauth/complete`, go to `/auth/done/`.
 - [web/src/app/auth/done/page.tsx](../../web/src/app/auth/done/page.tsx): result message and a link back to `/accounts/`.
-- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts, on `/accounts/` and in the Account panel.
+- [web/src/components/AccountsPanel.tsx](../../web/src/components/AccountsPanel.tsx): Connected accounts, on `/accounts/` only.
+- [web/src/components/Accounts/AccountsModal.tsx](../../web/src/components/Accounts/AccountsModal.tsx) and [AccountsModal.module.css](../../web/src/components/Accounts/AccountsModal.module.css): the Accounts dialog (a wide, centred [Modal](dialog-and-popover.md) with the shared Close button). The GitHub card says how GitHub is connected (`sourceOf` in [web/src/lib/accounts.ts](../../web/src/lib/accounts.ts): GitHub App, OAuth, fine-grained or classic token) with a Connected or Needs reconnect badge, and the buttons "Reconnect GitHub" (a link to `/oauth/github/start`, for the App and OAuth), "Replace token" (an inline form that calls `PUT /api/github/pat`, a password field that never shows the stored token; for tokens), "Check GitHub" (`POST /api/accounts/github/check`) and "Disconnect GitHub" (`DELETE /api/accounts/github`). Under it the table Repository / Source / Why lists every repository of `GET /api/repos` with the way GitHub fetches it: there is one connection, so the source and the reason (what that connection can see) are the same for each row. The Jira card shows the site (a select when there are several, which saves `jiraSiteId`), "Reconnect" (`/oauth/atlassian/start`), "Check Jira" and "Disconnect Jira", or "Connect Jira"; an unconfigured provider shows "Set up" (a link to `/setup/`). The Browsers card has "Sign out everywhere" (`POST /api/sessions/revoke-all`, which also ends this session) and then says how to sign in again.
 - [web/src/api/queries.ts](../../web/src/api/queries.ts) and [providers.tsx](../../web/src/app/providers.tsx): TanStack Query hooks and client. [web/src/lib/problems.ts](../../web/src/lib/problems.ts): problem code to text.
 
 E2e:
@@ -195,5 +198,5 @@ minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlass
 - [server/internal/backoff/backoff_test.go](../../server/internal/backoff/backoff_test.go): delays, `Retry-After`, jitter bounds, attempts.
 - [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go), [oauth_api_test.go](../../server/internal/api/oauth_api_test.go), [providers_test.go](../../server/internal/api/providers_test.go): setup (including the slug and `installUrl`), PAT, accounts (including GitHub `needsReconnect`), the callback and complete flow over HTTP, with fake providers.
 - [server/cmd/prdash/fake_e2e_test.go](../../server/cmd/prdash/fake_e2e_test.go) and [fake_prod_test.go](../../server/cmd/prdash/fake_prod_test.go): `--fake` exists only with the e2e tag.
-- Web: [AccountsPanel.test.tsx](../../web/src/components/AccountsPanel.test.tsx), [setup/page.test.tsx](../../web/src/app/setup/page.test.tsx), [auth/done/page.test.tsx](../../web/src/app/auth/done/page.test.tsx), [oauth/finish/page.test.tsx](../../web/src/app/oauth/finish/page.test.tsx), [oauthFinish.test.ts](../../web/src/lib/oauthFinish.test.ts), [problems.test.ts](../../web/src/lib/problems.test.ts), [githubApp.test.ts](../../web/src/lib/githubApp.test.ts) (slug and install link shape). The poller maps `ErrNeedsReconnect` in [poller_test.go](../../server/internal/poller/poller_test.go).
+- Web: [AccountsModal.test.tsx](../../web/src/components/Accounts/AccountsModal.test.tsx) (the cards, replacing a token without showing one, check and disconnect, the Jira site, connect and set up, reconnect states, sign out everywhere, closing), [accounts.test.ts](../../web/src/lib/accounts.test.ts), [AccountsPanel.test.tsx](../../web/src/components/AccountsPanel.test.tsx), [setup/page.test.tsx](../../web/src/app/setup/page.test.tsx), [auth/done/page.test.tsx](../../web/src/app/auth/done/page.test.tsx), [oauth/finish/page.test.tsx](../../web/src/app/oauth/finish/page.test.tsx), [oauthFinish.test.ts](../../web/src/lib/oauthFinish.test.ts), [problems.test.ts](../../web/src/lib/problems.test.ts), [githubApp.test.ts](../../web/src/lib/githubApp.test.ts) (slug and install link shape). The poller maps `ErrNeedsReconnect` in [poller_test.go](../../server/internal/poller/poller_test.go).
 - Playwright (`pnpm e2e`): [e2e/github.spec.ts](../../e2e/github.spec.ts) (cross-site GitHub App sign-in, refresh with rotation, tampered state, replay, denial, PAT classic, missing scope, fine-grained, rejected) and [e2e/atlassian.spec.ts](../../e2e/atlassian.spec.ts), plus [e2e/dashboard.spec.ts](../../e2e/dashboard.spec.ts) for the SSO-blocked dashboard (sign-in, two-site pick, refresh with rotation, refresh failure and reconnect, denial).

@@ -24,7 +24,7 @@ CSS Modules from these tokens and never from fixed colours.
 - [web/src/app/globals.css](../../web/src/app/globals.css): the tokens for light and `[data-mode='dark']`, the page background, the `.glass` pane, the shared control classes (`ui-btn`, `ui-ghost`, `ui-select`, `ui-input`, `ui-controls`), the cursor rules, the press and transition rules for buttons and the View Transition timing. The names `--bg`, `--fg`, `--muted`, `--card`, `--ok` and `--danger` stay for the setup and accounts pages.
 - [web/src/app/layout.tsx](../../web/src/app/layout.tsx): imports the two self-hosted font packages, [web/public/cursors/](../../web/public/cursors): the five cursor images.
 - [web/src/components/Header/ThemeButton.tsx](../../web/src/components/Header/ThemeButton.tsx): the theme circle in the right header pill ([header.md](header.md)). The old sun/moon swap in Settings (`ThemeSwap.tsx`) is gone.
-- [web/src/components/Settings/SettingsContent.tsx](../../web/src/components/Settings/SettingsContent.tsx): the Theme section, an Auto checkbox, after Sessions and before Activity. It is the keyboard and screen reader route to Auto. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) keeps `useTheme` mounted and passes it to the header, so the mode is applied while the Settings sidebar is closed.
+- [web/src/components/Settings/SettingsContent.tsx](../../web/src/components/Settings/SettingsContent.tsx): the Theme section, an Auto checkbox, the last section of the sidebar content. It is the keyboard and screen reader route to Auto. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) keeps `useTheme` mounted and passes it to the header, so the mode is applied while the Settings sidebar is closed.
 
 ## Key flows
 

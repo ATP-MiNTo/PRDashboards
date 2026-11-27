@@ -168,6 +168,8 @@ sequenceDiagram
 | Header, floating pills | [features/header.md](features/header.md) | Built |
 | Search | [features/search.md](features/search.md) | Built |
 | Toasts | [features/toast.md](features/toast.md) | Built |
+| Notes on pull requests | [features/notes.md](features/notes.md) | Built |
+| History view | [features/history.md](features/history.md) | Built |
 | Dialog, popup menu and tooltip | [features/dialog-and-popover.md](features/dialog-and-popover.md) | Built |
 | Sidebar shell | [features/sidebar-shell.md](features/sidebar-shell.md) | Built |
 | Settings | [features/settings.md](features/settings.md) | Built |

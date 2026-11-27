@@ -7,7 +7,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Starts the single binary, serves the embedded UI and the API on `127.0.0.1`, and signs the browser
 in with a one-time launch URL. `/` is the dashboard ([command-table.md](command-table.md)) and
 `/accounts/` shows "Signed in", the server version and the Connected accounts panel
-([auth.md](auth.md)); the dashboard shows the same panel in its Account side panel. The poller runs inside the binary ([poller.md](poller.md)).
+([auth.md](auth.md)); the dashboard shows it in its Accounts dialog. The poller runs inside the binary ([poller.md](poller.md)).
 
 Differences from the spec:
 
