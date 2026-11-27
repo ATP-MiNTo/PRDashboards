@@ -4,7 +4,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 ## Purpose
 
-The Settings content, shown in the left sidebar ([sidebar-shell.md](sidebar-shell.md)) and toggled by the burger in the header ([header.md](header.md)), as the design draws it: the Repositories block, GitHub and Jira polling, the "Status sync rules" button and the Auto theme checkbox. The accounts block is pinned at the bottom of the sidebar. Three things open in their own dialogs, all built on the shared [Modal](dialog-and-popover.md): the settings of one repository (the gear of its row), the status sync rules ([status-sync-rules.md](status-sync-rules.md)) and the accounts, opened by "Manage accounts" ([auth.md](auth.md)).
+The Settings content, shown in the left sidebar ([sidebar-shell.md](sidebar-shell.md)) and toggled by the burger in the header ([header.md](header.md)), as the design draws it: the Repositories block, GitHub and Jira polling, the "Status sync rules" button and the Auto theme checkbox. The accounts block is pinned at the bottom of the sidebar, with the GitHub API usage text of the last refresh in its eyebrow row ([sidebar-shell.md](sidebar-shell.md), [poller.md](poller.md)); the polling intervals above it are what keep that budget safe. Three things open in their own dialogs, all built on the shared [Modal](dialog-and-popover.md): the settings of one repository (the gear of its row), the status sync rules ([status-sync-rules.md](status-sync-rules.md)) and the accounts, opened by "Manage accounts" ([auth.md](auth.md)).
 
 Differences from the design and the earlier UI:
 
