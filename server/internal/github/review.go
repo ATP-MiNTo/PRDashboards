@@ -172,10 +172,10 @@ func (c *Client) MarkReady(ctx context.Context, token, id string) error {
 		return &blocked[0]
 	}
 	for _, e := range p.Errors {
-		switch {
-		case e.Type == "FORBIDDEN":
+		switch e.Type {
+		case "FORBIDDEN":
 			return needsReviewPermission(classifyForbidden(h, e.Message, e.Extensions))
-		case e.Type == "NOT_FOUND":
+		case "NOT_FOUND":
 			return ErrPRNotFound
 		}
 	}

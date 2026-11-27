@@ -17,10 +17,9 @@ import (
 )
 
 type stubReviewer struct {
-	calls  []string
-	req    review.Request
-	result review.Result
-	err    error
+	calls []string
+	req   review.Request
+	err   error
 }
 
 func (s *stubReviewer) do(action string, req review.Request) (review.Result, error) {
