@@ -79,12 +79,16 @@ export function approvalsBlock(a: Approvals): string | null {
  * account's role on the repository (`repo.viewerPermission`): read and triage cannot merge or take
  * a draft out of draft, and GitHub would refuse. A snapshot stored before the role was carried has
  * none, and then nothing is blocked. The role is the account's, not the token's: a token without
- * Pull requests: write still fails at click time with the server's message.
+ * Pull requests: write still fails at click time with the server's message. With several tokens
+ * the text names the one the repository is written with (`repo.tokenName`).
  */
 export function readOnlyReason(pr: SnapshotPr): string | null {
   const role = pr.repo.viewerPermission;
   if (role !== 'READ' && role !== 'TRIAGE') return null;
-  return `Read-only here: your token's account can't write to ${pr.repo.nameWithOwner}`;
+  const { tokenName, nameWithOwner } = pr.repo;
+  return tokenName
+    ? `Read-only here: ${tokenName} can't write to ${nameWithOwner}`
+    : `Read-only here: your token's account can't write to ${nameWithOwner}`;
 }
 
 /**

@@ -118,6 +118,21 @@ describe('blockOf', () => {
     });
   });
 
+  it('names the token when the repository says which one it is written with', () => {
+    const row = pr('a', 1, {
+      repo: {
+        ...pr('a', 1).repo,
+        viewerPermission: 'READ',
+        tokenName: 'Work',
+        tokenId: 'aaaaaaaa',
+      },
+    });
+    expect(blockOf(row)).toEqual({
+      readiness: 'blocked',
+      reason: "Read-only here: Work can't write to acme/web",
+    });
+  });
+
   it.each([['WRITE'], ['MAINTAIN'], ['ADMIN'], [undefined]] as const)(
     'blocks nothing for the role %s (a snapshot without the role gates nothing)',
     (role) => {
