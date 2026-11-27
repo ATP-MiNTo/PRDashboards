@@ -7,6 +7,7 @@ import {
   fakeState,
   resetFakes,
   signIn,
+  useOnlyGitHubToken,
 } from "./helpers";
 
 // Review actions: approve, request changes and mark ready, with the approvals required per
@@ -318,18 +319,13 @@ test("GitHub does not let the viewer review their own pull request", async ({
 });
 
 const ownerNote =
-  "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner.";
+  "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner. Add one in Accounts.";
 
 test("a token without Pull requests write is told which permission to add", async ({
   page,
   request,
 }) => {
-  const useToken = async (token: string) => {
-    await page.goto(APP + "/setup/");
-    await page.getByLabel("Personal access token").fill(token);
-    await page.getByRole("button", { name: "Validate and save" }).click();
-    await expect(page.getByText("Connected as octocat")).toBeVisible();
-  };
+  const useToken = (token: string) => useOnlyGitHubToken(page, token);
   await useToken("github_pat_pulls_read");
   try {
     await page.goto(APP + "/");
@@ -339,7 +335,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(review.status).toBe(403);
     expect(review.body).toMatchObject({
       code: "missing_permission",
-      detail: `This token can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
+      detail: `The token "Token (octocat)" can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const ready = await call(page, "POST", `/api/prs/${idOf(32)}/ready`, {
       expectedHeadSha: headOf(32),
@@ -347,7 +343,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(ready.status).toBe(403);
     expect(ready.body).toMatchObject({
       code: "missing_permission",
-      detail: `This token can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
+      detail: `The token "Token (octocat)" can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const github = await fakeState<GitHubState>(request, "github");
     expect(github.reviews ?? []).toEqual([]);
@@ -499,7 +495,7 @@ test("a repository where the account can only read blocks Merge up front but kee
   const merge = card.getByRole("button", { name: "Merge", exact: true });
   await expect(merge).toHaveAttribute("aria-disabled", "true");
   await expect(merge).toHaveAccessibleDescription(
-    "Read-only here: your token's account can't write to oss/lib",
+    "Read-only here: Token (octocat) can't write to oss/lib",
   );
   expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
   // Reviewing needs no write role: the Action menu stays.
