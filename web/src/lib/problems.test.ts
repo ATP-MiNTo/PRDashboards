@@ -23,9 +23,9 @@ describe('describeProblem', () => {
     expect(
       describeProblem(
         'missing_permission',
-        'The token needs the GitHub permission contents: write',
+        "This token can't merge in acme/web: it needs the GitHub permission contents: write.",
       ),
-    ).toBe('The token needs the GitHub permission contents: write');
+    ).toBe("This token can't merge in acme/web: it needs the GitHub permission contents: write.");
     expect(describeProblem('missing_permission')).toBe(
       'The token lacks a GitHub permission this action needs.',
     );

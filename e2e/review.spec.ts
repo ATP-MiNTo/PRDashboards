@@ -317,6 +317,9 @@ test("GitHub does not let the viewer review their own pull request", async ({
   // The author may take their own draft out of draft: ready ignores who opened it.
 });
 
+const ownerNote =
+  "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner.";
+
 test("a token without Pull requests write is told which permission to add", async ({
   page,
   request,
@@ -336,7 +339,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(review.status).toBe(403);
     expect(review.body).toMatchObject({
       code: "missing_permission",
-      detail: "The token needs the GitHub permission pull_requests: write",
+      detail: `This token can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const ready = await call(page, "POST", `/api/prs/${idOf(32)}/ready`, {
       expectedHeadSha: headOf(32),
@@ -344,7 +347,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(ready.status).toBe(403);
     expect(ready.body).toMatchObject({
       code: "missing_permission",
-      detail: "The token needs the GitHub permission pull_requests: write",
+      detail: `This token can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const github = await fakeState<GitHubState>(request, "github");
     expect(github.reviews ?? []).toEqual([]);

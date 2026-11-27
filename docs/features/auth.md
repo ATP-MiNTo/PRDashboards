@@ -21,7 +21,7 @@ Differences from the spec:
   token. The Jira site list is kept. A GitHub token that needs a reconnect is kept until the person
   signs in again.
 - No private key, app ID or JWT: only user access tokens are used. GitHub ignores `scope` for a
-  GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup). Approving, requesting changes and marking a draft ready need Pull requests: write on a fine-grained token or the App (a classic token needs `repo`); without it the API answers `missing_permission` naming `pull_requests: write` ([review-actions.md](review-actions.md)).
+  GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup). Approving, requesting changes and marking a draft ready need Pull requests: write on a fine-grained token or the App (a classic token needs `repo`); without it the API answers `missing_permission` naming the repository and `pull_requests: write`, and that a fine-grained token (or a GitHub App installation) works for one owner only, so a repository of another owner needs a token from that owner ([review-actions.md](review-actions.md)).
 - Setup is under `/setup`. The PAT form is on the same page. The dashboard has the Accounts dialog
   ([AccountsModal.tsx](../../web/src/components/Accounts/AccountsModal.tsx)), opened by "Manage accounts" at the bottom
   of the sidebar ([sidebar-shell.md](sidebar-shell.md)). The old right-hand Account side panel is gone. The `/accounts/`

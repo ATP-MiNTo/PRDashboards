@@ -268,7 +268,8 @@ describe('review actions', () => {
           title: 'Forbidden',
           status: 403,
           code: 'missing_permission',
-          detail: 'The token needs the GitHub permission pull_requests: write',
+          detail:
+            "This token can't write to acme/web: it needs the GitHub permission pull_requests: write. A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner.",
         },
         403,
         'application/problem+json',
@@ -277,7 +278,8 @@ describe('review actions', () => {
     await expect(client.markPrReady('PR_1', { expectedHeadSha: sha })).rejects.toMatchObject({
       status: 403,
       code: 'missing_permission',
-      detail: 'The token needs the GitHub permission pull_requests: write',
+      detail:
+        "This token can't write to acme/web: it needs the GitHub permission pull_requests: write. A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner.",
     });
   });
 });

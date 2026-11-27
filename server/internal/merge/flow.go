@@ -162,6 +162,8 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 
 	var failed *github.MergeFailedError
 	merged, err := s.cfg.GitHub.Merge(ctx, token, pr.Repo.NameWithOwner, pr.Number, string(req.Method), req.ExpectedHeadSHA)
+	// A refused write names the repository, so a token of another owner is told as such.
+	err = github.WithRepo(err, pr.Repo.NameWithOwner, "merge in")
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
 		return Result{}, &Error{Code: CodeHeadMoved, Detail: "the branch changed while the merge was prepared", Fresh: FreshOf(pr)}
@@ -419,7 +421,7 @@ func (s *Service) deleteBranch(ctx context.Context, token string, pr github.PR, 
 		s.cfg.Log.WarnContext(ctx, "delete branch", "pr", pr.ID, "err", err)
 		step.State, step.Message = StateFailed, "The branch could not be deleted"
 		var perm *github.PermissionError
-		if errors.As(err, &perm) {
+		if errors.As(github.WithRepo(err, pr.Repo.NameWithOwner, "delete branches in"), &perm) {
 			// The merge stays; only the person can fix the token, so say how.
 			step.Message += ". " + perm.Detail()
 		}

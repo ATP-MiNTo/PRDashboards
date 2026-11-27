@@ -323,14 +323,14 @@ describe('MergeDialog', () => {
         403,
         'missing_permission',
         null,
-        'The token needs the GitHub permission contents: write',
+        "This token can't merge in acme/web: it needs the GitHub permission contents: write. A fine-grained token works for one owner only.",
       ),
     );
     show();
     withoutTicket();
     mergeWithout();
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'The token needs the GitHub permission contents: write',
+      "This token can't merge in acme/web: it needs the GitHub permission contents: write. A fine-grained token works for one owner only.",
     );
     api.mergePr.mockRejectedValue(
       new ApiError(409, 'merge_failed', null, 'GitHub did not merge: 2 approvals are required'),

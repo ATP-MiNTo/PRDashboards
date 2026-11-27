@@ -130,7 +130,8 @@ func (s *Service) run(ctx context.Context, action string, req Request) (Result, 
 		s.cfg.Refresh()
 		return Result{}, e
 	}
-	err = s.send(ctx, action, token, pr, req)
+	// A refused write names the repository, so a token of another owner is told as such.
+	err = github.WithRepo(s.send(ctx, action, token, pr, req), pr.Repo.NameWithOwner, "")
 	var rejected *github.ReviewRejectedError
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):

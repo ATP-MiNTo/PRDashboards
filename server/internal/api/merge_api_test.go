@@ -163,6 +163,8 @@ func TestMergePermissionAndPolicyProblems(t *testing.T) {
 			"missing_permission", "The token needs one of these GitHub permissions: pull_requests: write or contents: write"},
 		{&github.PermissionError{Message: "Nope"}, "missing_permission", "The token lacks a GitHub permission this action needs: Nope"},
 		{fmt.Errorf("wrapped: %w", &github.PermissionError{Accepted: []string{"contents=write"}}), "missing_permission", "contents: write"},
+		{&github.PermissionError{Accepted: []string{"contents=write"}, Repo: "ATP-MiNTo/PRDashboards", Action: "merge in"},
+			"missing_permission", "This token can't merge in ATP-MiNTo/PRDashboards: it needs the GitHub permission contents: write. A fine-grained token works for one owner only"},
 		{&github.OrgBlocked{Org: "acme", Reason: "policy", Message: "secret wording"}, "org_blocked", "The acme organization policy does not allow this token"},
 		{&github.OrgBlocked{Reason: "policy"}, "org_blocked", "An organization policy does not allow this token"},
 		{&github.OrgBlocked{Org: "acme", Reason: "sso"}, "org_blocked", "An organization has not authorized the token"},

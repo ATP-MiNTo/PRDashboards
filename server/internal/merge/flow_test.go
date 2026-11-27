@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -389,6 +390,9 @@ func TestMergePermissionErrorStopsTheFlow(t *testing.T) {
 	if err := merge2(r, req); !errors.As(err, &perm) {
 		t.Fatalf("%v", err)
 	}
+	if want := "This token can't merge in acme/web: it needs the GitHub permission contents: write."; !strings.HasPrefix(perm.Detail(), want) {
+		t.Fatalf("%q", perm.Detail())
+	}
 	if r.jira.moveCount() != 0 || len(r.gh.deletes) != 0 || r.store.records.Load() != 0 {
 		t.Error("steps ran after a refused merge")
 	}
@@ -404,7 +408,7 @@ func TestDeleteBranchPermissionErrorIsAStepFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := stepOf(t, res, merge.StepDeleteBranch, "")
-	if s.State != merge.StateFailed || s.Message != "The branch could not be deleted. The token needs the GitHub permission contents: write" {
+	if s.State != merge.StateFailed || !strings.HasPrefix(s.Message, "The branch could not be deleted. This token can't delete branches in acme/web: it needs the GitHub permission contents: write.") {
 		t.Fatalf("%+v", s)
 	}
 	if stepOf(t, res, merge.StepMerge, "").State != merge.StateOK || stepOf(t, res, merge.StepTransition, "INP-1").State != merge.StateOK {

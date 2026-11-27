@@ -151,7 +151,9 @@ test("a failed move is kept and retried", async ({ page, request }) => {
   );
 
   await configure(request, "atlassian", { transitionMode: "" });
-  await history.getByRole("button", { name: "Retry the move of INP-104" }).click();
+  await history
+    .getByRole("button", { name: "Retry the move of INP-104" })
+    .click();
   await expect(history.getByText("did not move")).toHaveCount(0);
   await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
 
@@ -229,7 +231,7 @@ test("a token without Contents write says which permission is missing", async ({
     await panel.getByRole("button", { name: "Merge without ticket" }).click();
 
     await expect(panel.getByRole("alert")).toContainText(
-      "The token needs the GitHub permission contents: write",
+      "This token can't merge in acme/api: it needs the GitHub permission contents: write. A fine-grained token works for one owner only",
     );
     expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
     await expect(row).toBeVisible();

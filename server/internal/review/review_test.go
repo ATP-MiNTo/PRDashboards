@@ -3,6 +3,7 @@ package review_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -247,6 +248,12 @@ func TestUnknownPullRequestAndConnectionProblems(t *testing.T) {
 	}
 }
 
+// named reports whether the permission error names the repository of the pull request.
+func named(err error) bool {
+	var p *github.PermissionError
+	return errors.As(err, &p) && strings.HasPrefix(p.Detail(), "This token can't write to acme/web: it needs the GitHub permission pull_requests: write.")
+}
+
 func TestGitHubAnswersAreMapped(t *testing.T) {
 	perm := &github.PermissionError{Message: "Resource not accessible", Accepted: []string{"pull_requests=write"}}
 	tests := []struct {
@@ -262,8 +269,8 @@ func TestGitHubAnswersAreMapped(t *testing.T) {
 		{"rejected", review.ActionApprove, func(f *fakeGitHub) { f.reviewErr = &github.ReviewRejectedError{Message: "Review body can't be blank"} }, merge.CodeReviewRejected, nil},
 		{"not a draft on GitHub's side", review.ActionReady, func(f *fakeGitHub) { f.pr.Draft = true; f.readyErr = github.ErrNotDraft }, merge.CodeNotDraft, nil},
 		{"token rejected", review.ActionApprove, func(f *fakeGitHub) { f.reviewErr = github.ErrBadCredentials }, merge.CodeNotConnected, nil},
-		{"permission", review.ActionApprove, func(f *fakeGitHub) { f.reviewErr = perm }, "", func(e error) bool { return errors.Is(e, perm) }},
-		{"permission on ready", review.ActionReady, func(f *fakeGitHub) { f.pr.Draft = true; f.readyErr = perm }, "", func(e error) bool { return errors.Is(e, perm) }},
+		{"permission", review.ActionApprove, func(f *fakeGitHub) { f.reviewErr = perm }, "", func(e error) bool { return errors.Is(e, perm) && named(e) }},
+		{"permission on ready", review.ActionReady, func(f *fakeGitHub) { f.pr.Draft = true; f.readyErr = perm }, "", func(e error) bool { return errors.Is(e, perm) && named(e) }},
 		{"organization", review.ActionRequestChanges, func(f *fakeGitHub) { f.reviewErr = &github.OrgBlocked{Org: "acme"} }, "", func(e error) bool { var b *github.OrgBlocked; return errors.As(e, &b) }},
 	}
 	for _, tt := range tests {

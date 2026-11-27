@@ -58,7 +58,7 @@ Differences from the spec:
 | 409 | `not_connected`, `provider_not_configured` | account operation without a connection, or without client credentials |
 | 409 | `not_open`, `head_moved`, `not_draft`, `own_pull_request` | review action refused from fresh GitHub data ([review-actions.md](review-actions.md)) |
 | 422 | `body_required`, `review_rejected` | request changes without a text, or GitHub refused the review |
-| 403 | `missing_permission` | the token lacks a GitHub permission (a review needs `pull_requests: write`) |
+| 403 | `missing_permission` | the token lacks a GitHub permission on the repository (a review needs `pull_requests: write`); the detail names the repository and says a fine-grained token works for one owner only |
 
 ## Code map
 

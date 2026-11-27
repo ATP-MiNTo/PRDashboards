@@ -361,27 +361,65 @@ type PermissionError struct {
 	// X-Accepted-GitHub-Permissions header, such as "contents=write". Only entries of the shape
 	// name=read|write|admin are kept. It is empty when GitHub sent none.
 	Accepted []string
+	// Repo is the repository (owner/name) the refused write was for, set with WithRepo by the
+	// callers that know it. Empty for calls without a repository.
+	Repo string
+	// Action is the verb phrase that goes before Repo in Detail ("merge in"); empty reads "write to".
+	Action string
 }
 
 func (e *PermissionError) Error() string {
 	return "github: the token lacks a permission: " + e.Message
 }
 
-// Detail is a sentence for the person: which permission to add, built from the validated
-// Accepted entries ("contents=write" reads "contents: write"), or GitHub's message when it named
-// none.
-func (e *PermissionError) Detail() string {
-	if len(e.Accepted) == 0 {
-		return "The token lacks a GitHub permission this action needs: " + e.Message
+// WithRepo records the repository (and what was attempted there, such as "merge in") on a
+// *PermissionError inside err so Detail can name it. Other errors, and nil, pass through.
+func WithRepo(err error, repo, action string) error {
+	var perm *PermissionError
+	if errors.As(err, &perm) {
+		perm.Repo, perm.Action = repo, action
 	}
+	return err
+}
+
+// oneOwner is the cause worth saying: a fine-grained token belongs to one user or organization,
+// so a repository of another owner cannot be written with it whatever its permissions are.
+const oneOwner = "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner."
+
+// Detail is a sentence for the person. It is plain text. Without a repository it says which
+// permission to add, built from the validated Accepted entries ("contents=write" reads
+// "contents: write"), or GitHub's message when it named none. With a repository it names the
+// repository and adds the cause that adding a permission would not fix: the token belongs to
+// another owner.
+func (e *PermissionError) Detail() string {
 	names := make([]string, len(e.Accepted))
 	for i, a := range e.Accepted {
 		names[i] = strings.Replace(a, "=", ": ", 1)
 	}
-	if len(names) == 1 {
-		return "The token needs the GitHub permission " + names[0]
+	if e.Repo == "" {
+		switch len(names) {
+		case 0:
+			return "The token lacks a GitHub permission this action needs: " + e.Message
+		case 1:
+			return "The token needs the GitHub permission " + names[0]
+		}
+		return "The token needs one of these GitHub permissions: " + strings.Join(names, " or ")
 	}
-	return "The token needs one of these GitHub permissions: " + strings.Join(names, " or ")
+	action := e.Action
+	if action == "" {
+		action = "write to"
+	}
+	head := "This token can't " + action + " " + e.Repo
+	switch len(names) {
+	case 0:
+		if says := strings.TrimRight(e.Message, ". "); says != "" {
+			head += " (GitHub says: " + says + ")"
+		}
+		return head + ". " + oneOwner
+	case 1:
+		return head + ": it needs the GitHub permission " + names[0] + ". " + oneOwner
+	}
+	return head + ": it needs one of these GitHub permissions: " + strings.Join(names, " or ") + ". " + oneOwner
 }
 
 var permissionShape = regexp.MustCompile(`^[a-z_]{1,50}=(read|write|admin)$`)
