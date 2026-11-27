@@ -1,0 +1,62 @@
+/* Toasts: solid info, success and error colours of the daisyUI theme, at the top right. */
+
+.stack {
+  position: fixed;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: fit-content;
+  max-width: calc(100vw - 2rem);
+  pointer-events: none;
+}
+
+.toast {
+  padding: 0.5rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.1),
+    0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  pointer-events: auto;
+}
+
+.info {
+  border-color: oklch(var(--in) / 0.2);
+  background: oklch(var(--in));
+  color: oklch(var(--inc));
+}
+
+.success {
+  border-color: oklch(var(--su) / 0.2);
+  background: oklch(var(--su));
+  color: oklch(var(--suc));
+}
+
+.error {
+  border-color: oklch(var(--er) / 0.2);
+  background: oklch(var(--er));
+  color: oklch(var(--erc));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .toast {
+    animation: toast-pop 0.25s ease-out;
+  }
+}
+
+@keyframes toast-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
