@@ -17,14 +17,14 @@ const COLUMNS = ['Repo / PR', 'Ticket', 'Last commit', 'Review', 'CI', 'Method',
 export const GHOST_MS = 500;
 
 export function Table({ prefs }: { prefs: ListPrefs }) {
-  const { filter, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
+  const { filter, terms, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
   const select = useCallback(
     (s: Snapshot) => {
       const byId = new Map(s.prs.map((p) => [p.id, p]));
-      const groups = sortGroups(groupsOf(s, filter, Date.now(), show), byId, sort, reversed);
+      const groups = sortGroups(groupsOf(s, filter, Date.now(), show, terms), byId, sort, reversed);
       return applyHidden(groups, hidden, mode);
     },
-    [filter, sort, reversed, show, hidden, mode],
+    [filter, terms, sort, reversed, show, hidden, mode],
   );
   const groups = useSnapshot<Group[]>(select).data ?? [];
   const pages = paginate(groups, pageSize);
@@ -61,7 +61,9 @@ export function Table({ prefs }: { prefs: ListPrefs }) {
   );
 
   const empty =
-    mode === 'hidden'
+    terms.length > 0
+      ? 'No pull requests match the search.'
+      : mode === 'hidden'
       ? 'No hidden pull requests match.'
       : hidden.size > 0 && mode === 'visible'
         ? 'No pull requests match. Some are hidden.'

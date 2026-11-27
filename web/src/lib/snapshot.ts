@@ -1,4 +1,5 @@
 import type { Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
+import { matchesSearch } from './search';
 import { inShow, type ShowMode } from './show';
 
 export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
@@ -128,19 +129,22 @@ export interface Group {
 
 /**
  * Groups the filtered pull requests into rows: stacks stay together, in stack order, and everything
- * else is its own group. Only pull requests the Show mode lists are kept. The result holds ids only, so a row's data changing leaves it equal.
+ * else is its own group. Only pull requests the Show mode lists and the search terms match are kept. The result holds ids only, so a row's data changing leaves it equal.
  */
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
   now: number,
   show: ShowMode = 'everything',
+  terms: readonly string[] = [],
 ): Group[] {
   const groups: Group[] = [];
   const byStack = new Map<string, Group>();
   const rows = [...s.prs].sort((a, b) => (a.stack?.position ?? 0) - (b.stack?.position ?? 0));
   const kept = new Set(
-    rows.filter((p) => matches(p, filter, now) && inShow(p, show)).map((p) => p.id),
+    rows
+      .filter((p) => matches(p, filter, now) && inShow(p, show) && matchesSearch(p, terms))
+      .map((p) => p.id),
   );
   for (const pr of s.prs) {
     if (!kept.has(pr.id) || pr.stack) continue;

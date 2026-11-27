@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { searchTerms } from '@/lib/search';
 import { readStored, readStringList, writeStored } from '@/lib/storage';
 import { DEFAULT_SORT, type SortKey } from '@/lib/sort';
 import type { Filter } from '@/lib/snapshot';
@@ -26,12 +27,13 @@ function storedPageSize(): number {
 }
 
 /**
- * How the list is viewed: filter, sort, show, hidden pull requests, page size and page. Everything is
+ * How the list is viewed: filter, search, sort, show, hidden pull requests, page size and page. Everything is
  * client-side. The page goes back to the first whenever what it lists changes.
  * @param existing ids in the snapshot; hidden ids that are not among them are ignored.
  */
 export function useListPrefs(existing: readonly string[]) {
   const [filter, setFilterState] = useState<Filter>('all');
+  const [query, setQueryState] = useState('');
   const [sort, setSortState] = useState<SortKey>(DEFAULT_SORT);
   const [reversed, setReversed] = useState(false);
   const [mode, setModeState] = useState<HideMode>(storedMode);
@@ -60,8 +62,12 @@ export function useListPrefs(existing: readonly string[]) {
     writeStored(HIDDEN_KEY, JSON.stringify([...next]));
   }, []);
 
+  const terms = useMemo(() => searchTerms(query), [query]);
+
   return {
     filter,
+    query,
+    terms,
     sort,
     reversed,
     mode,
@@ -73,6 +79,10 @@ export function useListPrefs(existing: readonly string[]) {
     setPage,
     setFilter: (f: Filter) => {
       setFilterState(f);
+      setPage(0);
+    },
+    setQuery: (q: string) => {
+      setQueryState(q);
       setPage(0);
     },
     setSort: (s: SortKey) => {
