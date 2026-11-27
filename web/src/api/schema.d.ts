@@ -679,6 +679,17 @@ export interface components {
             number: number;
             title: string;
             repo: components["schemas"]["SnapshotRepo"];
+            /** @description Login of the user who opened the pull request. Null for a deleted account and for a snapshot stored before the field existed. */
+            author: string | null;
+            /**
+             * Format: date-time
+             * @description When the pull request last changed on GitHub. Null for a snapshot stored before the field existed.
+             */
+            updatedAt: string | null;
+            /** @description Lines added by the pull request. Null for a snapshot stored before the field existed. */
+            additions: number | null;
+            /** @description Lines removed by the pull request. Null for a snapshot stored before the field existed. */
+            deletions: number | null;
             /** @description Why the pull request is listed. Both can be present, and the list is never empty. */
             roles: ("assigned" | "authored")[];
             isDraft: boolean;

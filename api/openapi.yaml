@@ -1058,6 +1058,10 @@ components:
         - ticketLookup
         - mergeMethod
         - roles
+        - author
+        - updatedAt
+        - additions
+        - deletions
       properties:
         id:
           type: string
@@ -1067,6 +1071,25 @@ components:
           type: string
         repo:
           $ref: '#/components/schemas/SnapshotRepo'
+        author:
+          description: Login of the user who opened the pull request. Null for a deleted account and for a snapshot stored before the field existed.
+          type: string
+          nullable: true
+        updatedAt:
+          description: When the pull request last changed on GitHub. Null for a snapshot stored before the field existed.
+          type: string
+          format: date-time
+          nullable: true
+        additions:
+          description: Lines added by the pull request. Null for a snapshot stored before the field existed.
+          type: integer
+          minimum: 0
+          nullable: true
+        deletions:
+          description: Lines removed by the pull request. Null for a snapshot stored before the field existed.
+          type: integer
+          minimum: 0
+          nullable: true
         roles:
           description: Why the pull request is listed. Both can be present, and the list is never empty.
           type: array

@@ -217,10 +217,11 @@ func (p *Poller) Load(ctx context.Context) error {
 		p.cfg.Log.WarnContext(ctx, "stored snapshot is unreadable, starting empty", "err", err)
 		return nil
 	}
-	if fillRoles(&snap) {
-		if raw, err = encode(snap); err != nil {
-			return err
-		}
+	// Fields added since the snapshot was stored (author, updatedAt, additions, deletions) decode
+	// as nil; encoding again serves them as null, which is what the schema says. Roles get both.
+	fillRoles(&snap)
+	if raw, err = encode(snap); err != nil {
+		return err
 	}
 	p.mu.Lock()
 	p.version = stored.Version

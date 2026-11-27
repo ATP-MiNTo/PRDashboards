@@ -32,6 +32,12 @@ type fixturePR struct {
 	authored, unassigned bool
 	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
 	stacked bool
+	// author, updatedAgo, additions and deletions fill the author, updatedAt and diff size. Left
+	// zero they default to a colleague (the viewer, octocat, for an authored pull request), 5
+	// half the age of the last commit, and 12 and 3 lines.
+	author               string
+	updatedAgo           time.Duration
+	additions, deletions int
 }
 
 // matchesViewer reports whether the search query selects the pull request for the viewer.
@@ -119,7 +125,7 @@ func basePRs(now time.Time) []fixturePR {
 	}
 	return []fixturePR{
 		{
-			repo: "acme/web", org: "acme", number: 101, title: "INP-101 Add login", head: "feat/INP-101-login", base: "main",
+			repo: "acme/web", org: "acme", number: 101, additions: 214, deletions: 38, title: "INP-101 Add login", head: "feat/INP-101-login", base: "main",
 			mergeable: "MERGEABLE", mergeState: "BLOCKED", decision: "APPROVED", committedAgo: 3 * time.Hour, rollup: "FAILURE", reviewApproved: true,
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme/web", 1001)+"/job/1", ago(20*time.Minute), ago(18*time.Minute)),
@@ -129,7 +135,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/web", org: "acme", number: 102, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
+			repo: "acme/web", org: "acme", number: 102, additions: 96, deletions: 12, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 90 * time.Minute, rollup: "SUCCESS", requested: true,
 			authored: true, // assigned and opened by the viewer: both searches find it
 			checks: []map[string]any{
@@ -139,19 +145,19 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/web", org: "acme", number: 103, title: "INP-103 Account menu", head: "feat/INP-103-menu", base: "feat/INP-102-sso",
+			repo: "acme/web", org: "acme", number: 103, additions: 140, deletions: 4, title: "INP-103 Account menu", head: "feat/INP-103-menu", base: "feat/INP-102-sso",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "", committedAgo: 40 * time.Minute, rollup: "PENDING",
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "QUEUED", "", run("acme/web", 1003)+"/job/1", ago(time.Minute), time.Time{}),
 			},
 		},
 		{
-			repo: "acme/api", org: "acme", number: 7, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
+			repo: "acme/api", org: "acme", number: 7, additions: 58, deletions: 61, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
 			mergeable: "UNKNOWN", mergeState: "DRAFT", decision: "", committedAgo: 5 * 24 * time.Hour, rollup: "",
 			authored: true, unassigned: true, // opened by the viewer, assigned to nobody: only author:@me finds it
 		},
 		{
-			repo: "acme/api", org: "acme", number: 8, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
+			repo: "acme/api", org: "acme", number: 8, additions: 22, deletions: 7, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
 			mergeable: "CONFLICTING", mergeState: "DIRTY", decision: "APPROVED", committedAgo: 26 * time.Hour, rollup: "FAILURE", reviewApproved: true,
 			checks: []map[string]any{
 				statusContext("buildkite/api", "FAILURE", "https://buildkite.example.org/acme/api/builds/311", ago(25*time.Hour)),
@@ -159,7 +165,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/api", org: "acme", number: 9, title: "Bump dependencies", head: "chore/deps", base: "main",
+			repo: "acme/api", org: "acme", number: 9, additions: 512, deletions: 690, title: "Bump dependencies", head: "chore/deps", base: "main",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", committedAgo: time.Hour, rollup: "SUCCESS", reviewApproved: true,
 			totalChecks: 62,
 			checks: []map[string]any{
@@ -167,7 +173,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme-corp/billing", org: "acme-corp", number: 5, title: "INP-104 Invoice export", head: "feat/INP-104-export", base: "main",
+			repo: "acme-corp/billing", org: "acme-corp", number: 5, additions: 88, deletions: 15, title: "INP-104 Invoice export", head: "feat/INP-104-export", base: "main",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", committedAgo: 2 * time.Hour, rollup: "SUCCESS", reviewApproved: true,
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme-corp/billing", 3001)+"/job/1", ago(60*time.Minute), ago(58*time.Minute)),
@@ -221,12 +227,27 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 	if p.decision != "" {
 		decision = p.decision
 	}
+	author, updatedAgo, additions, deletions := p.author, p.updatedAgo, p.additions, p.deletions
+	if author == "" {
+		author = "priya"
+		if p.authored {
+			author = "octocat"
+		}
+	}
+	if updatedAgo == 0 {
+		updatedAgo = p.committedAgo / 2
+	}
+	if additions == 0 && deletions == 0 {
+		additions, deletions = 12, 3
+	}
 	return map[string]any{
 		"__typename": "PullRequest",
 		"id":         p.id(), "state": state, "isCrossRepository": false,
 		"number": p.number, "title": p.title, "url": fmt.Sprintf("https://github.com/%s/pull/%d", p.repo, p.number),
 		"isDraft": p.draft, "mergeable": p.mergeable, "mergeStateStatus": p.mergeState, "reviewDecision": decision,
 		"headRefName": p.head, "headRefOid": p.headSHA(moved), "baseRefName": p.base,
+		"author": map[string]any{"login": author}, "updatedAt": now.Add(-updatedAgo).UTC().Format(time.RFC3339),
+		"additions": additions, "deletions": deletions,
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",

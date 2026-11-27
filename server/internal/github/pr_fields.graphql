@@ -12,6 +12,12 @@ fragment PullRequestFields on PullRequest {
   headRefOid
   isCrossRepository
   baseRefName
+  updatedAt
+  additions
+  deletions
+  author {
+    login
+  }
   repository {
     id
     nameWithOwner

@@ -20,6 +20,12 @@
             "__typename": "PullRequest",
             "id": "PR_1",
             "number": 101,
+            "author": {
+              "login": "priya"
+            },
+            "updatedAt": "2026-11-24T08:30:00Z",
+            "additions": 214,
+            "deletions": 38,
             "title": "INP-101 Add login",
             "url": "https://github.com/acme/web/pull/101",
             "isDraft": false,
@@ -198,6 +204,10 @@
             "__typename": "PullRequest",
             "id": "PR_2",
             "number": 102,
+            "author": null,
+            "updatedAt": "2026-11-24T07:00:00Z",
+            "additions": 0,
+            "deletions": 5,
             "title": "Draft work",
             "url": "https://github.com/acme/web/pull/102",
             "isDraft": true,
