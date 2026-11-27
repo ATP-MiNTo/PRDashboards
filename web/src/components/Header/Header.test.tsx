@@ -259,6 +259,30 @@ describe('the toast after a refresh', () => {
     expect(screen.getByText('Refreshed. Nothing changed since 10:26.')).toBeInTheDocument();
   });
 
+  it('says nothing changed when the refresh ended and the snapshot kept its version', async () => {
+    const at = new Date(2026, 10, 24, 10, 26).toISOString();
+    const first = snapshot([], { version: 1, generatedAt: at });
+    const known: SyncStatus = { ...idle, refreshes: 4, snapshotVersion: 1 };
+    const { rerender } = draw(<Pair snap={first} status={known} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    const again = (status: SyncStatus) => rerender(<Pair snap={first} status={status} />);
+    await act(async () => again({ ...known, running: true }));
+    expect(screen.queryByText(/^Refreshed/)).toBeNull();
+    await act(async () => again({ ...known, refreshes: 5 }));
+    expect(screen.getByText('Refreshed. Nothing changed since 10:26.')).toBeInTheDocument();
+  });
+
+  it('waits for the snapshot when the status says a newer one exists', async () => {
+    const first = snapshot([], { version: 1 });
+    const known: SyncStatus = { ...idle, refreshes: 4, snapshotVersion: 1 };
+    const { rerender } = draw(<Pair snap={first} status={known} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    await act(async () =>
+      rerender(<Pair snap={first} status={{ ...known, refreshes: 5, snapshotVersion: 2 }} />),
+    );
+    expect(screen.queryByText(/^Refreshed/)).toBeNull();
+  });
+
   it('does not toast a refresh that this button did not start', async () => {
     const first = snapshot([], { version: 1 });
     const { rerender } = draw(<Pair snap={first} status={idle} />);

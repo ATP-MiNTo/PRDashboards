@@ -189,10 +189,10 @@ func (s *Store) SaveSync(ctx context.Context, version int64, data []byte, now ti
 		if err := writeSync(ctx, tx, now, w); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
-			 ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data, updated_at = excluded.updated_at`,
-			version, data, unix(now))
+		if len(data) == 0 {
+			return nil
+		}
+		_, err := tx.ExecContext(ctx, snapshotUpsert, version, data, unix(now))
 		return err
 	})
 }

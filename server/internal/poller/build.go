@@ -3,6 +3,7 @@ package poller
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"encoding/json"
 	"io"
 	"slices"
@@ -348,6 +349,21 @@ func linkRows(ls []linked) []store.LinkRow {
 }
 
 func encode(s gen.Snapshot) ([]byte, error) { return json.Marshal(s) }
+
+// fingerprint hashes what the person sees of a snapshot. The version, the generation time, the sync
+// times and the API usage are left out: they change with every refresh, travel on sync-status, and
+// do not make a new snapshot.
+func fingerprint(s gen.Snapshot) [sha256.Size]byte {
+	s.Version = 0
+	s.GeneratedAt = time.Time{}
+	s.Sources.Github.SyncedAt, s.Sources.Github.RateLimit = nil, nil
+	s.Sources.Jira.SyncedAt = nil
+	h := sha256.New()
+	_ = json.NewEncoder(h).Encode(s)
+	var sum [sha256.Size]byte
+	h.Sum(sum[:0])
+	return sum
+}
 
 func compress(b []byte) ([]byte, error) {
 	var buf bytes.Buffer

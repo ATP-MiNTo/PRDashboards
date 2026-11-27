@@ -65,14 +65,16 @@ sequenceDiagram
   P->>G: two GraphQL searches in parallel, assigned and authored, each paginated (one query per 50 PRs)
   P->>G: two merged PR searches (only if PRs left the open list)
   P->>P: link tickets, detect stacks (in memory)
+  Note over P: after a merge or review (TriggerAfterAction): GitHub only outside backoff, Jira only for the acted keys
   P->>J: JQL key in (...) per 100 keys (Jira interval)
   P->>S: upsert repos, prs, links (one transaction)
   P->>R: evaluate rules (pure, time passed in)
   R-->>P: firings
   P->>J: transitions for firing tickets only
   P->>S: activity + rule_firings (one transaction)
-  P->>H: snapshot version N
+  P->>H: snapshot version N (only when the snapshot changed)
   H-->>B: event: snapshot N
+  P->>H: sync-status (always, with the sync times and API usage)
   B->>P: GET /api/snapshot (If-None-Match)
 ```
 
@@ -111,7 +113,9 @@ sequenceDiagram
   Transitions are fetched only for the tickets being moved. The only single-PR call is the re-check
   before a merge.
 - One refresh at a time. Browser tabs read the snapshot and never trigger outside calls on their
-  own.
+  own. A refresh that changes nothing keeps the snapshot version and sends no snapshot event. A refresh
+  that follows a merge or a review respects the GitHub backoff and asks Jira only for the tickets it
+  moved; the person's Sync overrides the backoff.
 - At most 4 parallel outbound requests per provider. Back off on `403`, `429` and `503`.
 - Stack detection, linking and rule evaluation are O(n) passes with maps, never nested scans over
   all PRs.

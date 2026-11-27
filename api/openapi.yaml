@@ -214,9 +214,17 @@ paths:
           schema:
             type: string
             maxLength: 128
+        - name: Accept-Encoding
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 256
       responses:
         '200':
-          description: The snapshot.
+          description: >
+            The snapshot, gzip compressed (Content-Encoding gzip) when Accept-Encoding allows it. The
+            response varies on Accept-Encoding and both forms have the same ETag.
           headers:
             ETag:
               description: The snapshot version as a quoted string.
@@ -944,6 +952,20 @@ components:
           type: string
           format: date-time
           nullable: true
+        refreshes:
+          type: integer
+          format: int64
+          description: >
+            Refreshes finished since the server started. It goes up when a refresh ends, also when
+            it found nothing new and left the snapshot as it was.
+        snapshotVersion:
+          type: integer
+          format: int64
+          description: >
+            The version of the current snapshot. A refresh that changes nothing keeps it, and sends
+            no snapshot event.
+        rateLimit:
+          $ref: '#/components/schemas/RateLimitUsage'
     SourceState:
       type: string
       enum: [pending, ok, rate_limited, error, unreachable, disconnected]

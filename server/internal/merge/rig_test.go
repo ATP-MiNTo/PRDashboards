@@ -179,6 +179,8 @@ type rig struct {
 	accounts  *fakeAccounts
 	events    *events
 	refreshes atomic.Int32
+	keysMu    sync.Mutex
+	keys      [][]string
 	clock     *testutil.Clock
 	path      string
 }
@@ -228,7 +230,12 @@ func newRig(t *testing.T, tickets ...string) *rig {
 	}
 	r.svc = merge.New(merge.Config{
 		GitHub: r.gh, Jira: r.jira, Store: r.store, Snapshot: r.snapshot, Accounts: r.accounts,
-		Refresh: func() { r.refreshes.Add(1) }, Publisher: r.events,
+		Refresh: func(k []string) {
+			r.refreshes.Add(1)
+			r.keysMu.Lock()
+			r.keys = append(r.keys, k)
+			r.keysMu.Unlock()
+		}, Publisher: r.events,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Clock: clock.Now,
 	})
 	return r

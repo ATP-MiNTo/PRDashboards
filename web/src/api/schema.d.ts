@@ -649,6 +649,17 @@ export interface components {
             nextGithubAt: string | null;
             /** Format: date-time */
             nextJiraAt: string | null;
+            /**
+             * Format: int64
+             * @description Refreshes finished since the server started. It goes up when a refresh ends, also when it found nothing new and left the snapshot as it was.
+             */
+            refreshes?: number;
+            /**
+             * Format: int64
+             * @description The version of the current snapshot. A refresh that changes nothing keeps it, and sends no snapshot event.
+             */
+            snapshotVersion?: number;
+            rateLimit?: components["schemas"]["RateLimitUsage"];
         };
         /** @enum {string} */
         SourceState: "pending" | "ok" | "rate_limited" | "error" | "unreachable" | "disconnected";
@@ -1452,13 +1463,14 @@ export interface operations {
             query?: never;
             header?: {
                 "If-None-Match"?: string;
+                "Accept-Encoding"?: string;
             };
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description The snapshot. */
+            /** @description The snapshot, gzip compressed (Content-Encoding gzip) when Accept-Encoding allows it. The response varies on Accept-Encoding and both forms have the same ETag. */
             200: {
                 headers: {
                     /** @description The snapshot version as a quoted string. */

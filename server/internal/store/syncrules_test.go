@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
@@ -203,11 +204,24 @@ func TestSaveSyncAndRefreshWriteTheEvaluationAtomically(t *testing.T) {
 	if n := count(t, path, `SELECT count(*) FROM rule_firings`); n != 2 {
 		t.Fatalf("firings %d", n)
 	}
-	// A failing write rolls the snapshot back with it.
-	if err := s.SaveSync(ctx, 99, nil, clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "x"}}}); err == nil {
-		t.Fatal("a row without its required columns was accepted")
+	// An empty snapshot leaves the stored one as it is, and the evaluation is still written.
+	before, _ := s.LoadSnapshot(ctx)
+	if err := s.SaveSync(ctx, 99, nil, clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "x"}}}); err != nil {
+		t.Fatal(err)
 	}
-	if snap, _ := s.LoadSnapshot(ctx); snap.Version == 99 {
+	if snap, _ := s.LoadSnapshot(ctx); snap.Version != before.Version || !bytes.Equal(snap.Data, before.Data) {
+		t.Fatal("an empty snapshot replaced the stored one")
+	}
+	if n := count(t, path, `SELECT count(*) FROM activity`); n != 3 {
+		t.Fatalf("activity %d", n)
+	}
+	// A failing write rolls the snapshot back with it.
+	dead, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := s.SaveSync(dead, 100, []byte("y"), clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "z"}}}); err == nil {
+		t.Fatal("a cancelled write succeeded")
+	}
+	if snap, _ := s.LoadSnapshot(ctx); snap.Version == 100 {
 		t.Fatal("the snapshot was written although the transaction failed")
 	}
 }

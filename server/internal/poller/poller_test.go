@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -202,7 +203,7 @@ func TestSnapshotIsStoredCompressedAndLoadedAtStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := fresh.Current()
-	if got.Snapshot.Version != 2 || len(got.Snapshot.Prs) != 3 || string(got.JSON) != string(want.JSON) {
+	if got.Snapshot.Version != 1 || len(got.Snapshot.Prs) != 3 || string(got.JSON) != string(want.JSON) {
 		t.Fatalf("loaded version %d prs %d", got.Snapshot.Version, len(got.Snapshot.Prs))
 	}
 	if st := fresh.Status(); st.GithubAt == nil || !st.GithubAt.Equal(r.clock.Now()) {
@@ -215,10 +216,11 @@ func TestSnapshotIsStoredCompressedAndLoadedAtStart(t *testing.T) {
 		t.Fatal("unknown id")
 	}
 	r.clock.Advance(time.Minute)
+	r.gh.set(func(f *fakeGitHub) { f.result.PRs = f.result.PRs[:2] })
 	if err := fresh.Sync(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if fresh.Current().Snapshot.Version != 3 {
+	if fresh.Current().Snapshot.Version != 2 {
 		t.Fatalf("versions continue after a restart: %d", fresh.Current().Snapshot.Version)
 	}
 }
@@ -592,8 +594,8 @@ func TestRelinkWaitsForTheRunningRefresh(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
-	if v := r.snapshot().Version; v != 3 {
-		t.Fatalf("refresh then relink: version %d", v)
+	if v := r.snapshot().Version; v != 1 {
+		t.Fatalf("nothing changed, so the version stays: %d", v)
 	}
 }
 
@@ -745,7 +747,10 @@ func TestEveryRefreshStoresExactlyOneTransaction(t *testing.T) {
 func TestVersionsAreMonotonic(t *testing.T) {
 	r := newRig(t)
 	var seen []int64
-	for range 3 {
+	for i := range 3 {
+		r.gh.set(func(f *fakeGitHub) {
+			f.result.PRs = []github.PR{pr("PR_a", 1, "acme/web", "feat/x", "main", "title "+strconv.Itoa(i))}
+		})
 		r.sync()
 		seen = append(seen, r.snapshot().Version)
 	}

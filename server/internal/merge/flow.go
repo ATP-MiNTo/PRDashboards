@@ -35,8 +35,9 @@ type Config struct {
 	Store    Store
 	Snapshot Snapshot
 	Accounts Accounts
-	// Refresh starts a refresh without waiting for it.
-	Refresh   func()
+	// Refresh starts a refresh without waiting for it. It is given the ticket keys the action moved
+	// in Jira, which the refresh looks up again; none when no ticket moved.
+	Refresh   func(movedTickets []string)
 	Publisher Publisher
 	Log       *slog.Logger
 	Clock     func() time.Time
@@ -65,7 +66,7 @@ func New(cfg Config) *Service {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	if cfg.Refresh == nil {
-		cfg.Refresh = func() {}
+		cfg.Refresh = func([]string) {}
 	}
 	return &Service{cfg: cfg, flights: map[string]*flight{}}
 }
@@ -112,7 +113,7 @@ func (s *Service) once(ctx context.Context, req Request) (Result, error) {
 	res, err := s.run(ctx, req)
 	var refused *Error
 	if errors.As(err, &refused) && refused.Fresh != nil {
-		s.cfg.Refresh()
+		s.cfg.Refresh(nil)
 	}
 	return res, err
 }
@@ -228,7 +229,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	if s.cfg.Publisher != nil {
 		_ = s.cfg.Publisher.Publish(events.Activity, map[string]string{"pr": req.PRID})
 	}
-	s.cfg.Refresh()
+	s.cfg.Refresh(keys)
 	return res, nil
 }
 
@@ -260,7 +261,7 @@ func (s *Service) queued(ctx context.Context, req Request, pr github.PR) Result 
 	if s.cfg.Publisher != nil {
 		_ = s.cfg.Publisher.Publish(events.Activity, map[string]string{"pr": req.PRID})
 	}
-	s.cfg.Refresh()
+	s.cfg.Refresh(nil)
 	return res
 }
 
@@ -546,6 +547,6 @@ func (s *Service) Retry(ctx context.Context, id int64) (Step, error) {
 	if s.cfg.Publisher != nil {
 		_ = s.cfg.Publisher.Publish(events.Activity, map[string]string{"pr": row.PRID})
 	}
-	s.cfg.Refresh()
+	s.cfg.Refresh([]string{row.TicketKey})
 	return o.step, nil
 }

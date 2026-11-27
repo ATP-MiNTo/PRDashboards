@@ -1,6 +1,6 @@
 'use client';
 
-import { useAccounts, useSnapshot } from '@/api/queries';
+import { useAccounts, useSnapshot, useSyncStatus } from '@/api/queries';
 import type { Accounts, Snapshot } from '@/api/client';
 import styles from './Shell.module.css';
 
@@ -64,7 +64,10 @@ const rateLimitOf = (s: Snapshot) => s.sources.github.rateLimit;
  * refresh, when disconnected, or for a snapshot stored by an older version).
  */
 function ApiUsage() {
-  const usage = useSnapshot(rateLimitOf).data;
+  const fromSnapshot = useSnapshot(rateLimitOf).data;
+  const status = useSyncStatus().data;
+  // The status carries the budget of the latest refresh, also of the ones that left the snapshot as it was.
+  const usage = status?.rateLimit ?? fromSnapshot;
   if (!usage) return null;
   return (
     <span className={styles.usage}>

@@ -4,6 +4,7 @@ package poller
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"log/slog"
 	"strconv"
@@ -74,10 +75,12 @@ type Config struct {
 	After     func(d time.Duration) <-chan time.Time
 }
 
-// Published is the snapshot as served: the structure and its JSON, encoded once.
+// Published is the snapshot as served: the structure, its JSON encoded once and the same JSON
+// compressed once, for the clients that accept gzip. Gzip is empty when it was not computed.
 type Published struct {
 	Snapshot gen.Snapshot
 	JSON     []byte
+	Gzip     []byte
 }
 
 // ETag is the quoted version.
@@ -85,6 +88,9 @@ func (p *Published) ETag() string { return `"` + strconv.FormatInt(p.Snapshot.Ve
 
 type request struct {
 	github, jira, relink bool
+	// action marks a refresh that follows a merge or a review. Its Jira lookup is limited to keys.
+	action bool
+	keys   []string
 }
 
 type flight struct {
@@ -120,11 +126,16 @@ type Poller struct {
 	flights sync.WaitGroup
 	fl      *flight
 	version int64
-	gh      ghData
-	ls      []linked
-	jira    jiraData
-	ghSrc   gen.SourceStatus
-	rl      github.RateLimit
+	// sum is the fingerprint of the current snapshot, and sumOK says it was computed.
+	sum   [sha256.Size]byte
+	sumOK bool
+	runs  int64
+	extra []string
+	gh    ghData
+	ls    []linked
+	jira  jiraData
+	ghSrc gen.SourceStatus
+	rl    github.RateLimit
 
 	lastGH, lastJira       time.Time
 	nextGH, nextJira       time.Time
@@ -227,8 +238,15 @@ func (p *Poller) Load(ctx context.Context) error {
 	if raw, err = encode(snap); err != nil {
 		return err
 	}
+	// The blob was written before the fields above were filled, so the compressed copy is made from
+	// the JSON that is served, and the two always agree.
+	gz, err := compress(raw)
+	if err != nil {
+		return err
+	}
 	p.mu.Lock()
 	p.version = stored.Version
+	p.sum, p.sumOK = fingerprint(snap), true
 	p.ghSrc, p.jira.state = snap.Sources.Github, snap.Sources.Jira.State
 	// The budget of the last refresh before the restart (absent in older snapshots) is kept, so a
 	// build before the first refresh still shows it and the interval still honours a low budget.
@@ -241,7 +259,7 @@ func (p *Poller) Load(ctx context.Context) error {
 		p.lastGH = *t
 	}
 	p.mu.Unlock()
-	p.cur.Store(&Published{Snapshot: snap, JSON: raw})
+	p.cur.Store(&Published{Snapshot: snap, JSON: raw, Gzip: gz})
 	return nil
 }
 
@@ -268,7 +286,8 @@ func (p *Poller) Status() gen.SyncStatus {
 }
 
 func (p *Poller) statusLocked() gen.SyncStatus {
-	st := gen.SyncStatus{Running: p.fl != nil}
+	runs, version := p.runs, p.version
+	st := gen.SyncStatus{Running: p.fl != nil, Refreshes: &runs, SnapshotVersion: &version, RateLimit: rateLimitUsage(p.rl)}
 	set := func(dst **time.Time, t time.Time) {
 		if !t.IsZero() {
 			v := t
@@ -300,6 +319,18 @@ func (p *Poller) Sync(ctx context.Context) error {
 // Trigger starts a full refresh without waiting, or joins the running one, and returns the status.
 func (p *Poller) Trigger() gen.SyncStatus {
 	p.start(request{github: true, jira: true})
+	return p.Status()
+}
+
+// TriggerAfterAction starts the refresh that follows a merge or a review, or joins the running one,
+// and returns the status. Unlike Trigger it is not the person asking for a sync: GitHub is asked
+// only when it is not in backoff, and Jira only for the given ticket keys that the snapshot shows
+// (the tickets the action moved), never for the whole list. With no keys Jira is not asked.
+func (p *Poller) TriggerAfterAction(keys []string) gen.SyncStatus {
+	p.mu.Lock()
+	ghOK := !p.cfg.Clock().Before(p.ghBackoff)
+	p.mu.Unlock()
+	p.start(request{github: ghOK, action: true, keys: keys})
 	return p.Status()
 }
 
@@ -337,6 +368,7 @@ func (p *Poller) start(req request) *flight {
 	}
 	if p.fl != nil {
 		f := p.fl
+		p.extra = append(p.extra, req.keys...)
 		p.mu.Unlock()
 		return f
 	}
@@ -354,6 +386,7 @@ func (p *Poller) start(req request) *flight {
 		}
 		p.mu.Lock()
 		p.fl = nil
+		p.runs++
 		p.mu.Unlock()
 		p.publishStatus()
 		close(f.done)
