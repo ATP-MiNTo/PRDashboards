@@ -3,7 +3,7 @@ import { pr } from '@/test-fixtures';
 import type { SnapshotPr } from '@/api/client';
 import { groupsOf, type Group } from './snapshot';
 import { snapshot } from '@/test-fixtures';
-import { effectiveDir, naturalDir, sortGroups, type SortKey } from './sort';
+import { sizeOf, sortGroups, type SortKey } from './sort';
 
 const stack = (id: string, position: number, size: number, over: Partial<SnapshotPr> = {}) =>
   pr(id, over.number ?? 0, {
@@ -20,22 +20,38 @@ const stack = (id: string, position: number, size: number, over: Partial<Snapsho
 const single = (id: string, number: number, over: Partial<SnapshotPr> = {}) => pr(id, number, over);
 
 function run(prs: SnapshotPr[], key: SortKey, reversed = false): string[][] {
-  const groups = groupsOf(snapshot(prs), 'all', Date.now());
+  const groups = groupsOf(snapshot(prs), 'all');
   const map = new Map(prs.map((p) => [p.id, p]));
   return sortGroups(groups, map, key, reversed).map((g) => g.ids);
 }
 
 const prs = () => [
-  single('a', 5, { title: 'banana', committedAt: '2026-11-20T10:00:00Z' }),
+  single('a', 5, {
+    title: 'banana',
+    updatedAt: '2026-11-20T10:00:00Z',
+    additions: 10,
+    deletions: 5,
+  }),
   single('b', 2, {
     title: 'Apple',
-    committedAt: '2026-11-24T10:00:00Z',
+    updatedAt: '2026-11-24T10:00:00Z',
+    additions: 100,
+    deletions: 50,
     repo: { ...pr('z', 1).repo, nameWithOwner: 'acme/zeta' },
   }),
-  single('c', 9, { title: 'cherry', committedAt: null, isDraft: true }),
+  single('c', 9, {
+    title: 'cherry',
+    updatedAt: null,
+    committedAt: null,
+    additions: null,
+    deletions: null,
+    isDraft: true,
+  }),
   single('d', 7, {
     title: 'date',
-    committedAt: '2026-11-22T10:00:00Z',
+    updatedAt: '2026-11-22T10:00:00Z',
+    additions: 20,
+    deletions: 0,
     ci: { state: 'failing', total: 0, checks: [] },
   }),
 ];
@@ -45,7 +61,7 @@ describe('sortGroups', () => {
     ['updated', ['b', 'd', 'a', 'c']],
     ['title', ['b', 'a', 'c', 'd']],
     ['repo', ['a', 'd', 'c', 'b']],
-    ['number', ['b', 'a', 'd', 'c']],
+    ['size', ['b', 'd', 'a', 'c']],
     ['ready', ['a', 'b', 'd', 'c']],
   ])('sorts by %s in its natural order', (key, order) => {
     expect(run(prs(), key).map((g) => g[0])).toEqual(order);
@@ -54,7 +70,7 @@ describe('sortGroups', () => {
   it.each<[SortKey, string[]]>([
     ['updated', ['c', 'a', 'd', 'b']],
     ['title', ['d', 'c', 'a', 'b']],
-    ['number', ['c', 'd', 'a', 'b']],
+    ['size', ['c', 'a', 'd', 'b']],
     ['ready', ['c', 'd', 'a', 'b']],
   ])('reverses %s', (key, order) => {
     expect(run(prs(), key, true).map((g) => g[0])).toEqual(order);
@@ -62,29 +78,38 @@ describe('sortGroups', () => {
 
   it('keeps equal keys in the incoming order', () => {
     const same = [single('a', 1), single('b', 1), single('c', 1)];
-    expect(run(same, 'number').flat()).toEqual(['a', 'b', 'c']);
-    expect(run(same, 'number', true).flat()).toEqual(['a', 'b', 'c']);
+    expect(run(same, 'size').flat()).toEqual(['a', 'b', 'c']);
+    expect(run(same, 'size', true).flat()).toEqual(['a', 'b', 'c']);
   });
 
   it('keeps a stack together, in stack order, ranked by its best member', () => {
     const rows = [
-      single('x', 3, { committedAt: '2026-11-21T10:00:00Z' }),
-      stack('s1', 1, 2, { number: 10, committedAt: '2026-11-10T10:00:00Z' }),
-      stack('s2', 2, 2, { number: 11, committedAt: '2026-11-23T10:00:00Z' }),
-      single('y', 4, { committedAt: '2026-11-22T10:00:00Z' }),
+      single('x', 3, { updatedAt: '2026-11-21T10:00:00Z' }),
+      stack('s1', 1, 2, { number: 10, updatedAt: '2026-11-10T10:00:00Z' }),
+      stack('s2', 2, 2, { number: 11, updatedAt: '2026-11-23T10:00:00Z' }),
+      single('y', 4, { updatedAt: '2026-11-22T10:00:00Z' }),
     ];
     expect(run(rows, 'updated')).toEqual([['s1', 's2'], ['y'], ['x']]);
     // Reversed: the stack's best member is now its oldest one.
     expect(run(rows, 'updated', true)).toEqual([['s1', 's2'], ['x'], ['y']]);
   });
 
-  it('ranks a stack by its first member under the number sort', () => {
+  it('ranks a stack by its biggest member under the size sort', () => {
     const rows = [
-      single('x', 5),
-      stack('s1', 1, 2, { number: 10 }),
-      stack('s2', 2, 2, { number: 2 }),
+      single('x', 5, { additions: 50, deletions: 0 }),
+      stack('s1', 1, 2, { number: 10, additions: 1, deletions: 0 }),
+      stack('s2', 2, 2, { number: 2, additions: 100, deletions: 0 }),
     ];
-    expect(run(rows, 'number')).toEqual([['s1', 's2'], ['x']]);
+    expect(run(rows, 'size')).toEqual([['s1', 's2'], ['x']]);
+  });
+
+  it('falls back to the last commit when the update time is missing', () => {
+    const rows = [
+      single('old', 1, { updatedAt: null, committedAt: '2026-11-01T10:00:00Z' }),
+      single('new', 2, { updatedAt: null, committedAt: '2026-11-20T10:00:00Z' }),
+      single('mid', 3, { updatedAt: '2026-11-10T10:00:00Z' }),
+    ];
+    expect(run(rows, 'updated').flat()).toEqual(['new', 'mid', 'old']);
   });
 
   it('ignores ids that are not in the map', () => {
@@ -97,16 +122,10 @@ describe('sortGroups', () => {
   });
 });
 
-describe('direction', () => {
-  it('starts newest and best first, text ascending', () => {
-    expect(naturalDir('updated')).toBe('desc');
-    expect(naturalDir('ready')).toBe('desc');
-    expect(naturalDir('title')).toBe('asc');
-  });
-
-  it('flips when reversed', () => {
-    expect(effectiveDir('updated', true)).toBe('asc');
-    expect(effectiveDir('title', true)).toBe('desc');
-    expect(effectiveDir('title', false)).toBe('asc');
+describe('sizeOf', () => {
+  it('adds the lines, and counts 0 for a snapshot that does not say', () => {
+    expect(sizeOf({ additions: 12, deletions: 3 })).toBe(15);
+    expect(sizeOf({ additions: null, deletions: null })).toBe(0);
+    expect(sizeOf({ additions: 7, deletions: null })).toBe(7);
   });
 });

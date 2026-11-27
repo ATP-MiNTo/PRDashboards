@@ -144,7 +144,7 @@ sequenceDiagram
 
 ### Frontend
 
-- Rows subscribe to their own PR, so one change re-renders one row.
+- Cards subscribe to their own PR, so one change re-renders one card.
 - Links are built from validated parts, never taken from API data as is.
 - No `dangerouslySetInnerHTML`. No third-party scripts, fonts or CDNs at runtime.
 
@@ -163,8 +163,15 @@ sequenceDiagram
 | Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |
 | Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
+| Review actions and approvals | [features/review-actions.md](features/review-actions.md) | Built |
 | Status sync rules and Multi-PR tickets | [features/status-sync-rules.md](features/status-sync-rules.md) | Built |
-| Sidebar shell and floating burger | [features/sidebar-shell.md](features/sidebar-shell.md) | Built |
+| Header, floating pills | [features/header.md](features/header.md) | Built |
+| Search | [features/search.md](features/search.md) | Built |
+| Toasts | [features/toast.md](features/toast.md) | Built |
+| Notes on pull requests | [features/notes.md](features/notes.md) | Built |
+| History view | [features/history.md](features/history.md) | Built |
+| Dialog, popup menu and tooltip | [features/dialog-and-popover.md](features/dialog-and-popover.md) | Built |
+| Sidebar shell | [features/sidebar-shell.md](features/sidebar-shell.md) | Built |
 | Settings | [features/settings.md](features/settings.md) | Built |
 | Theme | [features/theme.md](features/theme.md) | Built |
 | Installable app (PWA) | [features/installable-app.md](features/installable-app.md) | Built |

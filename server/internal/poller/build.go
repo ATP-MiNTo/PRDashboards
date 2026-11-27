@@ -53,18 +53,46 @@ type buildInput struct {
 	Linked  []linked
 	// Repos holds the merge settings of the repos the store knows. A repo missing from it is seen for
 	// the first time and gets NewRepo.
-	Repos    map[string]merge.Repo
-	NewRepo  merge.Repo
-	Issues   map[string]jira.Issue
-	Site     jira.Site
-	GitHub   gen.SourceStatus
-	Jira     gen.SourceStatus
-	Blocked  []github.OrgBlocked
-	Warnings []gen.Warning
+	Repos   map[string]merge.Repo
+	NewRepo merge.Repo
+	Issues  map[string]jira.Issue
+	Site    jira.Site
+	GitHub  gen.SourceStatus
+	// RateLimit is the GitHub budget the last refresh saw; the zero value (no data) leaves it out.
+	RateLimit github.RateLimit
+	Jira      gen.SourceStatus
+	Blocked   []github.OrgBlocked
+	Warnings  []gen.Warning
 	// Waiting is the hint of each ticket whose mode all rule is waiting on other pull requests.
 	Waiting map[string]gen.TicketWaiting
 	// Plans maps "prID|ticket" to the merge plan of that ticket on that row.
 	Plans map[string]gen.TicketMergePlan
+}
+
+// rateLimitUsage maps the budget GitHub reported with the searches to the snapshot's used and limit
+// (used is limit minus remaining, never below 0 or above the limit). It is nil when GitHub reported
+// no limit, so the UI shows nothing.
+func rateLimitUsage(rl github.RateLimit) *gen.RateLimitUsage {
+	if rl.Limit <= 0 {
+		return nil
+	}
+	out := &gen.RateLimitUsage{Used: min(max(rl.Limit-rl.Remaining, 0), rl.Limit), Limit: rl.Limit}
+	if !rl.ResetAt.IsZero() {
+		out.ResetAt = tptr(rl.ResetAt)
+	}
+	return out
+}
+
+// rateLimitOf is the inverse of rateLimitUsage, for a snapshot read back from the store.
+func rateLimitOf(u *gen.RateLimitUsage) github.RateLimit {
+	if u == nil || u.Limit <= 0 {
+		return github.RateLimit{}
+	}
+	rl := github.RateLimit{Limit: u.Limit, Remaining: max(u.Limit-u.Used, 0)}
+	if u.ResetAt != nil {
+		rl.ResetAt = *u.ResetAt
+	}
+	return rl
 }
 
 func ptr[T comparable](v T) *T {
@@ -91,12 +119,14 @@ func build(in buildInput) gen.Snapshot {
 	}
 	stackOf := stacks.Detect(sp)
 
+	ghSrc := in.GitHub
+	ghSrc.RateLimit = rateLimitUsage(in.RateLimit)
 	snap := gen.Snapshot{
 		Version:     in.Version,
 		GeneratedAt: in.Now,
 		Prs:         make([]gen.SnapshotPr, 0, len(ls)),
 		Warnings:    in.Warnings,
-		Sources:     gen.Sources{Github: in.GitHub, Jira: in.Jira, BlockedOrgs: make([]gen.BlockedOrg, len(in.Blocked))},
+		Sources:     gen.Sources{Github: ghSrc, Jira: in.Jira, BlockedOrgs: make([]gen.BlockedOrg, len(in.Blocked))},
 	}
 	if snap.Warnings == nil {
 		snap.Warnings = []gen.Warning{}
@@ -110,15 +140,20 @@ func build(in buildInput) gen.Snapshot {
 	return snap
 }
 
-// mergeRepos maps the stored repos to the resolver's input.
-func mergeRepos(repos []store.RepoConfig) map[string]merge.Repo {
+// mergeRepos maps the stored repos to the resolver's input. A repo that follows the default takes
+// the global default method (Settings defaultMethodForNewRepos), not the one it has stored.
+func mergeRepos(repos []store.RepoConfig, global string) map[string]merge.Repo {
 	out := make(map[string]merge.Repo, len(repos))
 	for _, r := range repos {
 		rules := make([]merge.Rule, len(r.Rules))
 		for i, rule := range r.Rules {
 			rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
 		}
-		out[r.ID] = merge.Repo{Default: merge.Method(r.DefaultMethod), IsNew: r.IsNew, Rules: rules}
+		method := r.DefaultMethod
+		if r.InheritMethod {
+			method = global
+		}
+		out[r.ID] = merge.Repo{Default: merge.Method(method), IsNew: r.IsNew, Follows: r.InheritMethod, Rules: rules, Approvals: r.ApprovalsRequired}
 	}
 	return out
 }
@@ -130,7 +165,11 @@ func newRepo(method string) merge.Repo {
 	for i, rule := range store.SeedRules {
 		rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
 	}
-	return merge.Repo{Default: merge.Method(method), IsNew: true, Rules: rules}
+	return merge.Repo{Default: merge.Method(method), IsNew: true, Rules: rules, Approvals: merge.DefaultApprovals}
+}
+
+func approvalsOf(a merge.Approvals) gen.Approvals {
+	return gen.Approvals{Have: a.Have, Need: a.Need, ChangesRequested: a.ChangesRequested}
 }
 
 func resolutionOf(r merge.Resolution) gen.MethodResolution {
@@ -162,6 +201,10 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		MergeStateStatus: pr.MergeStateStatus,
 		HeadRef:          pr.HeadRef, HeadSha: pr.HeadSHA, BaseRef: pr.BaseRef,
 		CommittedAt:    pr.CommittedAt,
+		Author:         ptr(pr.Author),
+		UpdatedAt:      pr.UpdatedAt,
+		Additions:      &pr.Additions,
+		Deletions:      &pr.Deletions,
 		Ci:             ciOf(pr.CI),
 		Reviews:        make([]gen.Review, len(pr.Reviews)),
 		ReviewRequests: append([]string{}, pr.ReviewRequests...),
@@ -169,6 +212,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		Tickets:        make([]gen.SnapshotTicket, 0, len(l.res.Links)),
 		MergeMethod: resolutionOf(merge.Resolve(repo, pr.BaseRef,
 			merge.Allowed{Squash: pr.Repo.SquashAllowed, Merge: pr.Repo.MergeAllowed, Rebase: pr.Repo.RebaseAllowed})),
+		Approvals: approvalsOf(merge.CountApprovals(pr.Reviews, repo.Approvals)),
 	}
 	if d := gen.SnapshotPrReviewDecision(pr.ReviewDecision); d != "" {
 		row.ReviewDecision = &d
@@ -211,6 +255,27 @@ func fillRoles(s *gen.Snapshot) bool {
 		if len(s.Prs[i].Roles) == 0 {
 			s.Prs[i].Roles, changed = rolesOf(nil), true
 		}
+	}
+	return changed
+}
+
+// fillApprovals gives every pull request of a snapshot stored before approvals existed the tally
+// of its stored reviews against need(repoID), which is the repository's setting (1 when unknown).
+// It reports whether it changed anything. The next refresh replaces them.
+func fillApprovals(s *gen.Snapshot, need func(repoID string) int) bool {
+	changed := false
+	for i := range s.Prs {
+		if s.Prs[i].Approvals.Need != 0 {
+			continue
+		}
+		reviews := make([]github.Review, len(s.Prs[i].Reviews))
+		for j, r := range s.Prs[i].Reviews {
+			reviews[j] = github.Review{ID: r.Id, State: r.State}
+			if r.Author != nil {
+				reviews[j].Author = *r.Author
+			}
+		}
+		s.Prs[i].Approvals, changed = approvalsOf(merge.CountApprovals(reviews, need(s.Prs[i].Repo.Id))), true
 	}
 	return changed
 }

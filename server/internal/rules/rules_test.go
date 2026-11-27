@@ -2,6 +2,7 @@ package rules_test
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -74,6 +75,22 @@ func TestTriggers(t *testing.T) {
 		{"merged", rule("r", rules.Merged), pr("A", func(p *rules.PR) { p.State = rules.StateMerged }), "A=A", true},
 		{"open is not merged", rule("r", rules.Merged), pr("A"), "", false},
 		{"merged pull request has no review state", rule("r", rules.ReviewApproved), pr("A", func(p *rules.PR) { p.State, p.ReviewDecision = rules.StateMerged, "APPROVED" }), "", false},
+		{"no review yet", rule("r", rules.NoReviewYet), pr("A"), "A=sha-A:unreviewed", true},
+		{"no review yet while a review is required", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.ReviewDecision = "REVIEW_REQUIRED" }), "A=sha-A:unreviewed", true},
+		{"no review yet after a review", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.LatestReview = "rev1" }), "", false},
+		{"no review yet after a decision", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.ReviewDecision = "APPROVED" }), "", false},
+		{"no review yet for a draft", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.Draft = true }), "", false},
+		{"no review yet without a head", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.HeadSHA = "" }), "", false},
+		{"no review yet for a merged pull request", rule("r", rules.NoReviewYet), pr("A", func(p *rules.PR) { p.State = rules.StateMerged }), "", false},
+		{"waiting for approvals", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 1, 2 }), "A=sha-A:waiting", true},
+		{"waiting for approvals, 2 of 3", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 3 }), "A=sha-A:waiting", true},
+		{"waiting for approvals with none yet", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsNeed = 2 }), "", false},
+		{"waiting for approvals with enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 2 }), "", false},
+		{"waiting for approvals with more than enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 3, 2 }), "", false},
+		{"waiting for approvals with an unknown need", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave = 1 }), "", false},
+		{"waiting for approvals for a draft", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.Draft, p.ApprovalsHave, p.ApprovalsNeed = true, 1, 2 }), "", false},
+		{"waiting for approvals without a head", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.HeadSHA, p.ApprovalsHave, p.ApprovalsNeed = "", 1, 2 }), "", false},
+		{"waiting for approvals for a merged pull request", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.State, p.ApprovalsHave, p.ApprovalsNeed = rules.StateMerged, 1, 2 }), "", false},
 		{"unknown trigger", rule("r", "nope"), pr("A"), "", false},
 	}
 	for _, tt := range tests {
@@ -193,6 +210,77 @@ func TestModeAnyFiresOnTheFirstPRAndAgainOnANewOne(t *testing.T) {
 	b.ReviewDecision = "APPROVED"
 	if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a, b)}, stored); len(res.Firings) != 1 {
 		t.Fatalf("a second PR is a new event: %+v", res.Firings)
+	}
+}
+
+func TestEveryTriggerIsListedAndValid(t *testing.T) {
+	for _, tr := range []rules.Trigger{rules.NoReviewYet, rules.WaitingApprovals} {
+		if !slices.Contains(rules.Triggers, tr) {
+			t.Errorf("%s is not in Triggers", tr)
+		}
+	}
+	if len(rules.Triggers) != 11 {
+		t.Errorf("%d triggers, want 11", len(rules.Triggers))
+	}
+}
+
+func TestApprovalTriggersFireOncePerHeadCommit(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		tr   rules.Trigger
+		set  func(*rules.PR)
+		fp   string
+	}{
+		{"no review yet", rules.NoReviewYet, func(*rules.PR) {}, "A=sha-A:unreviewed"},
+		{"waiting for approvals", rules.WaitingApprovals, func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 1, 3 }, "A=sha-A:waiting"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rule("r", tc.tr)
+			a := pr("A", tc.set)
+			if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a)}, nil); len(res.Firings) != 1 || res.Firings[0].Fingerprint != tc.fp {
+				t.Fatalf("%+v", res)
+			}
+			stored := map[rules.Key]string{{Rule: "r", Ticket: "INP-1"}: tc.fp}
+			if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a)}, stored); len(res.Firings) != 0 || len(res.Holds) != 1 {
+				t.Fatalf("fired twice for one head: %+v", res)
+			}
+			a.HeadSHA = "sha-new"
+			if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a)}, stored); len(res.Firings) != 1 {
+				t.Fatalf("a new head commit is a new event: %+v", res)
+			}
+		})
+	}
+}
+
+func TestApprovalTriggersFollowFiltersExclusionsModeAndPreview(t *testing.T) {
+	a := pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 1, 2 })
+	b := pr("B")
+	for _, tr := range []rules.Trigger{rules.NoReviewYet, rules.WaitingApprovals} {
+		fe := pr("FE", func(p *rules.PR) { p.Repo = "acme/fe"; p.ApprovalsHave, p.ApprovalsNeed = 1, 2 })
+		r := rule("r", tr, func(r *rules.Rule) { r.Filters = rules.Filters{Repo: "acme/fe", Status: "In Review"} })
+		if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", fe, b)}, nil); len(res.Firings) != 1 {
+			t.Errorf("%s: the repo filter ignores the other pull request: %+v", tr, res)
+		}
+		r.Filters.Repo = "acme/other"
+		if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a)}, nil); len(res.Firings) != 0 {
+			t.Errorf("%s: repo filter: %+v", tr, res)
+		}
+	}
+	// Mode all waits for the pull request that does not meet it, and mode any does not.
+	r := rule("r", rules.WaitingApprovals)
+	if res := eval([]rules.Rule{r}, []rules.Ticket{ticket("INP-1", a, b)}, nil); len(res.Firings) != 0 || len(res.Waiting) != 1 {
+		t.Errorf("mode all: %+v", res)
+	}
+	if res := eval([]rules.Rule{rule("r", rules.WaitingApprovals, modeAny)}, []rules.Ticket{ticket("INP-1", a, b)}, nil); len(res.Firings) != 1 {
+		t.Errorf("mode any: %+v", res)
+	}
+	// An excluded status is never moved, and a preview ignores what fired before.
+	excl := rules.Input{Now: now, Rules: []rules.Rule{r}, Tickets: []rules.Ticket{ticket("INP-1", a)}, Exclude: []string{"in review"}}
+	if res := rules.Evaluate(excl); len(res.Firings) != 0 {
+		t.Errorf("excluded: %+v", res)
+	}
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", a)}, nil); len(pv.Moves) != 1 {
+		t.Errorf("preview: %+v", pv)
 	}
 }
 
@@ -370,6 +458,8 @@ func TestValidate(t *testing.T) {
 		{"stale too many hours", func(r *rules.Rule) { r.Trigger, r.Hours = rules.CommitStale, 721 }, true},
 		{"stale 1 hour", func(r *rules.Rule) { r.Trigger, r.Hours = rules.CommitStale, 1 }, false},
 		{"stale 720 hours", func(r *rules.Rule) { r.Trigger, r.Hours = rules.CommitStale, 720 }, false},
+		{"no review yet needs no hours", func(r *rules.Rule) { r.Trigger = rules.NoReviewYet }, false},
+		{"waiting for approvals needs no hours", func(r *rules.Rule) { r.Trigger = rules.WaitingApprovals }, false},
 	}
 	for _, tt := range tests {
 		r := ok

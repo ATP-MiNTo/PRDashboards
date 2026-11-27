@@ -1,0 +1,189 @@
+/* The History view, as the approved design draws it: one glass surface with a header and a row per
+   merged pull request (avatar, title and where it is from, the Jira outcome, the size of the
+   change and when it merged). */
+
+.surface {
+  composes: glass from global;
+  padding: 0.5rem;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+
+/* daisyUI "badge badge-ghost". */
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 1.25rem;
+  padding: 0 0.563rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25rem;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-top: 1px solid oklch(var(--bc) / 0.1);
+}
+
+.avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-pill);
+  background: oklch(var(--n));
+  color: oklch(var(--nc));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+.prTitle {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5rem;
+}
+
+.prTitle a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.prTitle a:hover {
+  text-decoration: underline;
+}
+
+.from {
+  color: var(--sub);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.reason {
+  color: var(--bad);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.tickets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* daisyUI "badge badge-sm" in its outline and ghost forms. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid;
+  border-radius: 1.9rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.ticket {
+  border-color: oklch(var(--in));
+  color: color-mix(in oklab, oklch(var(--in)) 55%, oklch(var(--bc)));
+}
+
+a.ticket:hover {
+  text-decoration: underline;
+}
+
+.failed {
+  border-color: var(--bad-fill);
+  color: var(--bad);
+}
+
+.queued {
+  border-color: var(--warn-fill);
+  color: var(--warn);
+}
+
+.none {
+  border-color: oklch(var(--b2));
+  background: oklch(var(--b2));
+  color: var(--sub);
+}
+
+.merged {
+  border-color: var(--good-fill);
+  color: var(--good);
+}
+
+/* A failed ticket move can be tried again. */
+.retry {
+  composes: ui-btn from global;
+  min-height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.diff {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
+}
+
+.add {
+  color: var(--diff-add);
+  font-weight: 600;
+}
+
+.del {
+  color: var(--diff-del);
+  font-weight: 600;
+}
+
+.empty {
+  margin: 0;
+  padding: 1.5rem 0.75rem;
+  border-top: 1px solid oklch(var(--bc) / 0.1);
+  color: var(--sub);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.problem {
+  margin: 0;
+  padding: 0 0.75rem 0.75rem;
+  color: var(--bad);
+  font-size: 0.875rem;
+}

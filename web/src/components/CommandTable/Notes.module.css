@@ -1,0 +1,99 @@
+/* A note on a pull request: the square button on the card, its dot, and the editor's buttons. */
+
+.wrap {
+  display: inline-flex;
+}
+
+/* daisyUI "btn btn-sm btn-square btn-ghost"; with a note, "btn-outline btn-primary". */
+.button {
+  composes: ui-ghost from global;
+  position: relative;
+  box-sizing: border-box;
+  flex: none;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  min-height: var(--ctl-h);
+  padding: 0;
+  cursor: pointer;
+}
+
+.button.has {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.button.has:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The indicator of a pull request that has a note (daisyUI "indicator" with a primary dot). */
+.dot {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.has:hover .dot {
+  background: var(--accent-fg);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* The footer buttons are the default daisyUI size: 3rem tall, 1rem of padding. */
+.save {
+  composes: ui-btn from global;
+  height: 3rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  line-height: 1;
+}
+
+button.save:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-fg);
+}
+
+.delete {
+  composes: ui-btn from global;
+  height: 3rem;
+  min-height: 3rem;
+  padding: 0 1rem;
+  border-color: oklch(var(--er));
+  color: var(--bad);
+  line-height: 1;
+}
+
+button.delete:hover:not(:disabled) {
+  border-color: oklch(var(--er));
+  background: oklch(var(--er));
+  color: oklch(var(--erc));
+}

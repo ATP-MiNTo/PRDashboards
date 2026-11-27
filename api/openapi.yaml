@@ -504,6 +504,116 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         '502':
           $ref: '#/components/responses/BadGateway'
+  /api/prs/{id}/approve:
+    post:
+      operationId: approvePr
+      summary: Approve a pull request
+      description: >
+        Submits an approving review as the connected GitHub user. The pull request is fetched again
+        first: it must still be open and its head must be expectedHeadSha, otherwise the answer is a 409
+        with the fresh state and the code not_open or head_moved (the review is also pinned to that
+        commit). A pull request the user opened cannot be approved (own_pull_request). A 403 is
+        org_blocked or missing_permission (the detail names the permission, normally pull_requests:
+        write). GitHub refusing the review is a 422 with the code review_rejected. After a
+        success one refresh is started, so the snapshot shows the new review state.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: The review was submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ReviewConflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/prs/{id}/request-changes:
+    post:
+      operationId: requestChangesPr
+      summary: Request changes on a pull request
+      description: >
+        Submits a review that requests changes, with a required explanation, as the connected GitHub
+        user. Same re-check, pinning and errors as approve. A body that is only white space is a 422
+        with the code body_required.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestChangesRequest'
+      responses:
+        '200':
+          description: The review was submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ReviewConflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+  /api/prs/{id}/ready:
+    post:
+      operationId: markPrReady
+      summary: Mark a draft pull request ready for review
+      description: >
+        Runs GitHub's markPullRequestReadyForReview. The pull request is fetched again first: it
+        must still be open (not_open), still a draft (not_draft) and its head must be expectedHeadSha
+        (head_moved). A 403 is org_blocked or missing_permission (pull_requests: write). After a
+        success one refresh is started.
+      parameters:
+        - $ref: '#/components/parameters/PrId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReadyRequest'
+      responses:
+        '200':
+          description: The pull request is ready for review.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewResult'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ReviewConflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '502':
+          $ref: '#/components/responses/BadGateway'
   /api/retries:
     get:
       operationId: listRetries
@@ -610,7 +720,13 @@ components:
       enum: [github, atlassian]
     PollingSeconds:
       type: integer
-      enum: [60, 120, 300, 900, 3600]
+      minimum: 30
+      maximum: 3600
+      multipleOf: 15
+      description: >
+        Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor
+        keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one
+        refresh at a time.
     Settings:
       type: object
       additionalProperties: false
@@ -825,6 +941,29 @@ components:
           type: string
           format: date-time
           nullable: true
+        rateLimit:
+          $ref: '#/components/schemas/RateLimitUsage'
+    RateLimitUsage:
+      type: object
+      description: >-
+        The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the
+        two searches (no extra call). Only the github source has it. Absent before the first
+        refresh, after the connection is lost, and in snapshots stored before it existed.
+      additionalProperties: false
+      required: [used, limit, resetAt]
+      properties:
+        used:
+          type: integer
+          minimum: 0
+          description: Points spent in the current window (limit minus remaining).
+        limit:
+          type: integer
+          minimum: 1
+        resetAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the window resets, null when GitHub did not say.
     BlockedOrg:
       type: object
       additionalProperties: false
@@ -1057,7 +1196,12 @@ components:
         - removedKeys
         - ticketLookup
         - mergeMethod
+        - approvals
         - roles
+        - author
+        - updatedAt
+        - additions
+        - deletions
       properties:
         id:
           type: string
@@ -1067,6 +1211,25 @@ components:
           type: string
         repo:
           $ref: '#/components/schemas/SnapshotRepo'
+        author:
+          description: Login of the user who opened the pull request. Null for a deleted account and for a snapshot stored before the field existed.
+          type: string
+          nullable: true
+        updatedAt:
+          description: When the pull request last changed on GitHub. Null for a snapshot stored before the field existed.
+          type: string
+          format: date-time
+          nullable: true
+        additions:
+          description: Lines added by the pull request. Null for a snapshot stored before the field existed.
+          type: integer
+          minimum: 0
+          nullable: true
+        deletions:
+          description: Lines removed by the pull request. Null for a snapshot stored before the field existed.
+          type: integer
+          minimum: 0
+          nullable: true
         roles:
           description: Why the pull request is listed. Both can be present, and the list is never empty.
           type: array
@@ -1122,6 +1285,26 @@ components:
           $ref: '#/components/schemas/TicketLookup'
         mergeMethod:
           $ref: '#/components/schemas/MethodResolution'
+        approvals:
+          $ref: '#/components/schemas/Approvals'
+    Approvals:
+      type: object
+      additionalProperties: false
+      required: [have, need, changesRequested]
+      description: >
+        have counts the distinct reviewers whose latest review is APPROVED, need is the repository's
+        approvalsRequired, and changesRequested counts the reviewers whose latest review requests
+        changes. The merge is refused, here and on the server, while have is below need ("Needs N
+        approvals, has M").
+      properties:
+        have:
+          type: integer
+          minimum: 0
+        need:
+          $ref: '#/components/schemas/ApprovalsRequired'
+        changesRequested:
+          type: integer
+          minimum: 0
     AssignedTickets:
       type: object
       additionalProperties: false
@@ -1221,10 +1404,23 @@ components:
           pattern: '^[A-Za-z0-9._/*-]+$'
         method:
           $ref: '#/components/schemas/MergeMethodName'
+    ApprovalsRequired:
+      type: integer
+      minimum: 1
+      maximum: 10
+      description: >
+        Approvals a pull request of the repository needs before the dashboard lets it merge, counted
+        as distinct reviewers whose latest review is an approval. 1 when never set.
+    DeleteBranchChoice:
+      type: string
+      enum: [default, 'yes', 'no']
+      description: >
+        Whether the merge dialog starts with "Delete branch after merge" ticked for the repository:
+        "default" follows Settings.deleteBranchAfterMerge.
     RepoSettings:
       type: object
       additionalProperties: false
-      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules]
+      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules, approvalsRequired, inheritMethod, deleteBranch]
       properties:
         id:
           type: string
@@ -1240,6 +1436,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BranchRule'
+        approvalsRequired:
+          $ref: '#/components/schemas/ApprovalsRequired'
+        inheritMethod:
+          type: boolean
+          description: >
+            True when the repository follows Settings.defaultMethodForNewRepos; defaultMethod is then
+            kept but not used.
+        deleteBranch:
+          $ref: '#/components/schemas/DeleteBranchChoice'
     Repos:
       type: object
       additionalProperties: false
@@ -1263,6 +1468,19 @@ components:
             $ref: '#/components/schemas/BranchRule'
         clearNew:
           type: boolean
+        approvalsRequired:
+          allOf:
+            - $ref: '#/components/schemas/ApprovalsRequired'
+          description: Left out, the stored value stays as it is.
+        inheritMethod:
+          type: boolean
+          description: >
+            True makes the repository follow Settings.defaultMethodForNewRepos (defaultMethod is kept
+            but not used). Like defaultMethod it is replaced by every update: left out means false.
+        deleteBranch:
+          allOf:
+            - $ref: '#/components/schemas/DeleteBranchChoice'
+          description: Left out, the stored value stays as it is.
     ReposUpdate:
       type: object
       additionalProperties: false
@@ -1306,6 +1524,8 @@ components:
         - ci_failing
         - ci_passing
         - merged
+        - no_review_yet
+        - waiting_approvals
     RuleMode:
       type: string
       enum: [all, any]
@@ -1592,6 +1812,49 @@ components:
           allOf:
             - $ref: '#/components/schemas/FreshPr'
           nullable: true
+    ApproveRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadSha]
+      properties:
+        expectedHeadSha:
+          type: string
+          pattern: '^[0-9a-fA-F]{7,64}$'
+        body:
+          type: string
+          maxLength: 65536
+          description: Optional comment sent with the approval. GitHub's limit is 65536 characters (the 64 KiB request cap can come first).
+    RequestChangesRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadSha, body]
+      properties:
+        expectedHeadSha:
+          type: string
+          pattern: '^[0-9a-fA-F]{7,64}$'
+        body:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          description: What has to change. Required, not only white space. GitHub's limit is 65536 characters (the 64 KiB request cap can come first).
+    ReadyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadSha]
+      properties:
+        expectedHeadSha:
+          type: string
+          pattern: '^[0-9a-fA-F]{7,64}$'
+    ReviewResult:
+      type: object
+      additionalProperties: false
+      required: [prId, action]
+      properties:
+        prId:
+          type: string
+        action:
+          type: string
+          enum: [approve, request_changes, ready]
     Retry:
       type: object
       additionalProperties: false
@@ -1752,6 +2015,14 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+    ReviewConflict:
+      description: >
+        The state does not allow it, with the pull request as GitHub reports it now (pr): not_open,
+        head_moved, not_draft, own_pull_request or not_connected.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/MergeProblem'
     TooManyRequests:
       description: GitHub's rate limit is used up (rate_limited).
       content:
@@ -1759,7 +2030,7 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Unprocessable:
-      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused).
+      description: The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused, body_required, review_rejected).
       content:
         application/problem+json:
           schema:

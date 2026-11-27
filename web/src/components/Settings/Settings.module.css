@@ -1,4 +1,8 @@
+/* The sidebar content: the repositories, the polling and the theme. Sizes are those of the
+   approved design (daisyUI: gap-3 blocks, btn-xs and btn-sm, checkbox-sm, badge-xs). */
+
 .body {
+  composes: ui-controls from global;
   display: grid;
   gap: 20px;
 }
@@ -10,12 +14,7 @@
 
 .section h3 {
   margin: 0;
-  font-size: 14px;
-}
-
-.section h4 {
-  margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 1rem;
 }
 
 .muted {
@@ -28,373 +27,368 @@
   color: var(--bad);
 }
 
-.note {
-  margin: 0;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--info-bg);
-  color: var(--info);
-}
-
-.field {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .check {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.body button,
-.body select,
-.body input[type='text'],
-.body input[type='search'] {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
-  color: var(--text);
-  font: inherit;
-}
-
-.body button {
-  cursor: pointer;
-}
-
-.body button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .body button:focus-visible,
 .body input:focus-visible,
 .body select:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
-.body input[aria-invalid='true'] {
-  border-color: var(--bad);
+/* ----- Repositories: the fold header, the defaults, the list ----- */
+
+.foldHead {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
 }
 
-.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-}
-
-.swap {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.swap[data-disabled] {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.swapInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+/* An eyebrow label, a count and a chevron that turns when it opens. */
+.body .foldButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 0;
+  padding: 0.25rem 0;
   border: 0;
-  appearance: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
-.swapOff,
-.swapOn {
-  grid-area: 1 / 1;
-  width: 32px;
-  height: 32px;
-  transition:
-    transform 0.3s,
-    opacity 0.3s;
+.body .foldButton:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
 }
 
-.swapOn {
-  opacity: 0;
-  transform: rotate(-45deg);
+.foldLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.swapInput:checked ~ .swapOn {
-  opacity: 1;
-  transform: rotate(0);
+.eyebrow {
+  color: var(--eyebrow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
-.swapInput:checked ~ .swapOff {
-  opacity: 0;
-  transform: rotate(45deg);
+/* A small grey count (daisyUI "badge badge-ghost badge-sm"). */
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
 }
 
-.swap:has(.swapInput:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-  border-radius: 8px;
+.chevron {
+  flex: none;
+  transition: transform 0.2s;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .swapOff,
-  .swapOn {
-    transition: none;
-  }
+.foldButton[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
 }
 
-.repos,
-.rules,
-.log {
-  display: grid;
-  gap: 8px;
+.open {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.defaults {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.deleteRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.deleteLabel {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.deleteRoll {
+  flex: none;
+  width: 4rem;
+}
+
+/* The roll is a w-16 button with 0.5rem of padding. */
+.body .deleteRoll button {
+  padding: 0 0.5rem;
+  gap: 0.25rem;
+}
+
+/* The "i" ghost button, over the outline look of the buttons of the sidebar. */
+.tip {
+  display: inline-flex;
+}
+
+.body .tip button {
+  min-height: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+}
+
+.body .tip button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--ghost-hover);
+  color: inherit;
+}
+
+.fieldLabel {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.defaults select {
+  width: 100%;
+}
+
+.listHead {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.listTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.dim {
+  color: var(--sub);
+}
+
+/* Select all and Clear: daisyUI "btn btn-xs join-item", the grey default button. */
+.join {
+  display: inline-flex;
+}
+
+.body .joinBtn {
+  box-sizing: border-box;
+  min-height: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 0;
+  background: oklch(var(--b2));
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.body .joinBtn:first-child {
+  border-radius: var(--radius-ctl) 0 0 var(--radius-ctl);
+}
+
+.body .joinBtn:last-child {
+  border-radius: 0 var(--radius-ctl) var(--radius-ctl) 0;
+}
+
+.body .joinBtn:hover:not(:disabled) {
+  border-color: color-mix(in oklab, oklch(var(--b2)) 90%, black);
+  background: color-mix(in oklab, oklch(var(--b2)) 90%, black);
+  color: var(--text);
+}
+
+.body .joinBtn:disabled {
+  border-color: transparent;
+  background: var(--btn-off-bg);
+  color: var(--btn-off-fg);
+}
+
+.repos {
+  display: flex;
+  flex-direction: column;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .repo {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.body .repoHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.25rem;
+}
+
+.repoLabel {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.375rem 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  user-select: none;
+}
+
+/* daisyUI "checkbox checkbox-sm checkbox-primary". */
+.repoCheck {
+  composes: ui-check from global;
+  --chkbg: oklch(var(--p));
+  --chkfg: oklch(var(--pc));
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.repoCheck:focus-visible {
+  outline-color: oklch(var(--p));
+}
+
+.repoName {
+  flex: 1;
+  min-width: 0;
+}
+
+/* daisyUI "badge badge-ghost badge-xs". */
+.via {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 1rem;
+  padding: 0 0.313rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+/* The gear: a ghost square. A repository with settings of its own has it filled in blue. */
+.body .gear {
+  box-sizing: border-box;
+  flex: none;
+  width: 1.5rem;
+  min-height: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+}
+
+.body .gear:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--ghost-hover);
+  color: inherit;
+}
+
+.gearOn,
+.body .gearOn:hover:not(:disabled) {
+  color: oklch(var(--p));
+}
+
+.gearOn svg,
+.gearOn svg path {
+  fill: oklch(var(--p));
+  stroke: none;
+  fill-rule: evenodd;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* ----- Polling: a label and a small number field per line, then the rules button ----- */
+
+.prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.pollRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pollBox {
+  composes: ui-input from global;
+  display: flex;
+  height: 2rem;
+  line-height: 2rem;
+  align-items: center;
+  gap: 0.25rem;
+  width: 4rem;
+  padding: 0 0.5rem;
+}
+
+.pollBox:focus-within {
+  border-color: oklch(var(--bc) / 0.2);
+  outline: 2px solid oklch(var(--bc) / 0.2);
+  outline-offset: 2px;
+}
+
+.body .pollBox input[type='text'] {
+  flex: 1;
   width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 2rem;
+  padding: 0;
   border: 0;
-  background: none;
-  text-align: left;
-}
-
-.repoBody {
-  display: grid;
-  gap: 8px;
-  padding: 8px 12px 12px;
-}
-
-.rule {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.log li {
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.stack {
-  display: grid;
-  gap: 2px;
-}
-
-.form {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
-}
-
-.filters {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-.preview {
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--info-bg);
-  color: var(--info);
-}
-
-.preview p,
-.preview ul {
-  margin: 0;
-}
-
-.preview ul {
-  padding-left: 18px;
-}
-
-.rulesList {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ruleItem {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-}
-
-.ruleMain {
-  display: grid;
-  flex: 1 1 200px;
-  gap: 2px;
-}
-
-.dragging {
-  opacity: 0.5;
-}
-
-.titleWithHint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.hintWrap {
-  position: relative;
-  display: inline-flex;
-}
-
-.body .info {
-  padding: 0 6px;
-  border-radius: 999px;
-  line-height: 1.4;
-}
-
-.tip {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 2;
-  display: none;
-  width: min(360px, 80vw);
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 4px 12px var(--shadow);
-  font-size: 13px;
-  font-weight: 400;
-}
-
-.hintWrap:hover .tip,
-.hintWrap:focus-within .tip {
-  display: block;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.body .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-}
-
-.body .chip[aria-pressed='true'] {
-  background: var(--accent);
-  color: var(--accent-fg);
-}
-
-.body .chip[aria-pressed='false'] {
-  background: var(--stack-bg);
-  color: var(--stack-fg);
-}
-
-.body input[type='number'] {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
-  color: var(--text);
+  background: transparent;
+  color: inherit;
   font: inherit;
-}
-
-.sessionNote {
-  margin: 0;
-  color: var(--sub);
-}
-
-.pollingLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.sep {
-  color: var(--sub);
-}
-
-.foldHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 14px;
-}
-
-.body .foldButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-size: 14px;
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
+  text-align: right;
+  cursor: ns-resize;
 }
 
-.foldButton::before {
-  content: '\25B8';
+.body .pollBox input[type='text']:focus-visible {
+  outline: none;
 }
 
-.foldButton[aria-expanded='true']::before {
-  content: '\25BE';
-}
-
-.group {
-  display: grid;
-  gap: 8px;
-}
-
-.hint {
-  margin: 0;
+.pollUnit {
   color: var(--sub);
-  font-size: 13px;
+  font-size: 0.75rem;
 }

@@ -149,7 +149,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	if cursors != 2 {
 		t.Fatalf("each search follows its cursor once, got %d", cursors)
 	}
-	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {"} {
+	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {", "updatedAt", "additions", "deletions", "author {"} {
 		if !strings.Contains(reqs[0].Query, want) {
 			t.Errorf("query lacks %q", want)
 		}
@@ -173,11 +173,22 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	if p.CommittedAt == nil || !p.CommittedAt.Equal(time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)) {
 		t.Fatalf("committed %v", p.CommittedAt)
 	}
+	if p.Author != "priya" || p.Additions != 214 || p.Deletions != 38 ||
+		p.UpdatedAt == nil || !p.UpdatedAt.Equal(time.Date(2026, 11, 24, 8, 30, 0, 0, time.UTC)) {
+		t.Fatalf("author, size and update time %q +%d -%d %v", p.Author, p.Additions, p.Deletions, p.UpdatedAt)
+	}
 	if len(p.Reviews) != 1 || p.Reviews[0].Author != "alice" || len(p.ReviewRequests) != 1 || p.ReviewRequests[0] != "U_bob" {
 		t.Fatalf("reviews %+v requests %v", p.Reviews, p.ReviewRequests)
 	}
 	if !res.PRs[1].Draft || res.PRs[1].Repo.SquashAllowed || res.PRs[1].ReviewDecision != "" || res.PRs[1].Reviews[0].Author != "" {
 		t.Fatalf("draft %+v", res.PRs[1])
+	}
+	// A deleted author comes as null, and a node without the new fields has no author, time or lines.
+	if q := res.PRs[1]; q.Author != "" || q.Additions != 0 || q.Deletions != 5 || q.UpdatedAt == nil {
+		t.Fatalf("deleted author %q +%d -%d %v", q.Author, q.Additions, q.Deletions, q.UpdatedAt)
+	}
+	if q := res.PRs[2]; q.Author != "" || q.UpdatedAt != nil || q.Additions != 0 || q.Deletions != 0 {
+		t.Fatalf("missing fields %+v", q)
 	}
 	if res.PRs[2].CI.State != github.CINone || res.PRs[2].CommittedAt != nil {
 		t.Fatalf("no commit data %+v", res.PRs[2].CI)

@@ -24,6 +24,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/netguard"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/review"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/secrets"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
@@ -178,6 +179,13 @@ func run(ctx context.Context, o options, e env) error {
 		Log:       log,
 		Clock:     e.clock,
 	})
+	reviewer := review.New(review.Config{
+		GitHub:   ghClient,
+		Snapshot: snapshots,
+		Accounts: acc,
+		Refresh:  func() { snapshots.Trigger() },
+		Log:      log,
+	})
 	handler, err := api.New(api.Config{
 		Port:     o.port,
 		Version:  e.version,
@@ -187,6 +195,7 @@ func run(ctx context.Context, o options, e env) error {
 		OAuth:    oauth,
 		Poller:   snapshots,
 		Merger:   merger,
+		Reviewer: reviewer,
 		Jira:     jiraClient,
 		Accounts: acc,
 		Events:   hub,

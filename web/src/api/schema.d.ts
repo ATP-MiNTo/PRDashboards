@@ -420,6 +420,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/prs/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a pull request
+         * @description Submits an approving review as the connected GitHub user. The pull request is fetched again first: it must still be open and its head must be expectedHeadSha, otherwise the answer is a 409 with the fresh state and the code not_open or head_moved (the review is also pinned to that commit). A pull request the user opened cannot be approved (own_pull_request). A 403 is org_blocked or missing_permission (the detail names the permission, normally pull_requests: write). GitHub refusing the review is a 422 with the code review_rejected. After a success one refresh is started, so the snapshot shows the new review state.
+         */
+        post: operations["approvePr"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prs/{id}/request-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request changes on a pull request
+         * @description Submits a review that requests changes, with a required explanation, as the connected GitHub user. Same re-check, pinning and errors as approve. A body that is only white space is a 422 with the code body_required.
+         */
+        post: operations["requestChangesPr"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/prs/{id}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a draft pull request ready for review
+         * @description Runs GitHub's markPullRequestReadyForReview. The pull request is fetched again first: it must still be open (not_open), still a draft (not_draft) and its head must be expectedHeadSha (head_moved). A 403 is org_blocked or missing_permission (pull_requests: write). After a success one refresh is started.
+         */
+        post: operations["markPrReady"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retries": {
         parameters: {
             query?: never;
@@ -490,8 +550,8 @@ export interface components {
         };
         /** @enum {string} */
         Provider: "github" | "atlassian";
-        /** @enum {integer} */
-        PollingSeconds: 60 | 120 | 300 | 900 | 3600;
+        /** @description Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time. */
+        PollingSeconds: number;
         Settings: {
             polling: {
                 githubSec: components["schemas"]["PollingSeconds"];
@@ -578,6 +638,18 @@ export interface components {
             syncedAt: string | null;
             error: string | null;
             /** Format: date-time */
+            resetAt: string | null;
+            rateLimit?: components["schemas"]["RateLimitUsage"];
+        };
+        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
+        RateLimitUsage: {
+            /** @description Points spent in the current window (limit minus remaining). */
+            used: number;
+            limit: number;
+            /**
+             * Format: date-time
+             * @description When the window resets, null when GitHub did not say.
+             */
             resetAt: string | null;
         };
         BlockedOrg: {
@@ -679,6 +751,17 @@ export interface components {
             number: number;
             title: string;
             repo: components["schemas"]["SnapshotRepo"];
+            /** @description Login of the user who opened the pull request. Null for a deleted account and for a snapshot stored before the field existed. */
+            author: string | null;
+            /**
+             * Format: date-time
+             * @description When the pull request last changed on GitHub. Null for a snapshot stored before the field existed.
+             */
+            updatedAt: string | null;
+            /** @description Lines added by the pull request. Null for a snapshot stored before the field existed. */
+            additions: number | null;
+            /** @description Lines removed by the pull request. Null for a snapshot stored before the field existed. */
+            deletions: number | null;
             /** @description Why the pull request is listed. Both can be present, and the list is never empty. */
             roles: ("assigned" | "authored")[];
             isDraft: boolean;
@@ -700,6 +783,13 @@ export interface components {
             removedKeys: string[];
             ticketLookup: components["schemas"]["TicketLookup"];
             mergeMethod: components["schemas"]["MethodResolution"];
+            approvals: components["schemas"]["Approvals"];
+        };
+        /** @description have counts the distinct reviewers whose latest review is APPROVED, need is the repository's approvalsRequired, and changesRequested counts the reviewers whose latest review requests changes. The merge is refused, here and on the server, while have is below need ("Needs N approvals, has M"). */
+        Approvals: {
+            have: number;
+            need: components["schemas"]["ApprovalsRequired"];
+            changesRequested: number;
         };
         AssignedTickets: {
             tickets: components["schemas"]["TicketSummary"][];
@@ -741,6 +831,13 @@ export interface components {
             pattern: string;
             method: components["schemas"]["MergeMethodName"];
         };
+        /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set. */
+        ApprovalsRequired: number;
+        /**
+         * @description Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.
+         * @enum {string}
+         */
+        DeleteBranchChoice: "default" | "yes" | "no";
         RepoSettings: {
             id: string;
             nameWithOwner: string;
@@ -748,6 +845,10 @@ export interface components {
             openPrs: number;
             defaultMethod: components["schemas"]["MergeMethodName"];
             branchRules: components["schemas"]["BranchRule"][];
+            approvalsRequired: components["schemas"]["ApprovalsRequired"];
+            /** @description True when the repository follows Settings.defaultMethodForNewRepos; defaultMethod is then kept but not used. */
+            inheritMethod: boolean;
+            deleteBranch: components["schemas"]["DeleteBranchChoice"];
         };
         Repos: {
             repos: components["schemas"]["RepoSettings"][];
@@ -756,6 +857,12 @@ export interface components {
             defaultMethod: components["schemas"]["MergeMethodName"];
             branchRules: components["schemas"]["BranchRule"][];
             clearNew: boolean;
+            /** @description Left out, the stored value stays as it is. */
+            approvalsRequired?: components["schemas"]["ApprovalsRequired"];
+            /** @description True makes the repository follow Settings.defaultMethodForNewRepos (defaultMethod is kept but not used). Like defaultMethod it is replaced by every update: left out means false. */
+            inheritMethod?: boolean;
+            /** @description Left out, the stored value stays as it is. */
+            deleteBranch?: components["schemas"]["DeleteBranchChoice"];
         };
         ReposUpdate: {
             repos: {
@@ -768,7 +875,7 @@ export interface components {
             projects: string[];
         };
         /** @enum {string} */
-        RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged";
+        RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged" | "no_review_yet" | "waiting_approvals";
         /** @enum {string} */
         RuleMode: "all" | "any";
         /** @description Every filter is optional (an empty string is no filter) and they combine with AND. */
@@ -886,6 +993,24 @@ export interface components {
             detail?: string;
             pr: components["schemas"]["FreshPr"] | null;
         };
+        ApproveRequest: {
+            expectedHeadSha: string;
+            /** @description Optional comment sent with the approval. GitHub's limit is 65536 characters (the 64 KiB request cap can come first). */
+            body?: string;
+        };
+        RequestChangesRequest: {
+            expectedHeadSha: string;
+            /** @description What has to change. Required, not only white space. GitHub's limit is 65536 characters (the 64 KiB request cap can come first). */
+            body: string;
+        };
+        ReadyRequest: {
+            expectedHeadSha: string;
+        };
+        ReviewResult: {
+            prId: string;
+            /** @enum {string} */
+            action: "approve" | "request_changes" | "ready";
+        };
         Retry: {
             /** Format: int64 */
             id: number;
@@ -975,6 +1100,15 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /** @description The state does not allow it, with the pull request as GitHub reports it now (pr): not_open, head_moved, not_draft, own_pull_request or not_connected. */
+        ReviewConflict: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["MergeProblem"];
+            };
+        };
         /** @description GitHub's rate limit is used up (rate_limited). */
         TooManyRequests: {
             headers: {
@@ -984,7 +1118,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused). */
+        /** @description The values are well formed but not acceptable (invalid_token, insufficient_scopes, unknown_site, invalid_rule, method_not_allowed, ticket_not_linked, missing_field, invalid_field, idempotency_key_reused, body_required, review_rejected). */
         Unprocessable: {
             headers: {
                 [name: string]: unknown;
@@ -1632,6 +1766,102 @@ export interface operations {
                     "application/problem+json": components["schemas"]["MergeProblem"];
                 };
             };
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    approvePr: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["PrId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveRequest"];
+            };
+        };
+        responses: {
+            /** @description The review was submitted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ReviewConflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    requestChangesPr: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["PrId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestChangesRequest"];
+            };
+        };
+        responses: {
+            /** @description The review was submitted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ReviewConflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    markPrReady: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["PrId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReadyRequest"];
+            };
+        };
+        responses: {
+            /** @description The pull request is ready for review. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewResult"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["ReviewConflict"];
             422: components["responses"]["Unprocessable"];
             429: components["responses"]["TooManyRequests"];
             502: components["responses"]["BadGateway"];

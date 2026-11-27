@@ -124,7 +124,7 @@ export function manifest(themeColor, backgroundColor) {
 function main() {
   const web = resolve(import.meta.dirname, '..');
   const css = readFileSync(join(web, 'src', 'app', 'globals.css'), 'utf8');
-  const [bar, page, accent] = ['tb-bg', 'page-bg', 'accent-bd'].map((n) => token(css, n));
+  const [bar, page, accent] = ['pwa-bar', 'pwa-page', 'pwa-accent'].map((n) => token(css, n));
   const pub = join(web, 'public');
   mkdirSync(join(pub, 'icons'), { recursive: true });
   writeFileSync(join(pub, 'icons', 'icon-192.png'), icon(192, accent, '#ffffff', false));

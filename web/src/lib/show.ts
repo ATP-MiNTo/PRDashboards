@@ -12,6 +12,8 @@ export function isShowMode(v: unknown): v is ShowMode {
   return v === 'everything' || v === 'assigned' || v === 'authored';
 }
 
+const NO_REPOS: ReadonlySet<string> = new Set();
+
 /** The roles of a pull request. A snapshot without any (an older one) counts for both. */
 export function rolesOf(pr: Pick<SnapshotPr, 'roles'>): readonly Role[] {
   const roles = pr.roles as readonly Role[] | undefined;
@@ -33,10 +35,15 @@ export function inShow(pr: Pick<SnapshotPr, 'roles'>, mode: ShowMode): boolean {
   return mode === 'everything' || rolesOf(pr).includes(mode);
 }
 
-/** How many pull requests of the whole snapshot each mode shows. */
-export function showCounts(s: Snapshot): Record<ShowMode, number> {
-  const out: Record<ShowMode, number> = { everything: s.prs.length, assigned: 0, authored: 0 };
+/** How many pull requests of the repositories that are not switched off (`off`) each mode shows. */
+export function showCounts(
+  s: Snapshot,
+  off: ReadonlySet<string> = NO_REPOS,
+): Record<ShowMode, number> {
+  const out: Record<ShowMode, number> = { everything: 0, assigned: 0, authored: 0 };
   for (const pr of s.prs) {
+    if (off.has(pr.repo.id)) continue;
+    out.everything += 1;
     const roles = rolesOf(pr);
     if (roles.includes('assigned')) out.assigned += 1;
     if (roles.includes('authored')) out.authored += 1;

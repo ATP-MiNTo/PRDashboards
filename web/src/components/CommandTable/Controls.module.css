@@ -1,0 +1,922 @@
+/* The right-hand controls of a card, as the design draws them: the review and CI badges, the
+   Jira badges with their add button, and the Merge, Ready and "Merged" buttons. Colours come from
+   the daisyUI theme variables (--su, --er, --in, --p, --n) the design mixes with the ink. */
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- Badges (daisyUI "badge badge-outline"): 6.1rem by 1.75rem, 0.8rem semibold. ---- */
+
+.badgeRow {
+  display: flex;
+  justify-content: center;
+}
+
+.badge {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 6.1rem;
+  height: 1.75rem;
+  padding: 0;
+  gap: 0.25rem;
+  border: 1px solid currentcolor;
+  border-radius: 1.9rem;
+  background: oklch(var(--bc) / 0.05);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.ok {
+  color: color-mix(in oklab, oklch(var(--su)) 55%, oklch(var(--bc)));
+}
+
+.warn {
+  color: color-mix(in oklab, oklch(var(--wa)) 55%, oklch(var(--bc)));
+}
+
+.err {
+  color: color-mix(in oklab, oklch(var(--er)) 60%, oklch(var(--bc)));
+}
+
+.change {
+  background: color-mix(in oklab, oklch(var(--er)) 14%, transparent);
+}
+
+.ghost {
+  border-color: oklch(var(--b2));
+  background: oklch(var(--b2));
+  color: oklch(var(--bc));
+  opacity: 0.8;
+}
+
+/* The Action menu: primary outline, with a ring that breathes every 2.4s. */
+.action {
+  color: oklch(var(--p));
+  cursor: pointer;
+  animation: rvPulse 2.4s ease-in-out infinite;
+}
+
+.action:not(:disabled):active {
+  transform: none;
+}
+
+.action:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 2px;
+}
+
+@keyframes rvPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(var(--p) / 0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px oklch(var(--p) / 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action {
+    animation: none;
+  }
+}
+
+.menuIcon {
+  flex: none;
+  display: inline-flex;
+}
+
+.menuApprove {
+  color: oklch(var(--su));
+}
+
+.menuChange {
+  color: oklch(var(--er));
+}
+
+.caret {
+  flex: none;
+}
+
+/* ---- CI: the rollup badge with an "i" segment that opens the checks. ---- */
+
+.ci {
+  width: 7.1rem;
+  gap: 0;
+  overflow: hidden;
+}
+
+.ciLabel {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  min-width: 0;
+  padding-left: 0.25rem;
+}
+
+.ciSep {
+  align-self: stretch;
+  width: 1px;
+  background: currentcolor;
+  opacity: 0.4;
+}
+
+.ciInfo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  width: 1.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.ciInfo:hover {
+  background: color-mix(in srgb, currentcolor 10%, transparent);
+}
+
+.ciInfo:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: -3px;
+}
+
+.ciInfo:not(:disabled):active {
+  transform: none;
+}
+
+.ciGlyph {
+  font-family: serif;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.spinner {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+.pop {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 16rem;
+  padding: 0.75rem;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.pop:focus {
+  outline: none;
+}
+
+.popBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: -0.25rem;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+}
+
+.popBody:hover {
+  background: oklch(var(--bc) / 0.05);
+}
+
+.popTitle {
+  margin: 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+}
+
+.popRows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.popRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+}
+
+.dot {
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: oklch(var(--bc) / 0.3);
+}
+
+.dot_passing {
+  background: oklch(var(--su));
+}
+
+.dot_failing {
+  background: oklch(var(--er));
+}
+
+.dot_running {
+  background: oklch(var(--wa));
+}
+
+.popName {
+  flex: 1 1 0%;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popState {
+  flex: none;
+  opacity: 0.7;
+}
+
+.popMore {
+  margin: 0;
+  padding: 0 0.25rem;
+  opacity: 0.7;
+}
+
+.popOpen {
+  margin-top: 0.25rem;
+  color: oklch(var(--p));
+  text-decoration: underline;
+}
+
+/* The whole panel is the link's click target. */
+.popOpen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.popOpen:focus-visible {
+  outline: 2px solid oklch(var(--p));
+  outline-offset: 2px;
+}
+
+/* ---- Jira badges and the add button. ---- */
+
+.tickets {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  gap: 0.25rem;
+}
+
+.ticketsMq {
+  padding: 1px 0;
+}
+
+.noJira {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  color: oklch(var(--bc));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+  opacity: 0.7;
+}
+
+.add {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+  padding: 0;
+  border: 1.5px solid color-mix(in oklch, oklch(var(--in)) 35%, oklch(var(--bc)));
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: color-mix(in oklch, oklch(var(--in)) 35%, oklch(var(--bc)));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.add:hover {
+  background: oklch(var(--bc) / 0.1);
+}
+
+.add svg {
+  width: 10px;
+  height: 10px;
+}
+
+.tkNote {
+  width: 100%;
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.tkWarn {
+  color: var(--warn);
+}
+
+.tkError {
+  color: var(--bad);
+}
+
+.lookupError {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--bad);
+  font-size: 0.75rem;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--link);
+  font-family: inherit;
+  font-size: 0.75rem;
+  text-decoration: underline;
+}
+
+.search {
+  composes: ui-input from global;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 0 4px;
+  min-height: 2rem;
+}
+
+.search:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.itemKey {
+  flex: none;
+  font-weight: 600;
+}
+
+.itemSummary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+/* daisyUI "badge badge-ghost badge-xs" inside a menu row. */
+.itemBadge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 1.25rem;
+  padding: 0 0.5rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* ---- Merge, Ready and the launch. ---- */
+
+.cell {
+  display: flex;
+  justify-content: center;
+}
+
+/* daisyUI "btn btn-sm". */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  gap: 0.375rem;
+  height: 2rem;
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Enabled: the blue of the design with an aura that pulses every 2.6s. --merge in globals.css is
+   the one value to edit to change the colour. */
+.mergeButton {
+  composes: btn;
+  border-color: var(--merge);
+  background: var(--merge);
+  color: #fff;
+  cursor: var(--cursor-merge);
+  box-shadow: 0 0 12px 1px rgba(0, 127, 255, 0.45);
+  animation: aura 2.6s ease-in-out infinite;
+}
+
+.mergeButton:hover:not(:disabled) {
+  border-color: var(--merge-hover);
+  background: var(--merge-hover);
+}
+
+.mergeButton:disabled {
+  border-color: var(--btn-off-line);
+  background: var(--btn-off-bg);
+  color: var(--btn-off-fg);
+  cursor: var(--cursor-no);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes aura {
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(0, 127, 255, 0.16),
+      0 0 22px 6px rgba(0, 127, 255, 0.32);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mergeButton {
+    animation: none;
+  }
+}
+
+.mergeIcon {
+  flex: none;
+}
+
+/* Blocked: the plain disabled button, still focusable so its reason can be read. */
+.mergeOff {
+  composes: btn;
+  border-color: var(--btn-off-line);
+  background: var(--btn-off-bg);
+  color: var(--btn-off-fg);
+  cursor: var(--cursor-no);
+}
+
+.mergeOff:not(:disabled):active {
+  transform: none;
+}
+
+.readyButton {
+  composes: btn;
+  border-color: #9dd6b2;
+  background: #bfe8cc;
+  color: #1d4d33;
+  cursor: var(--cursor-ready);
+}
+
+.readyButton:hover:not(:disabled) {
+  background: #cdeed8;
+}
+
+.readyButton:disabled {
+  cursor: var(--cursor-no);
+}
+
+:root[data-mode='dark'] .readyButton,
+:root[data-mode='dark'] .readyButton:hover:not(:disabled) {
+  border-color: #3f8660;
+  background: #2f6b4a;
+  color: #e4f7ec;
+}
+
+/* After Ready: a green button that frosts over in 1.2s and stays a disabled Merge. */
+.cold {
+  composes: mergeOff;
+  position: relative;
+  overflow: hidden;
+  border-color: #aab4c2;
+  background: #dfe4ec;
+  color: #6b7585;
+  animation: coldBg 1.2s ease-out both;
+}
+
+.cold::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.75) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  animation: frostSweep 1.2s ease-out both;
+}
+
+:root[data-mode='dark'] .cold {
+  border-color: #4b5565;
+  background: #343b47;
+  color: #98a2b3;
+  animation-name: coldBgDk;
+}
+
+@keyframes coldBg {
+  0% {
+    border-color: #9dd6b2;
+    background: #bfe8cc;
+    color: #1d4d33;
+    box-shadow: 0 0 0 0 rgba(170, 200, 255, 0);
+  }
+
+  35% {
+    border-color: #b6cde2;
+    background: #cfe0ee;
+    color: #4d6b88;
+    box-shadow: 0 0 14px 3px rgba(170, 210, 255, 0.65);
+  }
+
+  100% {
+    border-color: #aab4c2;
+    background: #dfe4ec;
+    color: #6b7585;
+    box-shadow: 0 0 0 0 rgba(170, 200, 255, 0);
+  }
+}
+
+@keyframes coldBgDk {
+  0% {
+    border-color: #3f8660;
+    background: #2f6b4a;
+    color: #e4f7ec;
+  }
+
+  35% {
+    border-color: #5b7d96;
+    background: #3b5568;
+    color: #cfe6f5;
+    box-shadow: 0 0 14px 3px rgba(140, 190, 255, 0.4);
+  }
+
+  100% {
+    border-color: #4b5565;
+    background: #343b47;
+    color: #98a2b3;
+  }
+}
+
+@keyframes frostSweep {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  70%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cold,
+  .cold::after {
+    animation: none;
+  }
+}
+
+/* The launch: a rocket crosses the button, a sonic boom follows, the button turns into starry
+   space and reads "Merged". Three seconds, all CSS. */
+.mflyWrap {
+  position: relative;
+  display: inline-block;
+  min-width: 5.75rem;
+}
+
+.mfly {
+  composes: btn;
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  border: 0;
+  background: #007fff;
+  color: #fff;
+  pointer-events: none;
+  animation: glowShift 3s linear both;
+}
+
+.mfly > span {
+  pointer-events: none;
+}
+
+.mOld {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  animation: oldLbl 3s linear both;
+}
+
+.mNew {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  opacity: 0;
+  animation: newLbl 3s linear both;
+}
+
+.mStars {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0 100% 0 0);
+  background-color: #0a0f2c;
+  background-image:
+    radial-gradient(1px 1px at 12% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 30% 72%, #cfe3ff, transparent),
+    radial-gradient(1.5px 1.5px at 55% 22%, #fff, transparent),
+    radial-gradient(1px 1px at 72% 76%, #fff, transparent),
+    radial-gradient(1px 1px at 90% 34%, #ffe9a8, transparent),
+    radial-gradient(1.2px 1.2px at 44% 58%, #fff, transparent),
+    radial-gradient(70% 140% at 85% 110%, rgba(130, 90, 255, 0.5), transparent),
+    radial-gradient(60% 120% at 5% -20%, rgba(0, 180, 255, 0.35), transparent),
+    linear-gradient(135deg, #0a0f2c, #1b1650 60%, #2a1b5e);
+  animation: starsWipe 3s linear both;
+}
+
+.mStars::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 60%, #fff, transparent),
+    radial-gradient(1.4px 1.4px at 64% 40%, #fff, transparent),
+    radial-gradient(1px 1px at 82% 18%, #cfe3ff, transparent),
+    radial-gradient(1px 1px at 8% 82%, #ffe9a8, transparent);
+  animation: twinkle 1.1s ease-in-out infinite alternate;
+}
+
+.mRocket {
+  position: absolute;
+  top: 50%;
+  left: -28px;
+  width: 18px;
+  height: 18px;
+  margin-top: -9px;
+  color: #fff;
+  opacity: 0;
+  animation: rocketFly 3s linear both;
+}
+
+.mRocket svg {
+  display: block;
+  transform: rotate(45deg);
+}
+
+.mRocket::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 30px;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, #ffb94d, #fff);
+}
+
+.mBoom {
+  position: absolute;
+  top: 50%;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  margin-top: -11px;
+  border: 2px solid #cfe3ff;
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+  animation: boom 3s linear both;
+}
+
+.mBoom2 {
+  border-color: #9bb8ff;
+  animation-name: boom2;
+}
+
+@keyframes glowShift {
+  0%,
+  24% {
+    box-shadow: 0 0 12px 1px rgba(0, 127, 255, 0.45);
+  }
+
+  30% {
+    box-shadow: 0 0 26px 8px rgba(160, 210, 255, 0.8);
+  }
+
+  42%,
+  100% {
+    box-shadow: 0 0 14px 2px rgba(110, 90, 255, 0.5);
+  }
+}
+
+@keyframes oldLbl {
+  0%,
+  2.4% {
+    clip-path: inset(0 0 0 0);
+  }
+
+  24.2%,
+  100% {
+    clip-path: inset(0 0 0 101%);
+  }
+}
+
+@keyframes newLbl {
+  0%,
+  34% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  48%,
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes starsWipe {
+  0%,
+  2.4% {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  24.2%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.35;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes rocketFly {
+  0% {
+    left: -28px;
+    opacity: 1;
+  }
+
+  29% {
+    left: calc(100% + 2px);
+    opacity: 1;
+  }
+
+  30%,
+  100% {
+    left: calc(100% + 40px);
+    opacity: 0;
+  }
+}
+
+@keyframes boom {
+  0%,
+  28% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+
+  30% {
+    opacity: 0.95;
+    transform: scale(0.4);
+  }
+
+  58%,
+  100% {
+    opacity: 0;
+    transform: scale(3.4);
+  }
+}
+
+@keyframes boom2 {
+  0%,
+  32% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+
+  34% {
+    opacity: 0.8;
+    transform: scale(0.4);
+  }
+
+  66%,
+  100% {
+    opacity: 0;
+    transform: scale(4.4);
+  }
+}
+
+/* Reduced motion: no rocket, no rings; the starry button reads "Merged" at once. */
+@media (prefers-reduced-motion: reduce) {
+  .mfly,
+  .mfly > span,
+  .mStars::after,
+  .mBoom {
+    animation: none !important;
+  }
+
+  .mOld,
+  .mRocket,
+  .mBoom {
+    opacity: 0;
+    clip-path: none;
+  }
+
+  .mNew {
+    opacity: 1;
+  }
+
+  .mStars {
+    clip-path: none;
+  }
+}
+
+.tkRoot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}

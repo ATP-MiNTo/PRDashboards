@@ -11,7 +11,7 @@ import {
 } from "./helpers";
 
 // A ticket linked to three pull requests moves only when the third one meets the rule (mode All),
-// through the real poller and the rule created in the settings drawer.
+// through the real poller and the rule created in the status sync rules dialog.
 
 type JiraState = {
   statuses: Record<string, string>;
@@ -32,7 +32,7 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 const sync = (page: Page) =>
-  page.getByRole("button", { name: "Sync", exact: true }).click();
+  page.getByRole("button", { name: "Refresh", exact: true }).click();
 
 const approve = async (
   page: Page,
@@ -49,28 +49,28 @@ test("moves INP-105 only after the third approval", async ({
 }) => {
   const before = (await fakeState<JiraState>(request, "atlassian")).jira;
   const drawer = await openSettings(page);
-  await drawer.getByRole("button", { name: "Add rule", exact: true }).click();
-  const form = drawer.getByRole("form", { name: "New rule" });
-  await form.getByLabel("When").selectOption("review_approved");
-  const target = form.getByRole("combobox", { name: "Move the ticket to" });
-  // The popover closes on any scroll, so let the sidebar finish scrolling before opening it.
-  await target.scrollIntoViewIfNeeded();
-  await page.evaluate(
-    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-  );
-  await target.click();
-  await page.getByRole("option", { name: "Ready to Merge", exact: true }).click();
-  await form.getByRole("button", { name: "Preview" }).click();
-  await expect(form.getByRole("region", { name: "Preview" })).toBeVisible();
+  await drawer.getByRole("button", { name: "Status sync rules" }).click();
+  const dialog = page.getByRole("dialog", { name: "Status sync rules" });
+  await dialog.getByRole("button", { name: "Add rule", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Blank rule", exact: true }).click();
+  const card = dialog.getByRole("listitem", { name: /^Rule 1,/ });
+  await card
+    .getByRole("combobox", { name: "When", exact: true })
+    .selectOption("review_approved");
+  await card.getByLabel("Then move it to").selectOption("Ready to Merge");
+  await card.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(card.getByRole("region", { name: "Preview" })).toBeVisible();
   // The approved fixture pull requests already match, and they must stay where they are.
-  await form
+  await card
     .getByRole("radio", { name: "Don't move existing tickets" })
     .check();
-  await form.getByRole("button", { name: "Save rule" }).click();
-  await expect(form).toBeHidden();
-  await expect(
-    drawer.getByRole("button", { name: /: All$/ }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await card.getByRole("button", { name: "Save rule" }).click();
+  await expect(card.getByText("Unsaved")).toBeHidden();
+  await expect(card.getByLabel("Tickets shared by several PRs")).toHaveValue(
+    "all",
+  );
+  await dialog.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(dialog).toBeHidden();
   await drawer.getByRole("button", { name: "Collapse sidebar" }).click();
 
   await approve(page, request, [34]);
@@ -95,11 +95,14 @@ test("moves INP-105 only after the third approval", async ({
   expect(jira.statuses["INP-105"]).toBe("Ready to Merge");
   expect(jira.jira.transitions - before.transitions).toBe(1);
   expect(jira.jira.moves - before.moves).toBe(1);
-  await expect(page.getByText(/Waiting on/)).toHaveCount(0);
+  await expect(page.getByText(/Waiting on \d+ of \d+ PRs/)).toHaveCount(0);
 
-  const log = (await openSettings(page)).getByRole("list", {
-    name: "Activity",
-  });
+  await (await openSettings(page))
+    .getByRole("button", { name: "Status sync rules" })
+    .click();
+  const log = page
+    .getByRole("dialog", { name: "Status sync rules" })
+    .getByRole("list", { name: "Activity" });
   await expect(log.getByText(/INP-105/).first()).toBeVisible();
   await expect(log.getByText(/by a status sync rule/).first()).toBeVisible();
 });

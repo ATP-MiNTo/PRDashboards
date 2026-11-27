@@ -33,6 +33,10 @@ export function pr(id: string, number: number, over: Partial<SnapshotPr> = {}): 
       rebaseAllowed: true,
     },
     roles: ['assigned'],
+    author: 'priya',
+    updatedAt: '2026-11-24T11:30:00Z',
+    additions: 12,
+    deletions: 3,
     isDraft: false,
     mergeable: 'MERGEABLE',
     mergeStateStatus: 'CLEAN',
@@ -55,6 +59,7 @@ export function pr(id: string, number: number, over: Partial<SnapshotPr> = {}): 
       allowed: ['squash', 'merge', 'rebase'],
       warning: null,
     },
+    approvals: { have: 1, need: 1, changesRequested: 0 },
     ...over,
   };
 }

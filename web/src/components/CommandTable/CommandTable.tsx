@@ -1,111 +1,139 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot, useSyncStatus } from '@/api/queries';
 import { showCounts } from '@/lib/show';
+import { crossfade } from '@/theme/transition';
+import { reducedMotion } from '@/lib/storage';
 import { useTheme } from '@/theme/useTheme';
 import styles from './CommandTable.module.css';
 import { OrgBanner } from './OrgBanner';
-import { Filters, StatStrip } from './StatStrip';
-import { Table } from './Table';
-import { TopBar } from './TopBar';
-import { RecentMerges } from './RecentMerges';
-import { AccountsPanel } from '../AccountsPanel';
+import { StatStrip } from './StatStrip';
+import { List, Notice } from './List';
+import { AccountsModal } from '../Accounts/AccountsModal';
+import { HistoryView } from '../History/HistoryView';
 import { Footer } from '../Toolbar/Footer';
 import { Toolbar } from '../Toolbar/Toolbar';
 import { useListPrefs } from '../Toolbar/useListPrefs';
-import { SidePanel } from '../SidePanel/SidePanel';
+import { RulesModal } from '../RulesModal/RulesModal';
 import { SettingsContent } from '../Settings/SettingsContent';
-import { Burger } from '../Shell/Burger';
+import { Header } from '../Header/Header';
+import { SearchBox } from '../Header/SearchBox';
 import { Sidebar } from '../Shell/Sidebar';
+import { SidebarAccounts } from '../Shell/SidebarAccounts';
 import { useScrolled, useSidebar } from '../Shell/useSidebar';
+import { ToastProvider } from '../Toast/Toast';
 import { useSnapshotEvents } from './useSnapshotEvents';
 
 const NO_IDS: string[] = [];
 const selectIds = (s: Snapshot) => s.prs.map((p) => p.id);
+const HISTORY_TITLE = 'PRDashboards · History';
 const NO_SHOW_COUNTS = { everything: 0, assigned: 0, authored: 0 };
 
 export function CommandTable() {
   const snapshot = useSnapshot();
   const status = useSyncStatus();
-  useTheme(); // keeps the mode on <html> in step with the setting
+  const theme = useTheme(); // keeps the mode on <html> in step with the setting
   const ids = useSnapshot(selectIds).data ?? NO_IDS;
-  const shown = useSnapshot(showCounts).data ?? NO_SHOW_COUNTS;
   const prefs = useListPrefs(ids);
+  const { filter, show, terms, hidden, mode, off } = prefs;
+  const shown = useSnapshot((s: Snapshot) => showCounts(s, off)).data ?? NO_SHOW_COUNTS;
+  const listed =
+    useSnapshot((s: Snapshot) => s.prs.filter((p) => !off.has(p.repo.id)).map((p) => p.id)).data ??
+    NO_IDS;
   const [account, setAccount] = useState(false);
-  const sidebar = useSidebar({ hold: account });
+  const [rules, setRules] = useState(false);
+  const [history, setHistory] = useState(false);
+  const sidebar = useSidebar();
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
+  const view = useMemo(
+    () => ({ filter, show, terms, hidden, mode, off }),
+    [filter, show, terms, hidden, mode, off],
+  );
+  // The History view replaces the list with a cross-fade of the whole page (0.9s).
+  const toggleHistory = () =>
+    crossfade(document, () => flushSync(() => setHistory((h) => !h)), reducedMotion());
 
+  const hiddenListed = listed.filter((id) => hidden.has(id)).length;
   const data = snapshot.data;
   return (
-    <div className={styles.page}>
-      <Sidebar
-        id="settings-sidebar"
-        open={sidebar.open}
-        overlay={!sidebar.wide}
-        onClose={sidebar.close}
-        asideRef={sidebar.aside}
-        returnFocus={burger}
-      >
-        <SettingsContent />
-      </Sidebar>
-      <div className={styles.main}>
-        <Burger
+    <ToastProvider>
+      <div className={styles.page}>
+        <Sidebar
+          id="settings-sidebar"
           open={sidebar.open}
-          stuck={scrolled}
-          onToggle={sidebar.toggle}
-          buttonRef={burger}
-          controls="settings-sidebar"
-        />
-        <TopBar
-          snapshot={data}
-          status={status.data}
-          onAccount={() => setAccount(true)}
-          scrolled={scrolled}
-        />
-        <main className={styles.wrap}>
-          {snapshot.isPending && <p className={styles.muted}>Loading</p>}
-          {snapshot.isError && <p className={styles.errorText}>Could not load the dashboard.</p>}
-          {data && (
-            <>
-              <OrgBanner snapshot={data} />
-              <StatStrip snapshot={data} />
-              <div className={styles.controls}>
-                <Filters value={prefs.filter} onChange={prefs.setFilter} />
-                <Toolbar
-                  sort={prefs.sort}
-                  reversed={prefs.reversed}
-                  onSort={prefs.setSort}
-                  onReverse={prefs.reverse}
-                  show={prefs.show}
-                  onShow={prefs.setShow}
-                  showCounts={shown}
-                  mode={prefs.mode}
-                  onMode={prefs.setMode}
-                  counts={{
-                    visible: Math.max(0, ids.length - prefs.hidden.size),
-                    all: ids.length,
-                    hidden: prefs.hidden.size,
-                  }}
-                />
-              </div>
-              {data.prs.length === 0 && data.sources.github.state === 'pending' ? (
-                <p className={styles.muted}>Loading pull requests</p>
-              ) : (
-                <Table prefs={prefs} />
-              )}
-              <RecentMerges />
-            </>
-          )}
-        </main>
-        <Footer />
+          overlay={!sidebar.wide}
+          onClose={sidebar.close}
+          asideRef={sidebar.aside}
+          returnFocus={burger}
+          footer={<SidebarAccounts onManage={() => setAccount(true)} />}
+        >
+          <SettingsContent onOpenRules={() => setRules(true)} off={off} onOff={prefs.setOff} />
+        </Sidebar>
+        <div className={styles.main}>
+          <Header
+            stuck={scrolled}
+            sidebarOpen={sidebar.open}
+            sidebarId="settings-sidebar"
+            onToggleSidebar={sidebar.toggle}
+            burgerRef={burger}
+            query={prefs.query}
+            onQuery={prefs.setQuery}
+            snapshot={data}
+            status={status.data}
+            theme={theme.theme}
+            mode={theme.mode}
+            onTheme={theme.setTheme}
+            history={{ active: history, onToggle: toggleHistory }}
+            title={history ? HISTORY_TITLE : undefined}
+          />
+          <main className={styles.wrap}>
+            <SearchBox value={prefs.query} onChange={prefs.setQuery} variant="page" />
+            {snapshot.isPending && <Notice>Loading</Notice>}
+            {snapshot.isError && <Notice error>Could not load the dashboard.</Notice>}
+            {data && (
+              <>
+                <OrgBanner snapshot={data} />
+                {history ? (
+                  <HistoryView terms={terms} />
+                ) : (
+                  <>
+                    <StatStrip view={view} onFilter={prefs.setFilter} />
+                    <Toolbar
+                      sort={prefs.sort}
+                      reversed={prefs.reversed}
+                      onSort={prefs.setSort}
+                      onReverse={prefs.reverse}
+                      show={prefs.show}
+                      onShow={prefs.setShow}
+                      showCounts={shown}
+                      mode={prefs.mode}
+                      onMode={prefs.setMode}
+                      counts={{
+                        visible: Math.max(0, listed.length - hiddenListed),
+                        all: listed.length,
+                        hidden: hiddenListed,
+                      }}
+                    />
+                    {data.prs.length === 0 && data.sources.github.state === 'pending' ? (
+                      <Notice>Loading pull requests</Notice>
+                    ) : (
+                      <List prefs={prefs} />
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </main>
+          <Footer />
+        </div>
+        {account && <AccountsModal onClose={() => setAccount(false)} />}
+        {rules && <RulesModal onClose={() => setRules(false)} />}
       </div>
-      <SidePanel open={account} onClose={() => setAccount(false)} title="Account">
-        <AccountsPanel />
-      </SidePanel>
-    </div>
+    </ToastProvider>
   );
 }

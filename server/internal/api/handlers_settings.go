@@ -77,6 +77,12 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 			return nil, err
 		}
 	}
+	if prev.DefaultMethod != saved.DefaultMethod && h.cfg.Poller != nil {
+		// Repositories that follow the default take the new method, so resolve every pull request again.
+		if err := h.cfg.Poller.Relink(ctx); err != nil {
+			return nil, err
+		}
+	}
 	return gen.PutSettings200JSONResponse(toGenSettings(saved)), nil
 }
 

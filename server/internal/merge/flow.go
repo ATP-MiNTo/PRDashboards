@@ -149,7 +149,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 		s.cfg.Log.WarnContext(ctx, "pull request re-check failed", "pr", req.PRID, "err", err)
 		return Result{}, err
 	}
-	if e := check(pr, req, s.cfg.Snapshot.Refs(pr.Repo.ID)); e != nil {
+	if e := check(pr, req, s.cfg.Snapshot.Refs(pr.Repo.ID), view.ApprovalsRequired); e != nil {
 		return Result{}, e
 	}
 	if !(Allowed{Squash: pr.Repo.SquashAllowed, Merge: pr.Repo.MergeAllowed, Rebase: pr.Repo.RebaseAllowed}).Has(req.Method) {
@@ -164,17 +164,17 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	merged, err := s.cfg.GitHub.Merge(ctx, token, pr.Repo.NameWithOwner, pr.Number, string(req.Method), req.ExpectedHeadSHA)
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
-		return Result{}, &Error{Code: CodeHeadMoved, Detail: "the branch changed while the merge was prepared", Fresh: freshOf(pr)}
+		return Result{}, &Error{Code: CodeHeadMoved, Detail: "the branch changed while the merge was prepared", Fresh: FreshOf(pr)}
 	case errors.Is(err, github.ErrNotMergeable):
-		return Result{}, &Error{Code: CodeNotMergeable, Detail: "GitHub refused the merge", Fresh: freshOf(pr)}
+		return Result{}, &Error{Code: CodeNotMergeable, Detail: "GitHub refused the merge", Fresh: FreshOf(pr)}
 	case errors.Is(err, github.ErrPRNotFound):
 		return Result{}, &Error{Code: CodeNotFound, Detail: "GitHub has no such pull request"}
 	case errors.Is(err, github.ErrEnqueued):
 		return s.queued(ctx, req, pr), nil
 	case errors.Is(err, github.ErrMergePending):
-		return Result{}, &Error{Code: CodeMergePending, Detail: "GitHub is still merging; refresh in a moment", Fresh: freshOf(pr)}
+		return Result{}, &Error{Code: CodeMergePending, Detail: "GitHub is still merging; refresh in a moment", Fresh: FreshOf(pr)}
 	case errors.As(err, &failed):
-		return Result{}, &Error{Code: CodeMergeFailed, Detail: "GitHub did not merge: " + failed.Reason, Fresh: freshOf(pr)}
+		return Result{}, &Error{Code: CodeMergeFailed, Detail: "GitHub did not merge: " + failed.Reason, Fresh: FreshOf(pr)}
 	case notConnected(err):
 		return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}
 	case err != nil:
@@ -273,7 +273,8 @@ func contains(list []string, key string) bool {
 	return false
 }
 
-func freshOf(pr github.PR) *Fresh {
+// FreshOf is the state of pr as GitHub reported it, for the refusals that carry it.
+func FreshOf(pr github.PR) *Fresh {
 	return &Fresh{
 		State: pr.State, HeadSHA: pr.HeadSHA, BaseRef: pr.BaseRef, IsDraft: pr.Draft,
 		Mergeable: pr.Mergeable, MergeState: pr.MergeStateStatus, ReviewDecision: pr.ReviewDecision,
@@ -282,9 +283,10 @@ func freshOf(pr github.PR) *Fresh {
 
 // check is step 2 of TECH_SPEC 7.7 against the pull request GitHub just reported: it is open, not
 // a draft, its base is merged, the head is the commit the person saw, GitHub says it is mergeable
-// and clean, and no required review is missing.
-func check(pr github.PR, req Request, refs []Ref) *Error {
-	refuse := func(code, detail string) *Error { return &Error{Code: code, Detail: detail, Fresh: freshOf(pr)} }
+// and clean, the repository's approvals are met (counted from the reviews GitHub just reported, the
+// same count the snapshot shows) and no required review is missing.
+func check(pr github.PR, req Request, refs []Ref, approvalsRequired int) *Error {
+	refuse := func(code, detail string) *Error { return &Error{Code: code, Detail: detail, Fresh: FreshOf(pr)} }
 	switch {
 	case pr.State != "" && pr.State != "OPEN":
 		return refuse(CodeNotOpen, "the pull request is no longer open")
@@ -301,9 +303,13 @@ func check(pr github.PR, req Request, refs []Ref) *Error {
 		return refuse(CodeHeadMoved, "the branch changed since the page loaded")
 	case pr.Mergeable != "MERGEABLE":
 		return refuse(CodeNotMergeable, "GitHub does not report the pull request as mergeable")
+	case pr.ReviewDecision == "CHANGES_REQUESTED":
+		return refuse(CodeNotMergeable, "changes were requested")
+	case CountApprovals(pr.Reviews, approvalsRequired).Block() != "":
+		return refuse(CodeNotMergeable, CountApprovals(pr.Reviews, approvalsRequired).Block())
 	case pr.MergeStateStatus != "CLEAN" && pr.MergeStateStatus != "HAS_HOOKS":
 		return refuse(CodeNotMergeable, "the merge state is "+pr.MergeStateStatus)
-	case pr.ReviewDecision == "REVIEW_REQUIRED" || pr.ReviewDecision == "CHANGES_REQUESTED":
+	case pr.ReviewDecision == "REVIEW_REQUIRED":
 		return refuse(CodeNotMergeable, "a required review is missing")
 	}
 	return nil

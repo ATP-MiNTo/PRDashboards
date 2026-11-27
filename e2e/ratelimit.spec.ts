@@ -31,22 +31,24 @@ for (const [mode, title] of [
     request,
   }) => {
     await configure(request, "github", { rateLimit: mode });
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
 
     await expect(page.getByText(/GitHub rate limit reached/)).toBeVisible();
+    // The source status is in the popover of the Refresh button, which opens on hover and focus.
+    await page.getByRole("button", { name: "Refresh", exact: true }).hover();
     const sources = page.getByRole("status", { name: "Source status" });
     await expect(sources).toContainText(/GitHub rate limited/);
     if (mode === "reset") {
       await expect(sources).toContainText(/resets in \d+m/);
     }
     const row = page
-      .locator("tr[data-pr]")
+      .locator("article[data-pr]")
       .filter({ hasText: "Bump dependencies" });
     await expect(row).toBeVisible();
     await expect(row.getByText(/Last data/)).toBeVisible();
 
     await configure(request, "github", { rateLimit: "" });
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByText(/GitHub rate limit reached/)).toHaveCount(0);
     await expect(sources).toContainText("GitHub ok");
     await expect(row.getByText(/Last data/)).toHaveCount(0);

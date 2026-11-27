@@ -1,7 +1,6 @@
-import type { Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
+import type { Approvals, Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
+import { matchesSearch } from './search';
 import { inShow, type ShowMode } from './show';
-
-export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
 const ORG = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO = /^[A-Za-z0-9._-]{1,100}$/;
@@ -65,6 +64,15 @@ export interface Block {
   reason: string | null;
 }
 
+/**
+ * Why the approvals alone keep a pull request from merging, or null. The words are the server's
+ * (`merge.Approvals.Block` in Go), which refuses the merge with the same text.
+ */
+export function approvalsBlock(a: Approvals): string | null {
+  const need = a.need >= 1 && a.need <= 10 ? a.need : 1;
+  return a.have >= need ? null : `Needs ${need} approvals, has ${a.have}`;
+}
+
 export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.isDraft) return { readiness: 'draft', reason: 'Draft' };
   const parent = parentNumber ?? pr.stack?.parentNumber ?? null;
@@ -77,6 +85,8 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return { readiness: 'blocked', reason: 'Changes requested' };
   }
+  const approvals = approvalsBlock(pr.approvals);
+  if (approvals) return { readiness: 'blocked', reason: approvals };
   if (pr.reviewDecision === 'REVIEW_REQUIRED') {
     return { readiness: 'blocked', reason: 'Review required' };
   }
@@ -84,38 +94,21 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   return { readiness: 'ready', reason: null };
 }
 
-export function isStale(pr: SnapshotPr, now: number): boolean {
-  if (!pr.committedAt) return false;
-  return now - Date.parse(pr.committedAt) > STALE_AFTER_MS;
-}
+/** What the stat tiles filter the list by: everything, ready to merge, running CI, or stacks only. */
+export type Filter = 'all' | 'ready' | 'running' | 'stacks';
 
-export interface Stats {
-  open: number;
-  ready: number;
-  blocked: number;
-  draft: number;
-  stale: number;
-}
+export const FILTERS: Filter[] = ['all', 'ready', 'running', 'stacks'];
 
-export function statsOf(s: Snapshot, now: number): Stats {
-  const out: Stats = { open: s.prs.length, ready: 0, blocked: 0, draft: 0, stale: 0 };
-  for (const pr of s.prs) {
-    out[blockOf(pr).readiness] += 1;
-    if (isStale(pr, now)) out.stale += 1;
-  }
-  return out;
-}
-
-export type Filter = 'all' | 'ready' | 'blocked' | 'draft' | 'stale';
-
-export function matches(pr: SnapshotPr, filter: Filter, now: number): boolean {
+export function matches(pr: SnapshotPr, filter: Filter): boolean {
   switch (filter) {
     case 'all':
       return true;
-    case 'stale':
-      return isStale(pr, now);
-    default:
-      return blockOf(pr).readiness === filter;
+    case 'ready':
+      return blockOf(pr).readiness === 'ready';
+    case 'running':
+      return pr.ci.state === 'running';
+    case 'stacks':
+      return pr.stack !== null;
   }
 }
 
@@ -126,21 +119,30 @@ export interface Group {
   stacked: boolean;
 }
 
+const NO_REPOS: ReadonlySet<string> = new Set();
+
 /**
  * Groups the filtered pull requests into rows: stacks stay together, in stack order, and everything
- * else is its own group. Only pull requests the Show mode lists are kept. The result holds ids only, so a row's data changing leaves it equal.
+ * else is its own group. Only pull requests the Show mode lists, the search terms match and a repository
+ * that is not switched off (`off`, repository ids) has are kept. The result holds ids only, so a row's data changing leaves it equal.
  */
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
-  now: number,
   show: ShowMode = 'everything',
+  terms: readonly string[] = [],
+  off: ReadonlySet<string> = NO_REPOS,
 ): Group[] {
   const groups: Group[] = [];
   const byStack = new Map<string, Group>();
   const rows = [...s.prs].sort((a, b) => (a.stack?.position ?? 0) - (b.stack?.position ?? 0));
   const kept = new Set(
-    rows.filter((p) => matches(p, filter, now) && inShow(p, show)).map((p) => p.id),
+    rows
+      .filter(
+        (p) =>
+          !off.has(p.repo.id) && matches(p, filter) && inShow(p, show) && matchesSearch(p, terms),
+      )
+      .map((p) => p.id),
   );
   for (const pr of s.prs) {
     if (!kept.has(pr.id) || pr.stack) continue;

@@ -1,18 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { NOW, pr, snapshot } from '@/test-fixtures';
 import {
+  approvalsBlock,
   blockOf,
   checkDuration,
   countdown,
   githubChecksUrl,
   githubPrUrl,
   groupsOf,
-  isStale,
   matches,
   orgSsoUrl,
   relativeTime,
   safeLink,
-  statsOf,
 } from './snapshot';
 
 describe('links', () => {
@@ -47,6 +46,22 @@ describe('links', () => {
   });
 });
 
+describe('approvalsBlock', () => {
+  it('says what is missing, as the server does', () => {
+    expect(approvalsBlock({ have: 1, need: 2, changesRequested: 0 })).toBe(
+      'Needs 2 approvals, has 1',
+    );
+    expect(approvalsBlock({ have: 2, need: 2, changesRequested: 0 })).toBeNull();
+  });
+
+  it('treats a need outside 1 to 10 as the default of one', () => {
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBe(
+      'Needs 1 approvals, has 0',
+    );
+    expect(approvalsBlock({ have: 1, need: 11, changesRequested: 0 })).toBeNull();
+  });
+});
+
 describe('blockOf', () => {
   it.each([
     ['draft', { isDraft: true }, 'draft', 'Draft'],
@@ -64,6 +79,19 @@ describe('blockOf', () => {
       'CI running',
     ],
     ['changes', { reviewDecision: 'CHANGES_REQUESTED' as const }, 'blocked', 'Changes requested'],
+    [
+      'too few approvals',
+      { approvals: { have: 1, need: 2, changesRequested: 0 } },
+      'blocked',
+      'Needs 2 approvals, has 1',
+    ],
+    [
+      'no approval at all',
+      { approvals: { have: 0, need: 1, changesRequested: 0 } },
+      'blocked',
+      'Needs 1 approvals, has 0',
+    ],
+    ['enough approvals', { approvals: { have: 3, need: 2, changesRequested: 0 } }, 'ready', null],
     ['review', { reviewDecision: 'REVIEW_REQUIRED' as const }, 'blocked', 'Review required'],
     ['unknown', { mergeable: 'UNKNOWN' as const }, 'blocked', 'Checking mergeability'],
     ['ready', {}, 'ready', null],
@@ -79,29 +107,39 @@ describe('blockOf', () => {
   });
 });
 
-describe('stats and groups', () => {
+describe('filters and groups', () => {
   const rows = [
     pr('a', 1, { stack: { id: 'a', position: 1, size: 2, parentId: null, parentNumber: null } }),
-    pr('c', 3),
+    pr('c', 3, { ci: { state: 'running', total: 1, checks: [] } }),
     pr('b', 2, { stack: { id: 'a', position: 2, size: 2, parentId: 'a', parentNumber: 1 } }),
     pr('d', 4, { isDraft: true, committedAt: '2026-11-01T00:00:00Z' }),
   ];
   const snap = snapshot(rows);
 
-  it('counts', () => {
-    expect(statsOf(snap, NOW)).toEqual({ open: 4, ready: 2, blocked: 1, draft: 1, stale: 1 });
-    expect(isStale(pr('x', 1, { committedAt: null }), NOW)).toBe(false);
-    expect(matches(rows[3]!, 'stale', NOW)).toBe(true);
+  it.each([
+    ['all', ['a', 'c', 'b', 'd']],
+    ['ready', ['a']],
+    ['running', ['c']],
+    ['stacks', ['a', 'b']],
+  ] as const)('the %s filter matches %j', (filter, ids) => {
+    expect(rows.filter((p) => matches(p, filter)).map((p) => p.id)).toEqual(ids);
   });
 
   it('keeps stacks together in stack order and the rest in list order', () => {
-    expect(groupsOf(snap, 'all', NOW)).toEqual([
+    expect(groupsOf(snap, 'all')).toEqual([
       { key: 'a', ids: ['a', 'b'], stacked: true },
       { key: 'c', ids: ['c'], stacked: false },
       { key: 'd', ids: ['d'], stacked: false },
     ]);
-    expect(groupsOf(snap, 'draft', NOW).map((g) => g.key)).toEqual(['d']);
-    expect(groupsOf(snap, 'blocked', NOW)).toEqual([{ key: 'a', ids: ['b'], stacked: true }]);
+    expect(groupsOf(snap, 'running')).toEqual([{ key: 'c', ids: ['c'], stacked: false }]);
+    expect(groupsOf(snap, 'stacks')).toEqual([{ key: 'a', ids: ['a', 'b'], stacked: true }]);
+    expect(groupsOf(snap, 'ready')).toEqual([{ key: 'a', ids: ['a'], stacked: true }]);
+  });
+
+  it('drops the pull requests of a repository that is switched off', () => {
+    const repo = snap.prs[0]?.repo.id ?? '';
+    expect(groupsOf(snap, 'all', 'everything', [], new Set([repo]))).toEqual([]);
+    expect(groupsOf(snap, 'all', 'everything', [], new Set(['other']))).toHaveLength(3);
   });
 });
 

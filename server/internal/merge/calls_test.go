@@ -35,6 +35,7 @@ func TestOutboundCallsOfOneMerge(t *testing.T) {
 			}
 			_, _ = io.WriteString(w, `{"data":{"node":{"__typename":"PullRequest","id":"PR_1","number":7,"state":"OPEN","isCrossRepository":false,
 				"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefName":"feat/x","headRefOid":"sha1","baseRefName":"main",
+				"latestReviews":{"nodes":[{"id":"RV1","state":"APPROVED","submittedAt":null,"author":{"login":"alice"}}]},
 				"repository":{"id":"R1","nameWithOwner":"acme/web","squashMergeAllowed":true,"mergeCommitAllowed":true,"rebaseMergeAllowed":true}}}}`)
 		case r.Method == http.MethodPut && r.URL.Path == "/repos/acme/web/pulls/7/merge":
 			puts.Add(1)

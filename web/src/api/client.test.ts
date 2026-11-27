@@ -190,3 +190,93 @@ describe('api client operations', () => {
     await expect(client.putSettings(saved)).resolves.toEqual(saved);
   });
 });
+
+describe('review actions', () => {
+  const sha = '0123456789abcdef0123456789abcdef01234567';
+
+  async function signedIn() {
+    fetchMock.mockResolvedValueOnce(json(session));
+    await getSession();
+  }
+
+  it.each([
+    ['approvePr', 'approve', { expectedHeadSha: sha, body: 'LGTM' }, 'approve'],
+    ['approvePr', 'approve', { expectedHeadSha: sha }, 'approve'],
+    [
+      'requestChangesPr',
+      'request-changes',
+      { expectedHeadSha: sha, body: 'rename it' },
+      'request_changes',
+    ],
+    ['markPrReady', 'ready', { expectedHeadSha: sha }, 'ready'],
+  ] as const)(
+    '%s posts to /api/prs/{id}/%s with the CSRF header',
+    async (name, path, body, action) => {
+      await signedIn();
+      fetchMock.mockResolvedValueOnce(json({ prId: 'PR_1/x', action }));
+      const call = client[name] as (id: string, b: unknown) => Promise<unknown>;
+      await expect(call('PR_1/x', body)).resolves.toEqual({ prId: 'PR_1/x', action });
+      const [url, init] = fetchMock.mock.calls.at(-1)!;
+      expect(url).toBe(`/api/prs/PR_1%2Fx/${path}`);
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      expect(init?.body).toBe(JSON.stringify(body));
+      expect(init?.headers).toMatchObject({
+        [CSRF_HEADER]: 'csrf-1',
+        'Content-Type': 'application/json',
+      });
+    },
+  );
+
+  it('throws an ApiError with the code, the detail and the fresh state of a refused action', async () => {
+    await signedIn();
+    const fresh = {
+      state: 'OPEN',
+      headSha: 'f'.repeat(40),
+      baseRef: 'main',
+      isDraft: false,
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: null,
+    };
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          type: '/problems/head_moved',
+          title: 'Conflict',
+          status: 409,
+          code: 'head_moved',
+          detail: 'moved',
+          pr: fresh,
+        },
+        409,
+        'application/problem+json',
+      ),
+    );
+    const error = await client.approvePr('PR_1', { expectedHeadSha: sha }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status: 409, code: 'head_moved', detail: 'moved', pr: fresh });
+  });
+
+  it('keeps the permission the token is missing', async () => {
+    await signedIn();
+    fetchMock.mockResolvedValueOnce(
+      json(
+        {
+          type: '/problems/missing_permission',
+          title: 'Forbidden',
+          status: 403,
+          code: 'missing_permission',
+          detail: 'The token needs the GitHub permission pull_requests: write',
+        },
+        403,
+        'application/problem+json',
+      ),
+    );
+    await expect(client.markPrReady('PR_1', { expectedHeadSha: sha })).rejects.toMatchObject({
+      status: 403,
+      code: 'missing_permission',
+      detail: 'The token needs the GitHub permission pull_requests: write',
+    });
+  });
+});

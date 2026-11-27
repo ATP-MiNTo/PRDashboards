@@ -6,6 +6,33 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.0] - 2026-11-27
+
+### Changed
+
+- The web app now matches the approved design: glass cards for pull requests, floating header pills with search, refresh
+  and theme buttons, a 320px settings sidebar, stat tiles, the sort, Show and Hidden PRs toolbar, paging, a footer
+  and a floating GitHub button, with Inter and Space Grotesk fonts, the design's colours, cursors, hover and press
+  states, and animations. The Merge button glows, and a merge plays the launch animation.
+- Merging happens in a dialog that also holds the merge method, branch deletion and the Jira move. Review,
+  CI and ticket controls follow the design, with a checks popover and a "My tickets" menu.
+- Status sync rules, repository settings and accounts open in dialogs. Rules can be reordered by dragging and have
+  templates and a preview. Exclude statuses, Multi-PR tickets and Activity moved into the rules dialog, and Sessions
+  into the accounts dialog as "Sign out everywhere".
+- The status filter chips are replaced by stat tiles that filter (Showing, Ready to merge, Running CI, Stacks).
+  Sorting by PR number is replaced by sorting by size of change.
+- Polling can be set in 15 second steps from 30 seconds to 1 hour.
+
+### Added
+
+- Approve and Request change on a pull request, and Ready for review on a draft, with the same checks as Merge.
+- An approvals-required setting per repository (1 to 10). A merge is refused with "Needs N approvals, has M".
+- Rule triggers "No review yet" and "The pull request is waiting for more approvals".
+- Search by title, repository, PR number or Jira key, toasts, notes on pull requests (kept in this browser) and a
+  History view of the merges made from this tab.
+- Each pull request carries its author, update time and size of change, taken from the same two GitHub searches.
+- A per repository choice for deleting the branch and for following the default merge method.
+
 ## [2.3.1] - 2026-11-26
 
 ### Fixed

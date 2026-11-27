@@ -79,6 +79,27 @@ func (e CiState) Valid() bool {
 	}
 }
 
+// Defines values for DeleteBranchChoice.
+const (
+	Default DeleteBranchChoice = "default"
+	No      DeleteBranchChoice = "no"
+	Yes     DeleteBranchChoice = "yes"
+)
+
+// Valid indicates whether the value is a known member of the DeleteBranchChoice enum.
+func (e DeleteBranchChoice) Valid() bool {
+	switch e {
+	case Default:
+		return true
+	case No:
+		return true
+	case Yes:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GithubAccountMethod.
 const (
 	App   GithubAccountMethod = "app"
@@ -166,33 +187,6 @@ func (e MergeStepState) Valid() bool {
 	}
 }
 
-// Defines values for PollingSeconds.
-const (
-	N120  PollingSeconds = 120
-	N300  PollingSeconds = 300
-	N3600 PollingSeconds = 3600
-	N60   PollingSeconds = 60
-	N900  PollingSeconds = 900
-)
-
-// Valid indicates whether the value is a known member of the PollingSeconds enum.
-func (e PollingSeconds) Valid() bool {
-	switch e {
-	case N120:
-		return true
-	case N300:
-		return true
-	case N3600:
-		return true
-	case N60:
-		return true
-	case N900:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for Provider.
 const (
 	Atlassian Provider = "atlassian"
@@ -205,6 +199,27 @@ func (e Provider) Valid() bool {
 	case Atlassian:
 		return true
 	case Github:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ReviewResultAction.
+const (
+	Approve        ReviewResultAction = "approve"
+	Ready          ReviewResultAction = "ready"
+	RequestChanges ReviewResultAction = "request_changes"
+)
+
+// Valid indicates whether the value is a known member of the ReviewResultAction enum.
+func (e ReviewResultAction) Valid() bool {
+	switch e {
+	case Approve:
+		return true
+	case Ready:
+		return true
+	case RequestChanges:
 		return true
 	default:
 		return false
@@ -236,10 +251,12 @@ const (
 	CiPassing        RuleTrigger = "ci_passing"
 	CommitStale      RuleTrigger = "commit_stale"
 	Merged           RuleTrigger = "merged"
+	NoReviewYet      RuleTrigger = "no_review_yet"
 	ReadyForReview   RuleTrigger = "ready_for_review"
 	ReviewApproved   RuleTrigger = "review_approved"
 	ReviewRequested  RuleTrigger = "review_requested"
 	ReviewSubmitted  RuleTrigger = "review_submitted"
+	WaitingApprovals RuleTrigger = "waiting_approvals"
 )
 
 // Valid indicates whether the value is a known member of the RuleTrigger enum.
@@ -255,6 +272,8 @@ func (e RuleTrigger) Valid() bool {
 		return true
 	case Merged:
 		return true
+	case NoReviewYet:
+		return true
 	case ReadyForReview:
 		return true
 	case ReviewApproved:
@@ -262,6 +281,8 @@ func (e RuleTrigger) Valid() bool {
 	case ReviewRequested:
 		return true
 	case ReviewSubmitted:
+		return true
+	case WaitingApprovals:
 		return true
 	default:
 		return false
@@ -491,6 +512,25 @@ type ActivityPage struct {
 	NextCursor *int64         `json:"nextCursor"`
 }
 
+// Approvals have counts the distinct reviewers whose latest review is APPROVED, need is the repository's approvalsRequired, and changesRequested counts the reviewers whose latest review requests changes. The merge is refused, here and on the server, while have is below need ("Needs N approvals, has M").
+type Approvals struct {
+	ChangesRequested int `json:"changesRequested"`
+	Have             int `json:"have"`
+
+	// Need Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+	Need ApprovalsRequired `json:"need"`
+}
+
+// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+type ApprovalsRequired = int
+
+// ApproveRequest defines model for ApproveRequest.
+type ApproveRequest struct {
+	// Body Optional comment sent with the approval. GitHub's limit is 65536 characters (the 64 KiB request cap can come first).
+	Body            *string `json:"body,omitempty"`
+	ExpectedHeadSha string  `json:"expectedHeadSha"`
+}
+
 // AssignedTickets defines model for AssignedTickets.
 type AssignedTickets struct {
 	Tickets []TicketSummary `json:"tickets"`
@@ -545,6 +585,9 @@ type ClientCredentials struct {
 type CreateSessionRequest struct {
 	LaunchToken string `json:"launchToken"`
 }
+
+// DeleteBranchChoice Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.
+type DeleteBranchChoice string
 
 // FreshPr defines model for FreshPr.
 type FreshPr struct {
@@ -677,8 +720,8 @@ type PatRequest struct {
 	Token string `json:"token"`
 }
 
-// PollingSeconds defines model for PollingSeconds.
-type PollingSeconds int
+// PollingSeconds Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time.
+type PollingSeconds = int
 
 // PrRef defines model for PrRef.
 type PrRef struct {
@@ -710,21 +753,53 @@ type ProviderSetup struct {
 	InstallUrl *string `json:"installUrl,omitempty"`
 }
 
+// RateLimitUsage The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
+type RateLimitUsage struct {
+	Limit int `json:"limit"`
+
+	// ResetAt When the window resets, null when GitHub did not say.
+	ResetAt *time.Time `json:"resetAt"`
+
+	// Used Points spent in the current window (limit minus remaining).
+	Used int `json:"used"`
+}
+
+// ReadyRequest defines model for ReadyRequest.
+type ReadyRequest struct {
+	ExpectedHeadSha string `json:"expectedHeadSha"`
+}
+
 // RepoSettings defines model for RepoSettings.
 type RepoSettings struct {
-	BranchRules   []BranchRule    `json:"branchRules"`
-	DefaultMethod MergeMethodName `json:"defaultMethod"`
-	Id            string          `json:"id"`
-	IsNew         bool            `json:"isNew"`
-	NameWithOwner string          `json:"nameWithOwner"`
-	OpenPrs       int             `json:"openPrs"`
+	// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+	ApprovalsRequired ApprovalsRequired `json:"approvalsRequired"`
+	BranchRules       []BranchRule      `json:"branchRules"`
+	DefaultMethod     MergeMethodName   `json:"defaultMethod"`
+
+	// DeleteBranch Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.
+	DeleteBranch DeleteBranchChoice `json:"deleteBranch"`
+	Id           string             `json:"id"`
+
+	// InheritMethod True when the repository follows Settings.defaultMethodForNewRepos; defaultMethod is then kept but not used.
+	InheritMethod bool   `json:"inheritMethod"`
+	IsNew         bool   `json:"isNew"`
+	NameWithOwner string `json:"nameWithOwner"`
+	OpenPrs       int    `json:"openPrs"`
 }
 
 // RepoUpdate defines model for RepoUpdate.
 type RepoUpdate struct {
-	BranchRules   []BranchRule    `json:"branchRules"`
-	ClearNew      bool            `json:"clearNew"`
-	DefaultMethod MergeMethodName `json:"defaultMethod"`
+	// ApprovalsRequired Left out, the stored value stays as it is.
+	ApprovalsRequired *ApprovalsRequired `json:"approvalsRequired,omitempty"`
+	BranchRules       []BranchRule       `json:"branchRules"`
+	ClearNew          bool               `json:"clearNew"`
+	DefaultMethod     MergeMethodName    `json:"defaultMethod"`
+
+	// DeleteBranch Left out, the stored value stays as it is.
+	DeleteBranch *DeleteBranchChoice `json:"deleteBranch,omitempty"`
+
+	// InheritMethod True makes the repository follow Settings.defaultMethodForNewRepos (defaultMethod is kept but not used). Like defaultMethod it is replaced by every update: left out means false.
+	InheritMethod *bool `json:"inheritMethod,omitempty"`
 }
 
 // Repos defines model for Repos.
@@ -738,6 +813,13 @@ type ReposUpdate struct {
 		Id     string     `json:"id"`
 		Update RepoUpdate `json:"update"`
 	} `json:"repos"`
+}
+
+// RequestChangesRequest defines model for RequestChangesRequest.
+type RequestChangesRequest struct {
+	// Body What has to change. Required, not only white space. GitHub's limit is 65536 characters (the 64 KiB request cap can come first).
+	Body            string `json:"body"`
+	ExpectedHeadSha string `json:"expectedHeadSha"`
 }
 
 // Retries defines model for Retries.
@@ -768,6 +850,15 @@ type Review struct {
 	State       string     `json:"state"`
 	SubmittedAt *time.Time `json:"submittedAt"`
 }
+
+// ReviewResult defines model for ReviewResult.
+type ReviewResult struct {
+	Action ReviewResultAction `json:"action"`
+	PrId   string             `json:"prId"`
+}
+
+// ReviewResultAction defines model for ReviewResult.Action.
+type ReviewResultAction string
 
 // RuleFilters Every filter is optional (an empty string is no filter) and they combine with AND.
 type RuleFilters struct {
@@ -838,8 +929,11 @@ type Settings struct {
 	ExcludedStatuses []string `json:"excludedStatuses"`
 	JiraSiteId       *string  `json:"jiraSiteId"`
 	Polling          struct {
+		// GithubSec Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time.
 		GithubSec PollingSeconds `json:"githubSec"`
-		JiraSec   PollingSeconds `json:"jiraSec"`
+
+		// JiraSec Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time.
+		JiraSec PollingSeconds `json:"jiraSec"`
 	} `json:"polling"`
 	Theme SettingsTheme `json:"theme"`
 }
@@ -867,9 +961,20 @@ type Snapshot struct {
 
 // SnapshotPr defines model for SnapshotPr.
 type SnapshotPr struct {
-	BaseRef          string                    `json:"baseRef"`
-	Ci               Ci                        `json:"ci"`
-	CommittedAt      *time.Time                `json:"committedAt"`
+	// Additions Lines added by the pull request. Null for a snapshot stored before the field existed.
+	Additions *int `json:"additions"`
+
+	// Approvals have counts the distinct reviewers whose latest review is APPROVED, need is the repository's approvalsRequired, and changesRequested counts the reviewers whose latest review requests changes. The merge is refused, here and on the server, while have is below need ("Needs N approvals, has M").
+	Approvals Approvals `json:"approvals"`
+
+	// Author Login of the user who opened the pull request. Null for a deleted account and for a snapshot stored before the field existed.
+	Author      *string    `json:"author"`
+	BaseRef     string     `json:"baseRef"`
+	Ci          Ci         `json:"ci"`
+	CommittedAt *time.Time `json:"committedAt"`
+
+	// Deletions Lines removed by the pull request. Null for a snapshot stored before the field existed.
+	Deletions        *int                      `json:"deletions"`
 	HeadRef          string                    `json:"headRef"`
 	HeadSha          string                    `json:"headSha"`
 	Id               string                    `json:"id"`
@@ -890,6 +995,9 @@ type SnapshotPr struct {
 	TicketLookup TicketLookup      `json:"ticketLookup"`
 	Tickets      []SnapshotTicket  `json:"tickets"`
 	Title        string            `json:"title"`
+
+	// UpdatedAt When the pull request last changed on GitHub. Null for a snapshot stored before the field existed.
+	UpdatedAt *time.Time `json:"updatedAt"`
 }
 
 // SnapshotPrMergeable defines model for SnapshotPr.Mergeable.
@@ -934,10 +1042,13 @@ type SourceState string
 
 // SourceStatus defines model for SourceStatus.
 type SourceStatus struct {
-	Error    *string     `json:"error"`
-	ResetAt  *time.Time  `json:"resetAt"`
-	State    SourceState `json:"state"`
-	SyncedAt *time.Time  `json:"syncedAt"`
+	Error *string `json:"error"`
+
+	// RateLimit The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
+	RateLimit *RateLimitUsage `json:"rateLimit,omitempty"`
+	ResetAt   *time.Time      `json:"resetAt"`
+	State     SourceState     `json:"state"`
+	SyncedAt  *time.Time      `json:"syncedAt"`
 }
 
 // Sources defines model for Sources.
@@ -1090,6 +1201,9 @@ type InvalidLaunchToken = Problem
 // NotFound defines model for NotFound.
 type NotFound = Problem
 
+// ReviewConflict defines model for ReviewConflict.
+type ReviewConflict = MergeProblem
+
 // TooManyRequests defines model for TooManyRequests.
 type TooManyRequests = Problem
 
@@ -1119,8 +1233,17 @@ type PutGithubPatJSONRequestBody = PatRequest
 // CompleteOAuthJSONRequestBody defines body for CompleteOAuth for application/json ContentType.
 type CompleteOAuthJSONRequestBody = OAuthComplete
 
+// ApprovePrJSONRequestBody defines body for ApprovePr for application/json ContentType.
+type ApprovePrJSONRequestBody = ApproveRequest
+
 // MergePrJSONRequestBody defines body for MergePr for application/json ContentType.
 type MergePrJSONRequestBody = MergeRequest
+
+// MarkPrReadyJSONRequestBody defines body for MarkPrReady for application/json ContentType.
+type MarkPrReadyJSONRequestBody = ReadyRequest
+
+// RequestChangesPrJSONRequestBody defines body for RequestChangesPr for application/json ContentType.
+type RequestChangesPrJSONRequestBody = RequestChangesRequest
 
 // PutPrTicketsJSONRequestBody defines body for PutPrTickets for application/json ContentType.
 type PutPrTicketsJSONRequestBody = TicketLinks
@@ -1169,9 +1292,18 @@ type ServerInterface interface {
 	// CompleteOAuth Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(w http.ResponseWriter, r *http.Request)
+	// ApprovePr Approve a pull request
+	// (POST /api/prs/{id}/approve)
+	ApprovePr(w http.ResponseWriter, r *http.Request, id PrId)
 	// MergePr Merge a pull request and move its tickets
 	// (POST /api/prs/{id}/merge)
 	MergePr(w http.ResponseWriter, r *http.Request, id PrId, params MergePrParams)
+	// MarkPrReady Mark a draft pull request ready for review
+	// (POST /api/prs/{id}/ready)
+	MarkPrReady(w http.ResponseWriter, r *http.Request, id PrId)
+	// RequestChangesPr Request changes on a pull request
+	// (POST /api/prs/{id}/request-changes)
+	RequestChangesPr(w http.ResponseWriter, r *http.Request, id PrId)
 	// PutPrTickets Set the manual ticket links and the hidden keys of a pull request
 	// (PUT /api/prs/{id}/tickets)
 	PutPrTickets(w http.ResponseWriter, r *http.Request, id PrId)
@@ -1403,6 +1535,32 @@ func (siw *ServerInterfaceWrapper) CompleteOAuth(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ApprovePr operation middleware
+func (siw *ServerInterfaceWrapper) ApprovePr(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id PrId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApprovePr(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // MergePr operation middleware
 func (siw *ServerInterfaceWrapper) MergePr(w http.ResponseWriter, r *http.Request) {
 
@@ -1448,6 +1606,58 @@ func (siw *ServerInterfaceWrapper) MergePr(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.MergePr(w, r, id, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkPrReady operation middleware
+func (siw *ServerInterfaceWrapper) MarkPrReady(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id PrId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkPrReady(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestChangesPr operation middleware
+func (siw *ServerInterfaceWrapper) RequestChangesPr(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id PrId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestChangesPr(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2022,6 +2232,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/rules", wrapper.PutRules)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/rules/preview", wrapper.PreviewRule)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prs/{id}/merge", wrapper.MergePr)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prs/{id}/approve", wrapper.ApprovePr)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prs/{id}/request-changes", wrapper.RequestChangesPr)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/prs/{id}/ready", wrapper.MarkPrReady)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/retries", wrapper.ListRetries)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/retries/{id}", wrapper.DismissRetry)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/retries/{id}", wrapper.RetryTransition)
@@ -2041,6 +2254,8 @@ type ForbiddenApplicationProblemPlusJSONResponse Problem
 type InvalidLaunchTokenApplicationProblemPlusJSONResponse Problem
 
 type NotFoundApplicationProblemPlusJSONResponse Problem
+
+type ReviewConflictApplicationProblemPlusJSONResponse MergeProblem
 
 type TooManyRequestsApplicationProblemPlusJSONResponse Problem
 
@@ -2330,6 +2545,125 @@ func (response CompleteOAuth502ApplicationProblemPlusJSONResponse) VisitComplete
 	return err
 }
 
+type ApprovePrRequestObject struct {
+	Id   PrId `json:"id"`
+	Body *ApprovePrJSONRequestBody
+}
+
+type ApprovePrResponseObject interface {
+	VisitApprovePrResponse(w http.ResponseWriter) error
+}
+
+type ApprovePr200JSONResponse ReviewResult
+
+func (response ApprovePr200JSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr403ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ForbiddenApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr404ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr409ApplicationProblemPlusJSONResponse struct {
+	ReviewConflictApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr409ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ReviewConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr422ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr429ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.TooManyRequestsApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ApprovePr502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response ApprovePr502ApplicationProblemPlusJSONResponse) VisitApprovePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type MergePrRequestObject struct {
 	Id     PrId `json:"id"`
 	Params MergePrParams
@@ -2437,6 +2771,244 @@ type MergePr502ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response MergePr502ApplicationProblemPlusJSONResponse) VisitMergePrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReadyRequestObject struct {
+	Id   PrId `json:"id"`
+	Body *MarkPrReadyJSONRequestBody
+}
+
+type MarkPrReadyResponseObject interface {
+	VisitMarkPrReadyResponse(w http.ResponseWriter) error
+}
+
+type MarkPrReady200JSONResponse ReviewResult
+
+func (response MarkPrReady200JSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady403ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ForbiddenApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady404ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady409ApplicationProblemPlusJSONResponse struct {
+	ReviewConflictApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady409ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ReviewConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady422ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady429ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.TooManyRequestsApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type MarkPrReady502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response MarkPrReady502ApplicationProblemPlusJSONResponse) VisitMarkPrReadyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPrRequestObject struct {
+	Id   PrId `json:"id"`
+	Body *RequestChangesPrJSONRequestBody
+}
+
+type RequestChangesPrResponseObject interface {
+	VisitRequestChangesPrResponse(w http.ResponseWriter) error
+}
+
+type RequestChangesPr200JSONResponse ReviewResult
+
+func (response RequestChangesPr200JSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr403ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ForbiddenApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr404ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr409ApplicationProblemPlusJSONResponse struct {
+	ReviewConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr409ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ReviewConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr422ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr429ApplicationProblemPlusJSONResponse struct {
+	TooManyRequestsApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr429ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.TooManyRequestsApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RequestChangesPr502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response RequestChangesPr502ApplicationProblemPlusJSONResponse) VisitRequestChangesPrResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
@@ -3253,9 +3825,18 @@ type StrictServerInterface interface {
 	// CompleteOAuth Finish an OAuth authorization with the code and state from the provider redirect
 	// (POST /api/oauth/complete)
 	CompleteOAuth(ctx context.Context, request CompleteOAuthRequestObject) (CompleteOAuthResponseObject, error)
+	// ApprovePr Approve a pull request
+	// (POST /api/prs/{id}/approve)
+	ApprovePr(ctx context.Context, request ApprovePrRequestObject) (ApprovePrResponseObject, error)
 	// MergePr Merge a pull request and move its tickets
 	// (POST /api/prs/{id}/merge)
 	MergePr(ctx context.Context, request MergePrRequestObject) (MergePrResponseObject, error)
+	// MarkPrReady Mark a draft pull request ready for review
+	// (POST /api/prs/{id}/ready)
+	MarkPrReady(ctx context.Context, request MarkPrReadyRequestObject) (MarkPrReadyResponseObject, error)
+	// RequestChangesPr Request changes on a pull request
+	// (POST /api/prs/{id}/request-changes)
+	RequestChangesPr(ctx context.Context, request RequestChangesPrRequestObject) (RequestChangesPrResponseObject, error)
 	// PutPrTickets Set the manual ticket links and the hidden keys of a pull request
 	// (PUT /api/prs/{id}/tickets)
 	PutPrTickets(ctx context.Context, request PutPrTicketsRequestObject) (PutPrTicketsResponseObject, error)
@@ -3554,6 +4135,39 @@ func (sh *strictHandler) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// ApprovePr operation middleware
+func (sh *strictHandler) ApprovePr(w http.ResponseWriter, r *http.Request, id PrId) {
+	var request ApprovePrRequestObject
+
+	request.Id = id
+
+	var body ApprovePrJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.ApprovePr(ctx, request.(ApprovePrRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApprovePr")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApprovePrResponseObject); ok {
+		if err := validResponse.VisitApprovePrResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // MergePr operation middleware
 func (sh *strictHandler) MergePr(w http.ResponseWriter, r *http.Request, id PrId, params MergePrParams) {
 	var request MergePrRequestObject
@@ -3581,6 +4195,72 @@ func (sh *strictHandler) MergePr(w http.ResponseWriter, r *http.Request, id PrId
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(MergePrResponseObject); ok {
 		if err := validResponse.VisitMergePrResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkPrReady operation middleware
+func (sh *strictHandler) MarkPrReady(w http.ResponseWriter, r *http.Request, id PrId) {
+	var request MarkPrReadyRequestObject
+
+	request.Id = id
+
+	var body MarkPrReadyJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.MarkPrReady(ctx, request.(MarkPrReadyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkPrReady")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkPrReadyResponseObject); ok {
+		if err := validResponse.VisitMarkPrReadyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RequestChangesPr operation middleware
+func (sh *strictHandler) RequestChangesPr(w http.ResponseWriter, r *http.Request, id PrId) {
+	var request RequestChangesPrRequestObject
+
+	request.Id = id
+
+	var body RequestChangesPrJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.RequestChangesPr(ctx, request.(RequestChangesPrRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RequestChangesPr")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RequestChangesPrResponseObject); ok {
+		if err := validResponse.VisitRequestChangesPrResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4193,148 +4873,176 @@ func (sh *strictHandler) GetTransitions(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"ePjt4u7i7n8GAA==",
+	"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",
+	"T2nv1tv79fPt59v/OwA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -57,6 +57,8 @@ type SyncState struct {
 	Merged []MergedPR
 	// ReadySHA maps an open pull request to the head commit it had when it became ready.
 	ReadySHA map[string]string
+	// ApprovalsNeed maps a repository id to the approvals it requires (1 to 10).
+	ApprovalsNeed map[string]int
 }
 
 // SyncWrite is what an evaluation writes next to the snapshot: the activity rows of the moves, the
@@ -265,6 +267,24 @@ func (s *Store) SyncState(ctx context.Context, since time.Time, justMerged []str
 			return st, err
 		}
 		st.ReadySHA[id] = sha
+	}
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+		return st, err
+	}
+
+	st.ApprovalsNeed = map[string]int{}
+	rows, err = s.r.QueryContext(ctx, `SELECT id, approvals_required FROM repos`)
+	if err != nil {
+		return st, err
+	}
+	for rows.Next() {
+		var id string
+		var need int
+		if err := rows.Scan(&id, &need); err != nil {
+			_ = rows.Close()
+			return st, err
+		}
+		st.ApprovalsNeed[id] = need
 	}
 	return st, errors.Join(rows.Err(), rows.Close())
 }

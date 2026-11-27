@@ -1,15 +1,15 @@
 import { act, render, screen } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fabPlacement, Footer, IDLE_MS } from './Footer';
+import { fabPlacement, Footer } from './Footer';
 
 describe('fabPlacement', () => {
   const slot = { left: 900, top: 760, width: 28 };
   const view = { width: 1000, height: 800 };
 
-  it('floats at the bottom right while the footer is below the fold', () => {
+  it('floats above the bottom edge, in line with the slot, while the footer is below the fold', () => {
     const p = fabPlacement({ top: 900, bottom: 936 }, slot, view);
-    expect(p).toEqual({ snapped: false, x: 940, y: 736, size: 44 });
+    expect(p).toEqual({ snapped: false, x: 882, y: 736, size: 44 });
   });
 
   it('snaps into the slot once the footer is fully visible', () => {
@@ -89,20 +89,18 @@ describe('Footer floating button', () => {
     expect(link().className).not.toMatch(/snapped/);
   });
 
-  it('hides while scrolling and returns after the idle time', () => {
+  it('stays visible while scrolling', () => {
     render(<Footer />);
     act(() => void vi.advanceTimersByTime(20));
     act(() => void window.dispatchEvent(new Event('scroll')));
-    expect(link().className).toMatch(/away/);
-    act(() => void vi.advanceTimersByTime(IDLE_MS + 20));
     expect(link().className).not.toMatch(/away/);
+    expect(link()).toBeVisible();
   });
 
-  it('stays put while scrolling once it is in the footer', () => {
-    footerRect = { top: 764, bottom: 800 };
+  it('turns its transitions on only after the first position settled', () => {
     render(<Footer />);
+    expect(link().className).not.toMatch(/ready/);
     act(() => void vi.advanceTimersByTime(20));
-    act(() => void window.dispatchEvent(new Event('scroll')));
-    expect(link().className).not.toMatch(/away/);
+    expect(link().className).toMatch(/ready/);
   });
 });

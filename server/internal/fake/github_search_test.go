@@ -31,3 +31,25 @@ func TestSearchHonoursAssigneeAndAuthor(t *testing.T) {
 		t.Errorf("an assigned-only pull request is only in the assignee search: %v / %v", assigned, authored)
 	}
 }
+
+func TestNodesCarryAuthorUpdateTimeAndSize(t *testing.T) {
+	now := time.Now()
+	_, body := searchBody("is:pr is:open assignee:@me archived:false", githubConfig{}, nil, now)
+	nodes := body["data"].(map[string]any)["search"].(map[string]any)["nodes"].([]any)
+	if len(nodes) == 0 {
+		t.Fatal("no nodes")
+	}
+	for _, n := range nodes {
+		m := n.(map[string]any)
+		author := m["author"].(map[string]any)["login"]
+		if author == "" || m["updatedAt"] == nil || m["additions"] == nil || m["deletions"] == nil {
+			t.Errorf("%v lacks author, updatedAt or size: %v", m["title"], m)
+		}
+		if m["title"] == "INP-102 Single sign-on" && author != "octocat" {
+			t.Errorf("a pull request the viewer opened is by the viewer, got %v", author)
+		}
+		if m["title"] == "INP-101 Add login" && (m["additions"] != 214 || m["deletions"] != 38) {
+			t.Errorf("fixture size %v +%v -%v", m["title"], m["additions"], m["deletions"])
+		}
+	}
+}

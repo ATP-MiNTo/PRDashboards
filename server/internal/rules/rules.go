@@ -25,12 +25,16 @@ const (
 	CIFailing        Trigger = "ci_failing"
 	CIPassing        Trigger = "ci_passing"
 	Merged           Trigger = "merged"
+	// NoReviewYet holds for a ready pull request nobody has reviewed. WaitingApprovals holds for a
+	// ready pull request that has some approvals, but fewer than its repository requires.
+	NoReviewYet      Trigger = "no_review_yet"
+	WaitingApprovals Trigger = "waiting_approvals"
 )
 
 // Triggers lists every trigger.
 var Triggers = []Trigger{
 	ReviewSubmitted, ReviewApproved, ChangesRequested, ReviewRequested, ReadyForReview,
-	CommitStale, CIFailing, CIPassing, Merged,
+	CommitStale, CIFailing, CIPassing, Merged, NoReviewYet, WaitingApprovals,
 }
 
 // Limits of a rule.
@@ -105,6 +109,11 @@ type PR struct {
 	CommittedAt *time.Time
 	// CI is the rollup: "passing", "failing", "running" or "none" (nothing reported).
 	CI string
+	// ApprovalsHave is the number of reviewers whose latest review is an approval, and
+	// ApprovalsNeed the number the repository requires. The caller counts them, so this package
+	// stays pure. A zero ApprovalsNeed means the count is unknown.
+	ApprovalsHave int
+	ApprovalsNeed int
 }
 
 // Ticket is a Jira ticket with the pull requests linked to it. Available is false when Jira data
@@ -307,6 +316,14 @@ func meets(r Rule, p PR, now time.Time) (string, bool) {
 		return p.HeadSHA + ":failing", p.CI == "failing" && p.HeadSHA != ""
 	case CIPassing:
 		return p.HeadSHA + ":passing", p.CI == "passing" && p.HeadSHA != ""
+	case NoReviewYet:
+		// A repository that requires reviews reports REVIEW_REQUIRED until someone reviews: that is
+		// still no decision.
+		undecided := p.ReviewDecision == "" || p.ReviewDecision == "REVIEW_REQUIRED"
+		return p.HeadSHA + ":unreviewed", !p.Draft && p.LatestReview == "" && undecided && p.HeadSHA != ""
+	case WaitingApprovals:
+		return p.HeadSHA + ":waiting", !p.Draft && p.HeadSHA != "" && p.ApprovalsNeed > 0 &&
+			p.ApprovalsHave >= 1 && p.ApprovalsHave < p.ApprovalsNeed
 	}
 	return "", false
 }

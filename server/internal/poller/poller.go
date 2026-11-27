@@ -183,7 +183,10 @@ func (p *Poller) Linked(id string) (merge.Linked, bool) {
 	for i, t := range pr.Tickets {
 		keys[i] = t.Key
 	}
-	return merge.Linked{RepoID: pr.Repo.Id, NameWithOwner: pr.Repo.NameWithOwner, Number: pr.Number, Tickets: keys}, true
+	return merge.Linked{
+		RepoID: pr.Repo.Id, NameWithOwner: pr.Repo.NameWithOwner, Number: pr.Number, Tickets: keys,
+		ApprovalsRequired: pr.Approvals.Need,
+	}, true
 }
 
 // Refs lists the branches of the open pull requests of one repository in the current snapshot.
@@ -217,14 +220,20 @@ func (p *Poller) Load(ctx context.Context) error {
 		p.cfg.Log.WarnContext(ctx, "stored snapshot is unreadable, starting empty", "err", err)
 		return nil
 	}
-	if fillRoles(&snap) {
-		if raw, err = encode(snap); err != nil {
-			return err
-		}
+	// Fields added since the snapshot was stored (author, updatedAt, additions, deletions) decode
+	// as nil; encoding again serves them as null, which is what the schema says. Roles get both.
+	fillRoles(&snap)
+	fillApprovals(&snap, p.approvalsNeeded(ctx))
+	if raw, err = encode(snap); err != nil {
+		return err
 	}
 	p.mu.Lock()
 	p.version = stored.Version
 	p.ghSrc, p.jira.state = snap.Sources.Github, snap.Sources.Jira.State
+	// The budget of the last refresh before the restart (absent in older snapshots) is kept, so a
+	// build before the first refresh still shows it and the interval still honours a low budget.
+	p.rl = rateLimitOf(p.ghSrc.RateLimit)
+	p.ghSrc.RateLimit = nil
 	if t := snap.Sources.Jira.SyncedAt; t != nil {
 		p.jira.syncedAt = *t
 	}
@@ -234,6 +243,21 @@ func (p *Poller) Load(ctx context.Context) error {
 	p.mu.Unlock()
 	p.cur.Store(&Published{Snapshot: snap, JSON: raw})
 	return nil
+}
+
+// approvalsNeeded reads the stored approvals setting of every repo once and returns a lookup that
+// gives 1 for a repo it does not know. A failed read is not an error here: the snapshot only gets
+// the default until the next refresh.
+func (p *Poller) approvalsNeeded(ctx context.Context) func(repoID string) int {
+	need := map[string]int{}
+	repos, err := p.cfg.Store.Repos(ctx)
+	if err != nil {
+		p.cfg.Log.WarnContext(ctx, "read repos for the stored snapshot", "err", err)
+	}
+	for _, r := range repos {
+		need[r.ID] = r.ApprovalsRequired
+	}
+	return func(id string) int { return need[id] }
 }
 
 // Status is the state of the sync machinery for the top bar.
@@ -343,9 +367,17 @@ func (p *Poller) publishStatus() {
 	}
 }
 
-// Interval is the wait between GitHub refreshes: the configured interval, doubled while less than
-// a tenth of the rate limit is left and the limit has not reset yet (TECH_SPEC 10.4).
+// MinInterval is the shortest wait between refreshes of one source. The settings allow 30 seconds
+// at the least, and a value stored below that (a hand-edited database) is raised to it, so the
+// GraphQL budget is never spent faster than the contract says.
+const MinInterval = 30 * time.Second
+
+// Interval is the wait between GitHub refreshes: the configured interval (at least MinInterval),
+// doubled while less than a tenth of the rate limit is left and the limit has not reset yet
+// (TECH_SPEC 10.4). Rate limit answers add their own wait (Retry-After, the reset time or an
+// exponential backoff) on top, in plan.
 func Interval(base time.Duration, rl github.RateLimit, now time.Time) time.Duration {
+	base = max(base, MinInterval)
 	if rl.Low() && now.Before(rl.ResetAt) {
 		return 2 * base
 	}
@@ -402,7 +434,7 @@ func (p *Poller) plan(st store.Settings, now time.Time) (request, time.Duration)
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.nextGH = later(p.lastGH.Add(Interval(time.Duration(st.GitHubSec)*time.Second, p.rl, now)), p.ghBackoff)
-	p.nextJira = later(p.lastJira.Add(time.Duration(st.JiraSec)*time.Second), p.jiraBackoff)
+	p.nextJira = later(p.lastJira.Add(max(time.Duration(st.JiraSec)*time.Second, MinInterval)), p.jiraBackoff)
 	req := request{github: !now.Before(p.nextGH), jira: !now.Before(p.nextJira)}
 	if req.github || req.jira {
 		return req, 0

@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   getRetries: vi.fn(),
   getAccounts: vi.fn(),
   getSetup: vi.fn(),
+  getRules: vi.fn(),
+  getJiraOptions: vi.fn(),
 }));
 const renders = vi.hoisted(() => new Map<string, number>());
 
@@ -86,6 +88,8 @@ beforeEach(() => {
   api.getRepos.mockResolvedValue({ repos: [] });
   api.getActivity.mockResolvedValue({ items: [], nextCursor: null });
   api.getRetries.mockResolvedValue({ retries: [] });
+  api.getRules.mockResolvedValue({ rules: [] });
+  api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
   api.getAccounts.mockResolvedValue({
     github: { connected: false, login: null, method: null, warning: null },
     jira: { connected: false, needsReconnect: false, sites: [], selectedSiteId: null },
@@ -97,50 +101,70 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
   document.documentElement.removeAttribute('data-mode');
   document.documentElement.removeAttribute('data-theme');
+  localStorage.clear();
 });
 
 describe('CommandTable', () => {
-  it('shows the columns in order, one row per pull request, and the merge reason', async () => {
+  it('shows one card per pull request, with its controls and the merge reason', async () => {
     renderWithClient(<CommandTable />);
     expect(await screen.findByText('Add login')).toBeInTheDocument();
-    const heads = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(heads).toEqual([
-      'Repo / PR',
-      'Ticket',
-      'Last commit',
-      'Review',
-      'CI',
-      'Method',
-      'Merge',
-    ]);
+    expect(document.querySelectorAll('article[data-pr]')).toHaveLength(4);
+    expect(document.querySelector('table')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Add login' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Add login' })).toHaveAttribute(
       'href',
       'https://github.com/acme/web/pull/1',
     );
-    expect(screen.getByRole('link', { name: 'INP-1' })).toBeInTheDocument();
-    const child = screen.getByText('SSO on top').closest('tr')!;
-    expect(within(child).getByText('Merge after #1')).toBeInTheDocument();
-    expect(within(child).getByRole('button', { name: 'Merge' })).toBeDisabled();
-    expect(
-      within(screen.getByText('Plain fix').closest('tr')!).getByText('Draft', { selector: 'div' }),
-    ).toBeInTheDocument();
+    const own = screen.getByText('Add login').closest('article')!;
+    expect(within(own).getByRole('link', { name: 'INP-1 · In Review' })).toBeInTheDocument();
+    const child = screen.getByText('SSO on top').closest('article')!;
+    const blocked = within(child).getByRole('button', { name: 'Merge' });
+    expect(blocked).toHaveAttribute('aria-disabled', 'true');
+    expect(blocked).toHaveAccessibleDescription('Merge after #1');
+    expect(within(child).getByRole('checkbox', { name: 'Hide #2' })).toBeInTheDocument();
+    const draft = screen.getByText('Plain fix').closest('article')!;
+    expect(within(draft).getByText('Draft', { selector: 'span' })).toBeInTheDocument();
+    expect(within(draft).getByRole('button', { name: 'Ready' })).toBeInTheDocument();
+    expect(within(draft).queryByRole('button', { name: 'Merge' })).toBeNull();
     expect(screen.getByText('Merge conflicts')).toBeInTheDocument();
-    expect(screen.getByText('Stack of 2')).toBeInTheDocument();
   });
 
-  it('counts the stat strip and filters with the chips', async () => {
+  it('draws a stack as one group with a banner above its cards', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    const stats = document.querySelector('dl')!;
-    expect(stats.textContent).toBe('Open4Ready1Blocked2Draft1Stale1');
-    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
-    expect(screen.queryByText('Add login')).toBeNull();
-    expect(screen.getByText('Plain fix')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stale' }));
-    expect(screen.getByText('Conflicted')).toBeInTheDocument();
-    expect(screen.queryByText('Plain fix')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    const group = screen.getByRole('region', { name: 'Stack' });
+    expect(within(group).getByText('STACK')).toBeInTheDocument();
+    expect(within(group).getByText('2 PRs, merge in order')).toBeInTheDocument();
+    expect(within(group).getAllByText('INP-1 · In Review').length).toBeGreaterThan(0);
+    expect(group.querySelectorAll('article[data-pr]')).toHaveLength(2);
+    expect(within(group).getByText('Stack 1/2')).toBeInTheDocument();
+    expect(within(group).getByText('Stack 2/2')).toBeInTheDocument();
+  });
+
+  it('counts the stat tiles and filters with them', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const tiles = screen.getByRole('group', { name: 'Summary' });
+    expect(
+      within(tiles)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Showing4', 'Ready to merge1', 'Running CI0', 'Stacks1']);
+    const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+    expect(tile(/^Showing/)).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(tile(/^Stacks/));
+    expect(tile(/^Stacks/)).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Add login')).toBeInTheDocument();
+    expect(screen.queryByText('Plain fix')).toBeNull();
+    fireEvent.click(tile(/^Ready to merge/));
+    expect(screen.queryByText('Conflicted')).toBeNull();
+    expect(screen.queryByText('Plain fix')).toBeNull();
+    expect(screen.queryByText('SSO on top')).toBeNull();
+    expect(screen.getByText('Add login')).toBeInTheDocument();
+    fireEvent.click(tile(/^Running CI/));
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
+    fireEvent.click(tile(/^Showing/));
+    expect(screen.getByText('Plain fix')).toBeInTheDocument();
   });
 
   it('shows an Authorize link for a blocked organization while other rows load', async () => {
@@ -182,7 +206,7 @@ describe('CommandTable', () => {
     expect(await screen.findByText(/rate limit reached/)).toBeInTheDocument();
     expect(screen.getByText('Jira unreachable, retry the lookup')).toBeInTheDocument();
     expect(screen.getByText('GitHub returns at most 1,000 results.')).toBeInTheDocument();
-    expect(screen.getByText('No pull requests match.')).toBeInTheDocument();
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
   });
 
   it('offers to connect GitHub when it is disconnected', async () => {
@@ -202,7 +226,8 @@ describe('CommandTable', () => {
   it('syncs on demand and follows the sync status events', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
+    expect(screen.queryByRole('button', { name: 'Sync' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(api.syncNow).toHaveBeenCalledTimes(1));
     act(() => {
       FakeEventSource.last!.emit('sync-status', {
@@ -213,7 +238,9 @@ describe('CommandTable', () => {
         nextJiraAt: null,
       });
     });
-    await screen.findByRole('button', { name: 'Syncing' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Refresh' })).toHaveAttribute('aria-busy', 'true'),
+    );
     act(() => {
       FakeEventSource.last!.emit('sync-status', {
         running: false,
@@ -223,8 +250,12 @@ describe('CommandTable', () => {
         nextJiraAt: null,
       });
     });
-    expect(await screen.findByRole('button', { name: 'Sync' })).toBeEnabled();
-    expect(screen.getByText(/Next sync in 1m/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Refresh' })).not.toHaveAttribute('aria-busy'),
+    );
+    // The sync details are in the popover of the refresh button.
+    fireEvent.focus(screen.getByRole('button', { name: 'Refresh' }));
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/Next sync in 1m/);
   });
 
   it('refetches the snapshot on a snapshot event and ignores malformed status events', async () => {
@@ -280,7 +311,7 @@ describe('CommandTable', () => {
     for (const id of ['a', 'b', 'd']) expect(renders.get(id)).toBe(before.get(id));
   });
 
-  it('shows the resolved merge method in the Method column', async () => {
+  it('shows the resolved merge method and where it comes from in the merge dialog', async () => {
     api.getSnapshot.mockResolvedValue(
       snapshot([
         pr('a', 1, {
@@ -296,25 +327,27 @@ describe('CommandTable', () => {
       ]),
     );
     renderWithClient(<CommandTable />);
-    const row = (await screen.findByText('Add login')).closest('tr')!;
-    expect(within(row).getByRole('combobox', { name: 'Merge method' })).toHaveTextContent(
-      'Merge commit (default)',
+    const row = (await screen.findByText('Add login')).closest('article')!;
+    expect(within(row).queryByRole('combobox', { name: 'Merge method' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
+    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    expect(within(dialog).getByRole('button', { name: 'Merge method' })).toHaveTextContent(
+      'merge commit',
     );
-    expect(within(row).getByText('Branch rule main')).toBeInTheDocument();
+    expect(within(dialog).getByText(/from branch rule main/)).toBeInTheDocument();
     expect(
-      within(row).getByText('Repo disallows squash merge, using merge commit'),
+      within(dialog).getByText('Repo disallows squash merge, using merge commit'),
     ).toBeInTheDocument();
   });
 
-  it('opens the merge panel under a ready row and closes it again', async () => {
+  it('opens the merge dialog from a ready card and closes it again', async () => {
     renderWithClient(<CommandTable />);
-    const row = (await screen.findByText('Add login')).closest('tr')!;
-    const button = within(row).getByRole('button', { name: 'Merge' });
-    fireEvent.click(button);
-    expect(button).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('group', { name: 'Merge #1' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('group', { name: 'Merge #1' })).toBeNull();
+    const row = (await screen.findByText('Add login')).closest('article')!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
+    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    expect(within(dialog).getByText('Add login')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Merge acme/web #1?' })).toBeNull();
   });
 
   it('opens the settings sidebar from the burger and closes it with Escape', async () => {
@@ -327,33 +360,152 @@ describe('CommandTable', () => {
     expect(burger).toHaveAttribute('aria-expanded', 'true');
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(
-      await within(dialog).findByRole('heading', { name: 'Repositories' }),
+      await within(dialog).findByRole('heading', { name: /^Repositories setting/ }),
     ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(burger).toHaveFocus();
   });
 
-  it('opens the account panel from the Account button', async () => {
+  it('opens the status sync rules dialog from the sidebar and gives the focus back on close', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    const account = screen.getByRole('button', { name: 'Account' });
-    account.focus();
-    fireEvent.click(account);
-    const dialog = screen.getByRole('dialog', { name: 'Account' });
-    expect(
-      await within(dialog).findByRole('heading', { name: 'Connected accounts' }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close account' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(account).toHaveFocus();
-
-    fireEvent.click(account);
-    fireEvent.click(screen.getByTestId('side-panel-scrim'));
-    expect(screen.queryByRole('dialog')).toBeNull();
-
     fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const button = await screen.findByRole('button', { name: 'Status sync rules' });
+    expect(screen.queryByRole('dialog', { name: 'Status sync rules' })).toBeNull();
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole('dialog', { name: 'Status sync rules' });
+    expect(await within(dialog).findByText('No rules yet.')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Status sync rules' })).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
+    expect(button).toHaveFocus();
+  });
+
+  it('opens the Accounts dialog from Manage accounts in the sidebar', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const manage = await screen.findByRole('button', { name: 'Manage accounts' });
+    manage.focus();
+    fireEvent.click(manage);
+    const dialog = await screen.findByRole('dialog', { name: 'Accounts' });
+    expect(await within(dialog).findByRole('region', { name: 'GitHub' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('region', { name: 'Jira' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Accounts' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(manage).toHaveFocus();
+
+    fireEvent.click(manage);
+    fireEvent.click(await screen.findByTestId('modal-scrim'));
+    expect(screen.queryByRole('dialog', { name: 'Accounts' })).toBeNull();
+  });
+
+  it('shows the connected accounts at the bottom of the sidebar', async () => {
+    api.getAccounts.mockResolvedValue({
+      github: { connected: true, login: 'minatpt', method: 'app' },
+      jira: {
+        connected: true,
+        needsReconnect: false,
+        sites: [{ id: 's1', name: 'acme', url: 'https://acme.atlassian.net' }],
+        selectedSiteId: 's1',
+      },
+    });
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    expect(await within(accounts).findByText('minatpt')).toBeInTheDocument();
+    expect(within(accounts).getByText('GitHub App')).toBeInTheDocument();
+    expect(within(accounts).getByText('acme')).toBeInTheDocument();
+    expect(within(accounts).getByText('Atlassian')).toBeInTheDocument();
+  });
+
+  it('shows the GitHub API usage of the last refresh in the accounts eyebrow row', async () => {
+    api.getSnapshot.mockResolvedValue(
+      snapshot(rows(), {
+        sources: {
+          github: {
+            state: 'ok',
+            syncedAt: '2026-11-24T11:59:00Z',
+            error: null,
+            resetAt: null,
+            rateLimit: { used: 4180, limit: 5000, resetAt: '2026-11-24T13:00:00Z' },
+          },
+          jira: { state: 'ok', syncedAt: '2026-11-24T11:59:00Z', error: null, resetAt: null },
+          blockedOrgs: [],
+        },
+      }),
+    );
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    const usage = await within(accounts).findByText('API 4180/5000');
+    expect(usage).toHaveAttribute('aria-hidden', 'true');
+    expect(within(accounts).getByText('GitHub API usage 4180 of 5000')).toBeInTheDocument();
+    expect(within(accounts).getByText('Accounts').parentElement).toContainElement(usage);
+  });
+
+  it('shows no API usage while the snapshot has no rate limit', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    await within(accounts).findByRole('button', { name: 'Manage accounts' });
+    expect(within(accounts).queryByText(/^API /)).toBeNull();
+    expect(within(accounts).queryByText(/GitHub API usage/)).toBeNull();
+  });
+
+  it('has no Sync or Account button in the header', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    expect(screen.queryByRole('button', { name: 'Sync' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Theme:/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('swaps the list for the History view and back, and the header search filters it', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const button = screen.getByRole('button', { name: 'History' });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    const view = screen.getByRole('region', { name: 'Merged pull requests' });
+    expect(within(view).getByText(/Nothing merged here yet/)).toBeInTheDocument();
+    expect(screen.queryByText('Add login')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Summary' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('PRDashboards · History');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Add login')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Merged pull requests' })).toBeNull();
+  });
+
+  it('leaves out the pull requests of a repository switched off in the sidebar', async () => {
+    localStorage.setItem('prd-repos-off', JSON.stringify(['R1']));
+    renderWithClient(<CommandTable />);
+    expect(await screen.findByText('Nothing here')).toBeInTheDocument();
+    expect(document.querySelectorAll('article[data-pr]')).toHaveLength(0);
+    localStorage.removeItem('prd-repos-off');
+  });
+
+  it('switches the theme from the header button', async () => {
+    api.getSettings.mockResolvedValue({ ...settings, theme: 'light' });
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Theme: light' }));
+    await waitFor(() =>
+      expect(api.putSettings).toHaveBeenLastCalledWith({ ...settings, theme: 'dark' }),
+    );
   });
 });

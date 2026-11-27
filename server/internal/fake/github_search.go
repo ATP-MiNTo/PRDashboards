@@ -32,7 +32,18 @@ type fixturePR struct {
 	authored, unassigned bool
 	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
 	stacked bool
+	// author, updatedAgo, additions and deletions fill the author, updatedAt and diff size. Left
+	// zero they default to a colleague (the viewer, octocat, for an authored pull request), 5
+	// half the age of the last commit, and 12 and 3 lines.
+	author               string
+	updatedAgo           time.Duration
+	additions, deletions int
+	// extra are the reviews the viewer submitted through the fake.
+	extra []fakeReview
 }
+
+// viewerOpened reports whether the viewer (octocat) opened the pull request.
+func (p fixturePR) viewerOpened() bool { return p.authored }
 
 // matchesViewer reports whether the search query selects the pull request for the viewer.
 // A query with neither assignee:@me nor author:@me matches everything.
@@ -94,6 +105,25 @@ func stackedPRs() []fixturePR {
 	}
 }
 
+// reviewPRs are the pull requests of the review actions, all in acme/review: #31 has one approval,
+// #32 is a draft and #33 was opened by the viewer.
+func reviewPRs() []fixturePR {
+	return []fixturePR{
+		{
+			repo: "acme/review", org: "acme", number: 31, title: "REV-31 Needs two approvals", head: "feat/rev-31", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", reviewApproved: true, committedAgo: time.Hour, rollup: "SUCCESS",
+		},
+		{
+			repo: "acme/review", org: "acme", number: 32, title: "REV-32 Draft to finish", head: "feat/rev-32", base: "main", draft: true,
+			mergeable: "MERGEABLE", mergeState: "DRAFT", decision: "", committedAgo: 2 * time.Hour, rollup: "",
+		},
+		{
+			repo: "acme/review", org: "acme", number: 33, title: "REV-33 My own change", head: "feat/rev-33", base: "main", authored: true,
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 3 * time.Hour, rollup: "SUCCESS",
+		},
+	}
+}
+
 // fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
 // requests the config asks for.
 func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
@@ -104,9 +134,23 @@ func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
 	if cfg.Stacked {
 		prs = append(prs, stackedPRs()...)
 	}
+	if cfg.Review {
+		prs = append(prs, reviewPRs()...)
+	}
 	for i, p := range prs {
 		if slices.Contains(cfg.Approved, p.number) {
 			prs[i].decision, prs[i].reviewApproved = "APPROVED", true
+		}
+		// What the review actions changed: a draft marked ready, and the viewer's reviews.
+		if slices.Contains(cfg.ready, p.id()) {
+			prs[i].draft, prs[i].mergeState = false, "CLEAN"
+		}
+		for _, rv := range cfg.reviews {
+			if rv.PR != p.id() {
+				continue
+			}
+			prs[i].extra = append(prs[i].extra, rv)
+			prs[i].decision = map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}[rv.Event]
 		}
 	}
 	return prs
@@ -119,7 +163,7 @@ func basePRs(now time.Time) []fixturePR {
 	}
 	return []fixturePR{
 		{
-			repo: "acme/web", org: "acme", number: 101, title: "INP-101 Add login", head: "feat/INP-101-login", base: "main",
+			repo: "acme/web", org: "acme", number: 101, additions: 214, deletions: 38, title: "INP-101 Add login", head: "feat/INP-101-login", base: "main",
 			mergeable: "MERGEABLE", mergeState: "BLOCKED", decision: "APPROVED", committedAgo: 3 * time.Hour, rollup: "FAILURE", reviewApproved: true,
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme/web", 1001)+"/job/1", ago(20*time.Minute), ago(18*time.Minute)),
@@ -129,7 +173,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/web", org: "acme", number: 102, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
+			repo: "acme/web", org: "acme", number: 102, additions: 96, deletions: 12, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 90 * time.Minute, rollup: "SUCCESS", requested: true,
 			authored: true, // assigned and opened by the viewer: both searches find it
 			checks: []map[string]any{
@@ -139,19 +183,19 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/web", org: "acme", number: 103, title: "INP-103 Account menu", head: "feat/INP-103-menu", base: "feat/INP-102-sso",
+			repo: "acme/web", org: "acme", number: 103, additions: 140, deletions: 4, title: "INP-103 Account menu", head: "feat/INP-103-menu", base: "feat/INP-102-sso",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "", committedAgo: 40 * time.Minute, rollup: "PENDING",
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "QUEUED", "", run("acme/web", 1003)+"/job/1", ago(time.Minute), time.Time{}),
 			},
 		},
 		{
-			repo: "acme/api", org: "acme", number: 7, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
+			repo: "acme/api", org: "acme", number: 7, additions: 58, deletions: 61, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
 			mergeable: "UNKNOWN", mergeState: "DRAFT", decision: "", committedAgo: 5 * 24 * time.Hour, rollup: "",
 			authored: true, unassigned: true, // opened by the viewer, assigned to nobody: only author:@me finds it
 		},
 		{
-			repo: "acme/api", org: "acme", number: 8, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
+			repo: "acme/api", org: "acme", number: 8, additions: 22, deletions: 7, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
 			mergeable: "CONFLICTING", mergeState: "DIRTY", decision: "APPROVED", committedAgo: 26 * time.Hour, rollup: "FAILURE", reviewApproved: true,
 			checks: []map[string]any{
 				statusContext("buildkite/api", "FAILURE", "https://buildkite.example.org/acme/api/builds/311", ago(25*time.Hour)),
@@ -159,7 +203,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme/api", org: "acme", number: 9, title: "Bump dependencies", head: "chore/deps", base: "main",
+			repo: "acme/api", org: "acme", number: 9, additions: 512, deletions: 690, title: "Bump dependencies", head: "chore/deps", base: "main",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", committedAgo: time.Hour, rollup: "SUCCESS", reviewApproved: true,
 			totalChecks: 62,
 			checks: []map[string]any{
@@ -167,7 +211,7 @@ func basePRs(now time.Time) []fixturePR {
 			},
 		},
 		{
-			repo: "acme-corp/billing", org: "acme-corp", number: 5, title: "INP-104 Invoice export", head: "feat/INP-104-export", base: "main",
+			repo: "acme-corp/billing", org: "acme-corp", number: 5, additions: 88, deletions: 15, title: "INP-104 Invoice export", head: "feat/INP-104-export", base: "main",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", committedAgo: 2 * time.Hour, rollup: "SUCCESS", reviewApproved: true,
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme-corp/billing", 3001)+"/job/1", ago(60*time.Minute), ago(58*time.Minute)),
@@ -213,6 +257,15 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 			"submittedAt": now.Add(-time.Hour).UTC().Format(time.RFC3339), "author": map[string]any{"login": "alice"},
 		})
 	}
+	// The viewer's latest review replaces the one before it, as latestReviews does.
+	if n := len(p.extra); n > 0 {
+		last := p.extra[n-1]
+		state := map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}[last.Event]
+		reviews = append(reviews, map[string]any{
+			"id": fmt.Sprintf("RV_%d_viewer", p.number), "state": state,
+			"submittedAt": now.UTC().Format(time.RFC3339), "author": map[string]any{"login": "octocat"},
+		})
+	}
 	requests := []any{}
 	if p.requested {
 		requests = append(requests, map[string]any{"requestedReviewer": map[string]any{"__typename": "User", "id": "U_bob"}})
@@ -221,12 +274,27 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 	if p.decision != "" {
 		decision = p.decision
 	}
+	author, updatedAgo, additions, deletions := p.author, p.updatedAgo, p.additions, p.deletions
+	if author == "" {
+		author = "priya"
+		if p.authored {
+			author = "octocat"
+		}
+	}
+	if updatedAgo == 0 {
+		updatedAgo = p.committedAgo / 2
+	}
+	if additions == 0 && deletions == 0 {
+		additions, deletions = 12, 3
+	}
 	return map[string]any{
 		"__typename": "PullRequest",
 		"id":         p.id(), "state": state, "isCrossRepository": false,
 		"number": p.number, "title": p.title, "url": fmt.Sprintf("https://github.com/%s/pull/%d", p.repo, p.number),
 		"isDraft": p.draft, "mergeable": p.mergeable, "mergeStateStatus": p.mergeState, "reviewDecision": decision,
 		"headRefName": p.head, "headRefOid": p.headSHA(moved), "baseRefName": p.base,
+		"author": map[string]any{"login": author}, "updatedAt": now.Add(-updatedAgo).UTC().Format(time.RFC3339),
+		"additions": additions, "deletions": deletions,
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",

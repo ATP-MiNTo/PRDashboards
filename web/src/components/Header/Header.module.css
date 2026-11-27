@@ -1,0 +1,335 @@
+/* The header of the dashboard, from the approved design: two floating pills over a glass title bar. */
+
+/* The row that carries the pills. It is as high as nothing, so it adds no scroll space, and sticks
+   to the top while the page scrolls. */
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: space-between;
+  height: 0;
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  margin-top: 22px;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--text);
+  pointer-events: auto;
+  transition:
+    background-color 0.2s,
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+
+.pillLeft {
+  margin-left: 12px;
+  padding-inline: 4px;
+}
+
+.pillRight {
+  gap: 4px;
+  margin-right: 12px;
+  padding-inline: 8px;
+}
+
+/* Scrolled: the pill turns to glass. */
+.stuck {
+  border-color: oklch(var(--bc) / 0.15);
+  background: oklch(var(--b1) / 0.94);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.45);
+}
+
+/* Burger: a ghost button, square, 32px. */
+.burger {
+  composes: ui-ghost from global;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+/* The name slides out of the left pill once the page has scrolled. */
+.pillTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width 0.4s ease,
+    opacity 0.3s ease,
+    margin 0.4s ease;
+}
+
+.stuck .pillTitle {
+  max-width: 14rem;
+  margin: 0 0.6rem 0 0.1rem;
+  opacity: 1;
+}
+
+/* The summary that slides into the right pill once the stat strip has scrolled out of view. */
+.stats {
+  display: none;
+  align-items: center;
+  gap: 0.9rem;
+  max-width: 0;
+  overflow: hidden;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width 0.4s ease,
+    opacity 0.3s ease,
+    margin 0.4s ease;
+}
+
+@media (min-width: 1024px) {
+  .stats {
+    display: flex;
+  }
+}
+
+.statsOn {
+  max-width: 30rem;
+  margin: 0 0.5rem 0 0.3rem;
+  opacity: 1;
+}
+
+/* The round buttons of the right pill: ghost, 32px. */
+.ctlButton {
+  composes: ui-ghost from global;
+  width: var(--ctl-h);
+  height: var(--ctl-h);
+  padding: 0;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.ctlButton:disabled {
+  opacity: 0.6;
+}
+
+.ctlActive,
+.ctlActive:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+
+.iconBox {
+  display: inline-flex;
+}
+
+.spinIn {
+  display: inline-flex;
+  animation: spin-in 0.35s ease-out;
+}
+
+@keyframes spin-in {
+  from {
+    opacity: 0;
+    transform: rotate(-120deg) scale(0.5);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The clock hand of the history button winds three turns when the view changes. */
+.hand {
+  transform-box: view-box;
+  transform-origin: 12px 12px;
+}
+
+.wind {
+  animation: wind 1.5s cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+
+.unwind {
+  animation: unwind 1.5s cubic-bezier(0.25, 0.8, 0.3, 1);
+}
+
+@keyframes wind {
+  to {
+    transform: rotate(1080deg);
+  }
+}
+
+@keyframes unwind {
+  to {
+    transform: rotate(-1080deg);
+  }
+}
+
+/* Search: a bordered field with a magnifier (from 768px) and the full-width field of narrow screens. */
+.searchBar,
+.searchPage {
+  composes: ui-input from global;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  line-height: 2rem;
+}
+
+.searchBar {
+  display: none;
+  width: 14rem;
+}
+
+.searchPage {
+  display: flex;
+}
+
+@media (min-width: 768px) {
+  .searchBar {
+    display: flex;
+  }
+
+  .searchPage {
+    display: none;
+  }
+}
+
+.searchBar:focus-within,
+.searchPage:focus-within {
+  border-color: oklch(var(--bc) / 0.2);
+  outline: 2px solid oklch(var(--bc) / 0.2);
+  outline-offset: 2px;
+}
+
+.searchBar input,
+.searchPage input {
+  flex-grow: 1;
+  min-width: 0;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  -webkit-appearance: textfield;
+  appearance: textfield;
+}
+
+.searchBar input:focus,
+.searchPage input:focus {
+  outline: none;
+}
+
+.searchBar input::placeholder,
+.searchPage input::placeholder {
+  color: var(--sub);
+  opacity: 1;
+}
+
+/* The refresh circle shows the sync details in a popover that opens on hover and focus. */
+.refreshWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.pop {
+  position: absolute;
+  top: 100%;
+  right: -8px;
+  z-index: 40;
+  padding-top: 14px;
+}
+
+.popCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 15rem;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 28px -12px var(--shadow);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  text-align: left;
+}
+
+.popTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.source[data-state='rate_limited'],
+.source[data-state='error'],
+.source[data-state='unreachable'],
+.source[data-state='disconnected'] {
+  color: var(--warn);
+}
+
+/* The title bar: a glass pane that scrolls away. The left pill and the burger float over its start. */
+.titleWrap {
+  padding: 12px 12px 0;
+}
+
+.titleBar {
+  composes: glass from global;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 4rem;
+  padding: 0.5rem max(16px, env(safe-area-inset-right, 0px)) 0.5rem
+    max(16px, env(safe-area-inset-left, 0px));
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0 2.25rem;
+  overflow: hidden;
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill,
+  .pillTitle,
+  .stats {
+    transition: none;
+  }
+
+  .spinIn,
+  .wind,
+  .unwind {
+    animation: none;
+  }
+}

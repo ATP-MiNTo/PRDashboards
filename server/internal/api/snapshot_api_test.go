@@ -390,3 +390,21 @@ func TestJiraOptionsReturnStatusesAndProjectsAndDegradeToProjects(t *testing.T) 
 		t.Fatal("reading the options must not refresh")
 	}
 }
+
+func TestChangingTheDefaultMethodResolvesThePullRequestsAgain(t *testing.T) {
+	g := newSnapRig(t)
+	put := func(method string) {
+		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"` + method + `","deleteBranchAfterMerge":true,"jiraSiteId":null,"excludedStatuses":["Done"]}`
+		if w := g.do(http.MethodPut, "/api/settings", body, g.l.write()...); w.Code != http.StatusOK {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+	}
+	put("squash")
+	if _, relinks, _ := g.p.counts(); relinks != 0 {
+		t.Fatalf("the same default changes nothing: %d", relinks)
+	}
+	put("rebase")
+	if tr, relinks, _ := g.p.counts(); relinks != 1 || tr != 0 {
+		t.Fatalf("repositories that follow the default take it from cached data: relinks %d triggers %d", relinks, tr)
+	}
+}

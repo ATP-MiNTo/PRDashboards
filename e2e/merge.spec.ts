@@ -52,7 +52,7 @@ test.beforeEach(async ({ page, request }) => {
   await signIn(page, "merge");
   await page.goto(APP + "/");
   await expect(async () => {
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(rowOf(page, "INP-104 Invoice export")).toBeVisible({
       timeout: 3000,
     });
@@ -61,7 +61,22 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 const rowOf = (page: Page, title: string) =>
-  page.locator("tr[data-pr]").filter({ hasText: title });
+  page.locator("article[data-pr]").filter({ hasText: title });
+
+const dialogOf = (page: Page, repo: string, number: number) =>
+  page.getByRole("dialog", { name: `Merge ${repo} #${number}?` });
+
+// A ticket's status is a menu in the dialog: "Move INP-104" opens it, its items are the moves.
+const moveTo = async (page: Page, key: string, status: string) => {
+  await page.getByRole("button", { name: `Move ${key}`, exact: true }).click();
+  await page.getByRole("menuitem", { name: status, exact: true }).click();
+};
+
+// The History view replaces the list: the merges made from this page, with what became of each ticket.
+const openHistory = async (page: Page) => {
+  await page.getByRole("button", { name: "History" }).click();
+  return page.getByRole("region", { name: "Merged pull requests" });
+};
 
 test("merges and moves the ticket, with the required field", async ({
   page,
@@ -69,17 +84,15 @@ test("merges and moves the ticket, with the required field", async ({
 }) => {
   const row = rowOf(page, "INP-104 Invoice export");
   await expect(row).toBeVisible();
-  await expect(row.getByRole("combobox", { name: "Merge method" })).toHaveText(
-    "Merge commit (default)",
-  );
-  await expect(row.getByText("Branch rule main")).toBeVisible();
   await row.getByRole("button", { name: "Merge", exact: true }).click();
 
-  const panel = page.getByRole("group", { name: "Merge #5" });
-  await expect(panel.getByText("Don't move")).toBeVisible();
-  await panel.getByRole("button", { name: "Move INP-104" }).click();
-  await panel.getByRole("combobox", { name: "Move INP-104" }).click();
-  await page.getByRole("option", { name: "Move to Done" }).click();
+  const panel = dialogOf(page, "acme-corp/billing", 5);
+  await expect(panel.getByRole("button", { name: "Merge method" })).toHaveText(
+    "merge commit",
+  );
+  await expect(panel.getByText(/from branch rule main/)).toBeVisible();
+  await expect(panel.getByText(/Jira INP-104 stays in/)).toBeVisible();
+  await moveTo(page, "INP-104", "Done");
 
   const merge = panel.getByRole("button", { name: "Merge & move to Done" });
   await expect(merge).toBeDisabled();
@@ -93,10 +106,10 @@ test("merges and moves the ticket, with the required field", async ({
   await expect(merge).toBeEnabled();
   await merge.click();
 
-  const recent = page.getByRole("region", { name: "Recent merges" });
-  await expect(recent.getByText("Move INP-104 to Done")).toBeVisible();
-  await expect(recent.getByText("Failed", { exact: true })).toHaveCount(0);
   await expect(rowOf(page, "INP-104 Invoice export")).toHaveCount(0);
+  const history = await openHistory(page);
+  await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
+  await expect(history.getByText("did not move")).toHaveCount(0);
 
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(1);
@@ -118,30 +131,29 @@ test("a failed move is kept and retried", async ({ page, request }) => {
   await configure(request, "atlassian", { transitionMode: "reject" });
   const row = rowOf(page, "INP-104 Invoice export");
   await row.getByRole("button", { name: "Merge", exact: true }).click();
-  const panel = page.getByRole("group", { name: "Merge #5" });
-  await panel.getByRole("button", { name: "Move INP-104" }).click();
-  await panel.getByRole("combobox", { name: "Move INP-104" }).click();
-  await page.getByRole("option", { name: "Move to Done" }).click();
+  const panel = dialogOf(page, "acme-corp/billing", 5);
+  await moveTo(page, "INP-104", "Done");
   await panel.getByLabel("Resolution (required)").selectOption("10000");
   await panel
     .getByRole("checkbox", { name: "Confirm moving INP-104 to Done" })
     .check();
   await panel.getByRole("button", { name: "Merge & move to Done" }).click();
 
-  const steps = page.getByRole("list", { name: "Merge steps" });
+  await expect(rowOf(page, "INP-104 Invoice export")).toHaveCount(0);
+  const history = await openHistory(page);
   await expect(
-    steps.getByText("Jira rejected the move: Workflow validator failed"),
+    history.getByText("Jira rejected the move: Workflow validator failed"),
   ).toBeVisible();
-  await expect(steps.getByText("Failed", { exact: true })).toBeVisible();
+  await expect(history.getByText("INP-104 did not move")).toBeVisible();
   expect((await fakeState<GitHubState>(request, "github")).merges).toBe(1);
   expect((await fakeState<JiraState>(request, "atlassian")).statuses).toEqual(
     {},
   );
 
   await configure(request, "atlassian", { transitionMode: "" });
-  await steps.getByRole("button", { name: /^Retry/ }).click();
-  await expect(steps.getByText("Failed", { exact: true })).toHaveCount(0);
-  await expect(steps.getByText("Done", { exact: true })).toHaveCount(2);
+  await history.getByRole("button", { name: "Retry the move of INP-104" }).click();
+  await expect(history.getByText("did not move")).toHaveCount(0);
+  await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
 
   const jira = await fakeState<JiraState>(request, "atlassian");
   expect(jira.moves).toHaveLength(2);
@@ -156,7 +168,7 @@ test("a head that moved is refused and the row is refreshed", async ({
   const row = rowOf(page, "Bump dependencies");
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "Merge", exact: true }).click();
-  const panel = page.getByRole("group", { name: "Merge #9" });
+  const panel = dialogOf(page, "acme/api", 9);
   await panel
     .getByRole("checkbox", { name: "Merge without moving any ticket" })
     .check();
@@ -178,7 +190,7 @@ test("a head that moved is refused and the row is refreshed", async ({
     )
     .toBeGreaterThan(before);
   await expect(
-    page.getByRole("button", { name: "Sync", exact: true }),
+    page.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeVisible();
 
   await panel.getByRole("button", { name: "Cancel" }).click();
@@ -187,9 +199,8 @@ test("a head that moved is refused and the row is refreshed", async ({
     .getByRole("checkbox", { name: "Merge without moving any ticket" })
     .check();
   await panel.getByRole("button", { name: "Merge without ticket" }).click();
-  await expect(
-    page.getByRole("region", { name: "Recent merges" }),
-  ).toContainText("Bump dependencies");
+  await expect(rowOf(page, "Bump dependencies")).toHaveCount(0);
+  await expect(await openHistory(page)).toContainText("Bump dependencies");
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(1);
   expect(github.lastMerge.sha).toBe(headOf(9, true));
@@ -211,7 +222,7 @@ test("a token without Contents write says which permission is missing", async ({
     const row = rowOf(page, "Bump dependencies");
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: "Merge", exact: true }).click();
-    const panel = page.getByRole("group", { name: "Merge #9" });
+    const panel = dialogOf(page, "acme/api", 9);
     await panel
       .getByRole("checkbox", { name: "Merge without moving any ticket" })
       .check();
@@ -234,19 +245,20 @@ test("a stacked pull request merges through GitHub's asynchronous API", async ({
   await configure(request, "github", { stacked: true });
   const row = rowOf(page, "Stack bottom");
   await expect(async () => {
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(row).toBeVisible({ timeout: 3000 });
   }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
   await row.getByRole("button", { name: "Merge", exact: true }).click();
-  const panel = page.getByRole("group", { name: "Merge #21" });
+  const panel = dialogOf(page, "acme/stack", 21);
   await panel
     .getByRole("checkbox", { name: "Merge without moving any ticket" })
     .check();
   await panel.getByRole("button", { name: "Merge without ticket" }).click();
 
-  const recent = page.getByRole("region", { name: "Recent merges" });
-  await expect(recent).toContainText("Stack bottom", { timeout: 15_000 });
-  await expect(recent.getByText("Failed", { exact: true })).toHaveCount(0);
+  const history = await openHistory(page);
+  await expect(history).toContainText("Stack bottom", { timeout: 15_000 });
+  await expect(history.getByText("did not move")).toHaveCount(0);
+  await expect(history.getByText("Branch not deleted")).toHaveCount(0);
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(0);
   expect(github.asyncSubmits).toBe(1);

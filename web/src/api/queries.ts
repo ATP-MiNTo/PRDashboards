@@ -7,7 +7,10 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import {
+  approvePr,
   checkAccount,
+  markPrReady,
+  requestChangesPr,
   dismissRetry,
   getActivity,
   getJiraOptions,
@@ -34,11 +37,15 @@ import {
   putSettings,
   putSetupClient,
   revokeAllSessions,
+  type ApproveRequest,
   type ClientCredentials,
+  type ReadyRequest,
+  type RequestChangesRequest,
   type MergeRequest,
   type MergeResult,
   type RulesUpdate,
   type SyncRule,
+  type RepoSettings,
   type RepoUpdate,
   type ReposUpdate,
   type Provider,
@@ -140,6 +147,26 @@ function useSaveReposWith<TVars>(fn: (vars: TVars) => Promise<unknown>) {
 export const useSaveRepo = () =>
   useSaveReposWith(({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update));
 
+/**
+ * The update that changes only the approvals a repository needs (1 to 10): everything else is sent
+ * as the repository has it now, and the repository stays marked new or seen as it was.
+ */
+export const approvalsUpdate = (repo: RepoSettings, approvalsRequired: number): RepoUpdate => ({
+  defaultMethod: repo.defaultMethod,
+  inheritMethod: repo.inheritMethod,
+  deleteBranch: repo.deleteBranch,
+  branchRules: repo.branchRules,
+  clearNew: false,
+  approvalsRequired,
+});
+
+/** Saves the approvals a repository needs. The snapshot follows: its `approvals.need` changes. */
+export const useSaveApprovals = () =>
+  useSaveReposWith(
+    ({ repo, approvalsRequired }: { repo: RepoSettings; approvalsRequired: number }) =>
+      putRepo(repo.id, approvalsUpdate(repo, approvalsRequired)),
+  );
+
 /** Saves several repositories in one request. */
 export const useSaveRepos = () => useSaveReposWith((update: ReposUpdate) => putRepos(update));
 
@@ -165,11 +192,14 @@ export const useActivity = (enabled: boolean) =>
     enabled,
   });
 
-/** The outcome of a merge made in this tab, kept for the steps list and the recent merges strip. */
+/** A merge made in this tab: the pull request as it was and the server's steps, for the History view. */
 export interface RecentMerge {
   prId: string;
-  label: string;
+  /** The pull request when it was merged: the snapshot drops it soon after. */
+  pr: SnapshotPr;
   result: MergeResult;
+  /** When the server answered, in milliseconds. */
+  at: number;
 }
 
 export const useRecentMerges = <T = RecentMerge[]>(select?: (m: RecentMerge[]) => T) =>
@@ -181,7 +211,8 @@ export const useRecentMerges = <T = RecentMerge[]>(select?: (m: RecentMerge[]) =
     select,
   });
 
-const MAX_RECENT = 10;
+/** The History view keeps this many merges of the tab. */
+const MAX_RECENT = 50;
 
 /** Merges a pull request. The key identifies one panel opening, so a repeated click replays. */
 export function useMerge() {
@@ -195,11 +226,14 @@ export function useMerge() {
       id: string;
       key: string;
       body: MergeRequest;
-      label: string;
+      pr: SnapshotPr;
     }) => mergePr(id, key, body),
-    onSuccess: (result, { id, label }) =>
+    onSuccess: (result, { id, pr }) =>
       client.setQueryData<RecentMerge[]>(keys.merges, (old = []) =>
-        [{ prId: id, label, result }, ...old.filter((m) => m.prId !== id)].slice(0, MAX_RECENT),
+        [{ prId: id, pr, result, at: Date.now() }, ...old.filter((m) => m.prId !== id)].slice(
+          0,
+          MAX_RECENT,
+        ),
       ),
     onSettled: () =>
       Promise.all([
@@ -210,6 +244,23 @@ export function useMerge() {
       ]),
   });
 }
+
+/**
+ * One review action on one pull request. After it (success or refusal) the snapshot is fetched
+ * again, so the card shows the new review state, or the newer head that made the server refuse.
+ * The server starts one refresh of its own after a success; the browser makes no outside call.
+ */
+function useReviewAction<TBody>(fn: (id: string, body: TBody) => Promise<unknown>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: TBody }) => fn(id, body),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.snapshot }),
+  });
+}
+
+export const useApprove = () => useReviewAction<ApproveRequest>(approvePr);
+export const useRequestChanges = () => useReviewAction<RequestChangesRequest>(requestChangesPr);
+export const useMarkReady = () => useReviewAction<ReadyRequest>(markPrReady);
 
 export function useRetryTransition() {
   const client = useQueryClient();
@@ -264,6 +315,13 @@ export function useSaveRules() {
 
 export const usePreviewRule = () =>
   useMutation({ mutationFn: (rule: SyncRule) => previewRule(rule) });
+
+/** Previews several rules, each against the cached data. The server makes no outside call for it. */
+export const usePreviewRules = () =>
+  useMutation({
+    mutationFn: (rules: SyncRule[]) =>
+      Promise.all(rules.map(async (rule) => ({ rule, preview: await previewRule(rule) }))),
+  });
 
 /**
  * The Jira statuses and project keys for the rule form. It is read on demand and kept for a few

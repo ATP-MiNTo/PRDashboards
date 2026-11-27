@@ -15,6 +15,8 @@ export const TRIGGERS: { value: RuleTrigger; label: string }[] = [
   { value: 'review_approved', label: 'The pull request is approved' },
   { value: 'changes_requested', label: 'Changes are requested' },
   { value: 'review_requested', label: 'A review is requested' },
+  { value: 'no_review_yet', label: 'No review yet' },
+  { value: 'waiting_approvals', label: 'The pull request is waiting for more approvals' },
   { value: 'ready_for_review', label: 'The pull request is ready for review' },
   { value: 'commit_stale', label: 'The latest commit is older than N hours' },
   { value: 'ci_failing', label: 'CI is failing' },
@@ -22,9 +24,15 @@ export const TRIGGERS: { value: RuleTrigger; label: string }[] = [
   { value: 'merged', label: 'The pull request is merged' },
 ];
 
-/** The hint of the Multi-PR tickets section (TECH_SPEC 7.5), word for word. */
+/** The hint of "Tickets shared by several PRs" (TECH_SPEC 7.5). */
 export const MULTI_PR_HINT =
-  'When a ticket is linked to several PRs. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket. Left-click for All, right-click for Any.';
+  'When a ticket is linked to several PRs. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.';
+
+/** The two modes as the "Tickets shared by several PRs" select words them. */
+export const MODE_CHOICES: { value: RuleMode; label: string }[] = [
+  { value: 'all', label: 'When the last PR meets it' },
+  { value: 'any', label: 'When the first PR meets it' },
+];
 
 const GLOB = /^[A-Za-z0-9._/*-]*$/;
 const PROJECT = /^[A-Za-z0-9_]*$/;

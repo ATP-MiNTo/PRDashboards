@@ -125,10 +125,12 @@ func (p *Poller) ticketsOf(st store.SyncState, ls []linked) []rules.Ticket {
 		if ready == "" && !pr.Draft {
 			ready = pr.HeadSHA
 		}
+		approvals := merge.CountApprovals(pr.Reviews, st.ApprovalsNeed[pr.Repo.ID])
 		rp := rules.PR{
 			ID: pr.ID, Number: pr.Number, Repo: pr.Repo.NameWithOwner, Base: pr.BaseRef, State: rules.StateOpen,
 			Draft: pr.Draft, HeadSHA: pr.HeadSHA, ReadySHA: ready, ReviewDecision: pr.ReviewDecision,
 			LatestReview: latestReview(pr.Reviews), ReviewRequests: pr.ReviewRequests, CommittedAt: pr.CommittedAt, CI: string(pr.CI.State),
+			ApprovalsHave: approvals.Have, ApprovalsNeed: approvals.Need,
 		}
 		for _, link := range l.res.Links {
 			add(link.Key, rp)

@@ -1,0 +1,103 @@
+/* The design's dropdown menu (daisyUI "dropdown-content menu menu-sm"): a rounded opaque box with
+   one-line items. It is fixed to the viewport and placed by usePopover, so no card clips it. */
+
+.menu {
+  position: fixed;
+  z-index: 80;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: 1rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.w44 {
+  width: 11rem;
+}
+
+.w48 {
+  width: 12rem;
+}
+
+.w72 {
+  width: 18rem;
+  max-width: calc(100vw - 16px);
+}
+
+.title {
+  padding: 0.5rem 0.75rem;
+  color: oklch(var(--bc) / 0.4);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.75rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.item:hover:not([aria-disabled='true']),
+.item:focus-visible {
+  background: oklch(var(--bc) / 0.1);
+}
+
+.item:focus-visible {
+  outline: 2px solid currentcolor;
+  outline-offset: -2px;
+}
+
+.item.active {
+  background: oklch(var(--n));
+  color: oklch(var(--nc));
+}
+
+.item[aria-disabled='true'] {
+  color: oklch(var(--bc) / 0.3);
+  cursor: var(--cursor-no);
+}
+
+.note {
+  padding: 0.25rem 0.75rem;
+  color: oklch(var(--bc) / 0.3);
+  cursor: var(--cursor-no);
+}
+
+.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon {
+  flex: none;
+  display: inline-flex;
+}

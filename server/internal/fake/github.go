@@ -39,8 +39,16 @@ type githubConfig struct {
 	// AsyncResult is what polling the asynchronous merge ends with after one "pending" answer:
 	// "" (merged), "failed" or "enqueued".
 	AsyncResult string `json:"asyncResult"`
+	// Review adds three pull requests of acme/review for the review actions: #31 has one approval
+	// (set the repository to need two), #32 is a draft and #33 was opened by the viewer, so GitHub
+	// refuses the viewer's review of it.
+	Review bool `json:"review"`
 	// Approved lists the numbers of pull requests that GitHub reports as approved.
 	Approved []int `json:"approved"`
+	// reviews and ready are what the review actions changed (see githubState); fixturePRs applies
+	// them. Unexported, so the admin config never carries them.
+	reviews []fakeReview
+	ready   []string
 	// ExpiresIn is the lifetime in seconds of issued user tokens (default 28800, like GitHub). The
 	// app refreshes tokens that have less than a minute left, so 1 makes every use refresh.
 	ExpiresIn int `json:"expiresIn"`
@@ -50,6 +58,14 @@ type githubConfig struct {
 
 // defaultGitHubExpiry is the lifetime of a GitHub App user token with expiry turned on.
 const defaultGitHubExpiry = 8 * 3600
+
+// fakeReview is a review the viewer submitted through the fake.
+type fakeReview struct {
+	PR    string `json:"pr"`
+	Event string `json:"event"`
+	SHA   string `json:"sha"`
+	Body  string `json:"body"`
+}
 
 type githubState struct {
 	Config            githubConfig `json:"config"`
@@ -77,6 +93,20 @@ type githubState struct {
 	LastMerge map[string]string `json:"lastMerge"`
 	// Deleted lists the branches deleted, as "owner/repo:branch".
 	Deleted []string `json:"deleted"`
+	// Reviews lists the reviews submitted, in order; the latest of the viewer on a pull request is
+	// what its latestReviews shows. Ready lists the node ids marked ready for review.
+	Reviews []fakeReview `json:"reviews"`
+	Ready   []string     `json:"ready"`
+	// ReviewCalls and ReadyCalls count every call, refused or not.
+	ReviewCalls int `json:"reviewCalls"`
+	ReadyCalls  int `json:"readyCalls"`
+}
+
+// cfgLocked is the config with what the review actions changed. The caller holds g.mu.
+func (g *github) cfgLocked() githubConfig {
+	c := g.st.Config
+	c.reviews, c.ready = slices.Clone(g.st.Reviews), slices.Clone(g.st.Ready)
+	return c
 }
 
 type github struct {
@@ -95,6 +125,8 @@ var githubPATs = map[string]string{
 	"github_pat_finegrained": "",
 	// contents_read is a fine-grained token with Contents read-only: its merge is refused.
 	"github_pat_contents_read": "",
+	// pulls_read is a fine-grained token with Pull requests read-only: reviews and ready marks are refused.
+	"github_pat_pulls_read": "",
 }
 
 func (g *github) routes() http.Handler {
@@ -105,6 +137,7 @@ func (g *github) routes() http.Handler {
 	mux.HandleFunc("PUT /repos/{owner}/{repo}/pulls/{number}/merge", g.merge)
 	mux.HandleFunc("PUT /repos/{owner}/{repo}/pulls/{number}/merge-async", g.mergeAsync)
 	mux.HandleFunc("GET /repos/{owner}/{repo}/pulls/{number}/merge-async/{uuid}", g.mergeAsyncPoll)
+	mux.HandleFunc("POST /repos/{owner}/{repo}/pulls/{number}/reviews", g.review)
 	mux.HandleFunc("DELETE /repos/{owner}/{repo}/git/refs/heads/{branch...}", g.deleteBranch)
 	mux.HandleFunc("GET /__admin/state", func(w http.ResponseWriter, _ *http.Request) {
 		g.mu.Lock()
@@ -235,7 +268,7 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.mu.Lock()
-	cfg, merged := g.st.Config, slices.Clone(g.st.Merged)
+	cfg, merged := g.cfgLocked(), slices.Clone(g.st.Merged)
 	g.mu.Unlock()
 	sso := cfg.SSO
 	var req struct {
@@ -255,6 +288,10 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set(k, v)
 		}
 		writeJSON(w, http.StatusOK, body)
+		return
+	}
+	if id, ok := req.Variables["id"].(string); ok && strings.Contains(req.Query, "markPullRequestReadyForReview") {
+		g.markReady(w, r, id, cfg)
 		return
 	}
 	if id, ok := req.Variables["id"].(string); ok {
@@ -284,7 +321,7 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 func (g *github) config() githubConfig {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.st.Config
+	return g.cfgLocked()
 }
 
 // limited answers a search with a rate limit response when the config asks for one.
@@ -327,7 +364,7 @@ func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	cfg := g.st.Config
+	cfg := g.cfgLocked()
 	if p.stacked {
 		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Merging stacked PRs via this endpoint is not supported. Use the asynchronous merge endpoint instead."})
 		return
@@ -424,4 +461,87 @@ func (g *github) mergeAsyncPoll(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "merged", "details": map[string]any{"merge_commit_sha": fmt.Sprintf("%040x", p.number*104729)}})
 	}
+}
+
+// review accepts POST .../pulls/{n}/reviews like GitHub: the review is pinned to commit_id, a
+// request for changes needs a body, and the viewer cannot review a pull request they opened.
+func (g *github) review(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	g.mu.Lock()
+	g.st.ReviewCalls++
+	g.mu.Unlock()
+	if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") == "github_pat_pulls_read" {
+		w.Header().Set("X-Accepted-GitHub-Permissions", "pull_requests=write")
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Resource not accessible by personal access token"})
+		return
+	}
+	var body map[string]string
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<17)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"message": "Problems parsing JSON"})
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	number, _ := strconv.Atoi(r.PathValue("number"))
+	p, ok := findFixture(repo, number, g.config())
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	invalid := func(msg string) {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"message": "Unprocessable Entity", "errors": []string{msg}})
+	}
+	event := body["event"]
+	switch {
+	case event != "APPROVE" && event != "REQUEST_CHANGES":
+		invalid("Review event is invalid")
+	case p.viewerOpened():
+		if event == "APPROVE" {
+			invalid("Can not approve your own pull request")
+		} else {
+			invalid("Can not request changes on your own pull request")
+		}
+	case body["commit_id"] != p.headSHA(g.st.Config.HeadMoved):
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"message": "Validation Failed", "errors": []map[string]string{
+			{"resource": "PullRequestReview", "code": "custom", "field": "commit_id", "message": "commit_id is not part of the pull request"}}})
+	case event == "REQUEST_CHANGES" && strings.TrimSpace(body["body"]) == "":
+		invalid("Review body can't be blank")
+	default:
+		g.st.Reviews = append(g.st.Reviews, fakeReview{PR: p.id(), Event: event, SHA: body["commit_id"], Body: body["body"]})
+		writeJSON(w, http.StatusOK, map[string]any{"id": len(g.st.Reviews), "state": map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}[event]})
+	}
+}
+
+// markReady answers the markPullRequestReadyForReview mutation.
+func (g *github) markReady(w http.ResponseWriter, r *http.Request, id string, cfg githubConfig) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.st.ReadyCalls++
+	fail := func(kind, msg string) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data":   map[string]any{"markPullRequestReadyForReview": nil},
+			"errors": []map[string]any{{"type": kind, "message": msg, "path": []string{"markPullRequestReadyForReview"}}},
+		})
+	}
+	if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") == "github_pat_pulls_read" {
+		fail("FORBIDDEN", "Resource not accessible by personal access token")
+		return
+	}
+	for _, p := range fixturePRs(time.Now(), cfg) {
+		if p.id() != id {
+			continue
+		}
+		if !p.draft {
+			fail("UNPROCESSABLE", "Pull request is not a draft")
+			return
+		}
+		g.st.Ready = append(g.st.Ready, id)
+		writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"markPullRequestReadyForReview": map[string]any{
+			"pullRequest": map[string]any{"id": id, "isDraft": false}}}})
+		return
+	}
+	fail("NOT_FOUND", "Could not resolve to a node with the global id of '"+id+"'.")
 }

@@ -139,6 +139,13 @@ type PR struct {
 	CI               CI
 	Reviews          []Review
 	ReviewRequests   []string
+	// Author is the login of the user who opened the pull request, empty for a deleted account.
+	Author string
+	// UpdatedAt is when the pull request last changed on GitHub; Additions and Deletions are the
+	// lines of its diff. They come with the search, without an extra call.
+	UpdatedAt *time.Time
+	Additions int
+	Deletions int
 	// Roles holds RoleAssigned when the assigned search returned the pull request and RoleAuthored
 	// when the authored search did. SearchOpen sets it; it is never empty there.
 	Roles []string
@@ -257,6 +264,12 @@ type rawPR struct {
 			} `json:"requestedReviewer"`
 		} `json:"nodes"`
 	} `json:"reviewRequests"`
+	UpdatedAt *time.Time `json:"updatedAt"`
+	Additions int        `json:"additions"`
+	Deletions int        `json:"deletions"`
+	Author    *struct {
+		Login string `json:"login"`
+	} `json:"author"`
 }
 
 type rawCheck struct {
@@ -642,7 +655,11 @@ func (n rawPR) pr() PR {
 			SquashAllowed: n.Repository.SquashMergeAllowed, MergeAllowed: n.Repository.MergeCommitAllowed,
 			RebaseAllowed: n.Repository.RebaseMergeAllowed,
 		},
+		UpdatedAt: n.UpdatedAt, Additions: n.Additions, Deletions: n.Deletions,
 		CI: CI{State: CINone},
+	}
+	if n.Author != nil {
+		pr.Author = n.Author.Login
 	}
 	if len(n.Commits.Nodes) > 0 {
 		commit := n.Commits.Nodes[0].Commit

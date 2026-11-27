@@ -26,10 +26,14 @@ const MESSAGES: Record<string, string> = {
   invalid_field: 'Jira did not accept a field value.',
   idempotency_key_reused: 'That merge request was already used. Close the panel and open it again.',
   unauthenticated: 'Your session ended. Open the app with scripts/start.sh',
+  own_pull_request: 'You opened this pull request, so you cannot review it.',
+  body_required: 'Write a comment first. GitHub needs one to request changes.',
+  review_rejected: 'GitHub did not accept the review.',
+  not_draft: 'This pull request is not a draft any more.',
 };
 
 /** Codes whose server detail is shown, as plain text, because it names what the person must change. */
-const SHOWS_DETAIL = new Set(['missing_permission', 'merge_failed']);
+const SHOWS_DETAIL = new Set(['missing_permission', 'merge_failed', 'review_rejected']);
 
 /**
  * Turns a problem code into text for the person. The code itself is never shown. For a code in
@@ -39,4 +43,12 @@ const SHOWS_DETAIL = new Set(['missing_permission', 'merge_failed']);
 export function describeProblem(code: string | undefined, detail?: string): string {
   if (code && SHOWS_DETAIL.has(code) && detail) return detail;
   return (code && MESSAGES[code]) || 'Something went wrong. Try again.';
+}
+
+/** The same for a review action or marking ready: a moved head asks for another try, not a merge. */
+export function describeReviewProblem(code: string | undefined, detail?: string): string {
+  if (code === 'head_moved') {
+    return 'The pull request changed since the page loaded. The card was refreshed. Look at it and try again.';
+  }
+  return describeProblem(code, detail);
 }

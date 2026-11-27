@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import type { SnapshotPr } from '@/api/client';
+import { pr, snapshot } from '@/test-fixtures';
+import { searchTerms } from './search';
 import type { Group } from './snapshot';
 import {
   applyHidden,
   isHideMode,
   isPageSize,
+  listStats,
+  locate,
+  type ListView,
   pageItems,
   pageRange,
+  pinLaunched,
   paginate,
   pruneHidden,
   shownIn,
@@ -103,5 +110,128 @@ describe('hidden', () => {
     expect(isPageSize(15)).toBe(true);
     expect(isPageSize(12)).toBe(false);
     expect(isPageSize('10')).toBe(false);
+  });
+});
+
+describe('listStats', () => {
+  const stackOf = (id: string, position: number): Partial<SnapshotPr> => ({
+    stack: {
+      id: 'S',
+      position,
+      size: 2,
+      parentId: position === 1 ? null : 'a',
+      parentNumber: position === 1 ? null : 1,
+    },
+  });
+  const s = snapshot([
+    pr('a', 1, { roles: ['assigned'], ...stackOf('a', 1) }),
+    pr('b', 2, {
+      roles: ['assigned'],
+      ...stackOf('b', 2),
+      ci: { state: 'running', total: 0, checks: [] },
+    }),
+    pr('c', 3, { roles: ['authored'], isDraft: true }),
+    pr('d', 4, { roles: ['authored'], ci: { state: 'running', total: 0, checks: [] } }),
+  ]);
+  const view = (over: Partial<ListView> = {}): ListView => ({
+    filter: 'all',
+    show: 'everything',
+    terms: [],
+    hidden: new Set(),
+    mode: 'visible',
+    off: new Set(),
+    ...over,
+  });
+
+  it('counts what the list holds: showing, ready, running and stacks', () => {
+    expect(listStats(s, view())).toEqual({ showing: 4, ready: 1, running: 2, stacks: 1 });
+  });
+
+  it('leaves out the repositories that are switched off', () => {
+    const other = (id: string, n: number) =>
+      pr(id, n, {
+        repo: {
+          id: 'R2',
+          nameWithOwner: 'acme/api',
+          isNew: false,
+          squashAllowed: true,
+          mergeAllowed: true,
+          rebaseAllowed: true,
+        },
+      });
+    const two = snapshot([pr('a', 1), other('b', 2), other('c', 3)]);
+    expect(listStats(two, view({ off: new Set(['R2']) })).showing).toBe(1);
+    expect(listStats(two, view({ off: new Set(['R1']) })).showing).toBe(2);
+    expect(listStats(two, view({ off: new Set(['R1', 'R2']) })).showing).toBe(0);
+  });
+
+  it('follows the Show state', () => {
+    expect(listStats(s, view({ show: 'authored' }))).toEqual({
+      showing: 2,
+      ready: 0,
+      running: 1,
+      stacks: 0,
+    });
+  });
+
+  it('follows the search', () => {
+    expect(listStats(s, view({ terms: searchTerms('change 3') })).showing).toBe(1);
+  });
+
+  it('leaves out the hidden pull requests, and keeps only them in the Hidden mode', () => {
+    expect(listStats(s, view({ hidden: new Set(['d']) })).showing).toBe(3);
+    expect(listStats(s, view({ hidden: new Set(['d']), mode: 'all' })).showing).toBe(4);
+    expect(listStats(s, view({ hidden: new Set(['d']), mode: 'hidden' })).showing).toBe(1);
+  });
+
+  it('keeps the other tiles whole when a tile filters the list, and narrows Showing', () => {
+    const f = listStats(s, view({ filter: 'running' }));
+    expect(f.showing).toBe(2);
+    expect(f.ready).toBe(1);
+    expect(listStats(s, view({ filter: 'stacks' })).showing).toBe(2);
+    expect(listStats(s, view({ filter: 'ready' })).showing).toBe(1);
+  });
+});
+
+describe('locate and pinLaunched', () => {
+  const groups = [g('s', 3), g('x', 1), g('y', 1)];
+
+  it('finds where a card is', () => {
+    expect(locate(groups, 's1')).toEqual({ groupKey: 's', stacked: true, groupIndex: 0, index: 1 });
+    expect(locate(groups, 'y0')).toEqual({
+      groupKey: 'y',
+      stacked: false,
+      groupIndex: 2,
+      index: 0,
+    });
+    expect(locate(groups, 'nope')).toBeNull();
+  });
+
+  it('leaves the groups alone while the snapshot still has every launched card', () => {
+    const l = { id: 'x0', ...locate(groups, 'x0')! };
+    expect(pinLaunched(groups, [l], new Set(['s0', 's1', 's2', 'x0', 'y0']))).toBe(groups);
+  });
+
+  it('puts a dropped single card back where it was', () => {
+    const l = { id: 'x0', ...locate(groups, 'x0')! };
+    const now = [g('s', 3), g('y', 1)];
+    const out = pinLaunched(now, [l], new Set(['s0', 's1', 's2', 'y0']));
+    expect(out.map((x) => x.key)).toEqual(['s', 'x0', 'y']);
+    expect(now).toHaveLength(2);
+  });
+
+  it('puts a dropped card of a stack back into that stack', () => {
+    const l = { id: 's1', ...locate(groups, 's1')! };
+    const now = [{ key: 's', ids: ['s0', 's2'], stacked: true }, g('x', 1)];
+    const out = pinLaunched(now, [l], new Set(['s0', 's2', 'x0']));
+    expect(out[0]?.ids).toEqual(['s0', 's1', 's2']);
+    expect(now[0]?.ids).toEqual(['s0', 's2']);
+  });
+
+  it('puts a card of a stack that is gone back alone', () => {
+    const l = { id: 's0', ...locate(groups, 's0')! };
+    const out = pinLaunched([g('x', 1)], [l], new Set(['x0']));
+    expect(out.map((x) => x.ids)).toEqual([['s0'], ['x0']]);
+    expect(out[0]?.stacked).toBe(false);
   });
 });

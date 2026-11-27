@@ -78,7 +78,11 @@ export function useSidebar({ hold = false }: { hold?: boolean } = {}) {
     const timer = createIdleTimer({
       delayMs: AUTO_COLLAPSE_MS,
       onIdle: () => setFolded(true),
-      isHeld: () => holdRef.current || !!aside.current?.contains(document.activeElement),
+      // A dialog over the page (the repository settings, a note, the rules) keeps the sidebar open too.
+      isHeld: () =>
+        holdRef.current ||
+        !!aside.current?.contains(document.activeElement) ||
+        document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
     });
     let inside = false;
     const onMove = (e: MouseEvent) => {

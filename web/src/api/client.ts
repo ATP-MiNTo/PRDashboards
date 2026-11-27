@@ -153,7 +153,9 @@ export type MergeMethodName = Schemas['MergeMethodName'];
 export type MethodResolution = Schemas['MethodResolution'];
 export type BranchRule = Schemas['BranchRule'];
 export type RepoSettings = Schemas['RepoSettings'];
+export type Approvals = Schemas['Approvals'];
 export type RepoUpdate = Schemas['RepoUpdate'];
+export type DeleteBranchChoice = Schemas['DeleteBranchChoice'];
 export type ReposUpdate = Schemas['ReposUpdate'];
 export type JiraOptions = Schemas['JiraOptions'];
 export type Transition = Schemas['Transition'];
@@ -208,3 +210,25 @@ export const putRules = (update: RulesUpdate) =>
   json<Schemas['Rules']>('PUT', '/api/rules', update);
 export const previewRule = (rule: SyncRule) =>
   json<RulePreview>('POST', '/api/rules/preview', { rule });
+
+export type ReviewResult = Schemas['ReviewResult'];
+export type ApproveRequest = Schemas['ApproveRequest'];
+export type RequestChangesRequest = Schemas['RequestChangesRequest'];
+export type ReadyRequest = Schemas['ReadyRequest'];
+
+/**
+ * Approves a pull request. `expectedHeadSha` is the head the row showed; the server fetches the
+ * pull request again and refuses with `head_moved` (409, with the fresh state in `ApiError.pr`) when
+ * it differs. Other refusals: `not_open`, `own_pull_request`, `missing_permission` (403, the detail
+ * names the permission), `review_rejected` (422), `rate_limited`, `upstream_error`.
+ */
+export const approvePr = (id: string, body: ApproveRequest) =>
+  json<ReviewResult>('POST', `/api/prs/${encodeURIComponent(id)}/approve`, body);
+
+/** Requests changes. `body` is required (not only white space), at most 65536 characters. */
+export const requestChangesPr = (id: string, body: RequestChangesRequest) =>
+  json<ReviewResult>('POST', `/api/prs/${encodeURIComponent(id)}/request-changes`, body);
+
+/** Marks a draft ready for review. Also refuses with `not_draft`. */
+export const markPrReady = (id: string, body: ReadyRequest) =>
+  json<ReviewResult>('POST', `/api/prs/${encodeURIComponent(id)}/ready`, body);

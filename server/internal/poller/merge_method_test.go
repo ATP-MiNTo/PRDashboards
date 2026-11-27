@@ -25,7 +25,7 @@ func TestSnapshotCarriesTheResolvedMergeMethod(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := r.store.PutRepo(ctx, "R-acme/web", "rebase", []store.BranchRule{{Pattern: "feat/*", Method: "merge"}}, true); err != nil {
+	if err := r.store.PutRepo(ctx, "R-acme/web", "rebase", []store.BranchRule{{Pattern: "feat/*", Method: "merge"}}, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.p.Relink(ctx); err != nil {
@@ -45,5 +45,52 @@ func TestSnapshotCarriesTheResolvedMergeMethod(t *testing.T) {
 	}
 	if open, _ := r.gh.calls(); open != 1 {
 		t.Fatalf("a settings change rebuilds from cache: %d GitHub searches", open)
+	}
+}
+
+func TestARepoThatFollowsTheDefaultTakesTheGlobalMethod(t *testing.T) {
+	r := newRig(t)
+	web := pr("PR_a", 1, "acme/web", "feat/a", "develop", "On develop")
+	r.gh.set(func(f *fakeGitHub) { f.result.PRs = append(f.result.PRs, web) })
+	r.sync()
+	method := func() string { return string(r.snapshot().Prs[0].MergeMethod.Method) }
+	if method() != "squash" {
+		t.Fatalf("a new repo follows the default: %s", method())
+	}
+
+	ctx := context.Background()
+	st, err := r.store.GetSettings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.DefaultMethod = "rebase"
+	if err := r.store.PutSettings(ctx, st); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.p.Relink(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if method() != "rebase" {
+		t.Fatalf("the repo follows the new default: %s", method())
+	}
+
+	// Its own method, kept but unused while it follows the default.
+	if err := r.store.PutRepos(ctx, []store.RepoUpdate{{ID: "R-acme/web", Method: "merge"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.p.Relink(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if method() != "merge" {
+		t.Fatalf("an explicit method is used: %s", method())
+	}
+	if err := r.store.PutRepos(ctx, []store.RepoUpdate{{ID: "R-acme/web", Method: "merge", Inherit: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.p.Relink(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if method() != "rebase" {
+		t.Fatalf("back to the default: %s", method())
 	}
 }

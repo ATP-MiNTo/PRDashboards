@@ -3,21 +3,24 @@
 }
 
 .button {
-  display: inline-flex;
-  align-items: center;
+  composes: ui-btn from global;
   gap: 8px;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
+  border-color: var(--ctl-border);
+  background: var(--ctl-bg);
+  font-weight: 400;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--ctl-border);
+  background: var(--hover);
   color: var(--text);
-  font: inherit;
-  cursor: pointer;
 }
 
 .button:disabled {
+  border-color: var(--ctl-border);
+  background: var(--ctl-bg);
+  color: var(--text);
   opacity: 0.6;
-  cursor: default;
 }
 
 .button:focus-visible {
@@ -38,21 +41,16 @@
   z-index: 80;
   padding: 4px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-box);
   background: var(--surface);
   box-shadow: 0 4px 12px var(--shadow);
 }
 
 .search {
+  composes: ui-input from global;
   box-sizing: border-box;
   width: 100%;
   margin-bottom: 4px;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
-  color: var(--text);
-  font: inherit;
 }
 
 .search:focus-visible {
@@ -72,14 +70,16 @@
   margin: 0;
   padding: 5px 8px;
   color: var(--sub);
+  font-size: 0.875rem;
 }
 
 .option {
   padding: 5px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-ctl);
   color: var(--text);
+  font-size: 0.875rem;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: var(--cursor-hand);
 }
 
 .option[aria-selected='true'] {
@@ -93,5 +93,5 @@
 .disabled {
   color: var(--sub);
   opacity: 0.6;
-  cursor: default;
+  cursor: var(--cursor-no);
 }

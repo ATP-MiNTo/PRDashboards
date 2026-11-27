@@ -67,6 +67,11 @@ func TestSettingsValidation(t *testing.T) {
 	l := g.login()
 	bad := map[string]string{
 		"interval not allowed":  strings.Replace(validSettings, `"githubSec":120`, `"githubSec":61`, 1),
+		"interval below 30":     strings.Replace(validSettings, `"githubSec":120`, `"githubSec":15`, 1),
+		"interval 0":            strings.Replace(validSettings, `"githubSec":120`, `"githubSec":0`, 1),
+		"jira interval 45.5":    strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":45.5`, 1),
+		"interval above 3600":   strings.Replace(validSettings, `"githubSec":120`, `"githubSec":3615`, 1),
+		"jira not a multiple":   strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":100`, 1),
 		"interval as string":    strings.Replace(validSettings, `"githubSec":120`, `"githubSec":"120"`, 1),
 		"theme":                 strings.Replace(validSettings, `"dark"`, `"neon"`, 1),
 		"method":                strings.Replace(validSettings, `"rebase"`, `"fast-forward"`, 1),
@@ -88,7 +93,8 @@ func TestSettingsValidation(t *testing.T) {
 	if got.Theme != "auto" {
 		t.Fatal("a rejected PUT changed the settings")
 	}
-	for _, v := range []int{60, 120, 300, 900, 3600} {
+	// Every multiple of 15 from 30 to 3600 is allowed, which includes the five values older versions offered.
+	for _, v := range []int{30, 45, 60, 75, 120, 285, 300, 900, 3600} {
 		body := strings.Replace(validSettings, `"githubSec":120`, `"githubSec":`+itoa(v), 1)
 		if w := g.do(http.MethodPut, "/api/settings", body, l.write()...); w.Code != http.StatusOK {
 			t.Errorf("interval %d rejected: %s", v, w.Body)

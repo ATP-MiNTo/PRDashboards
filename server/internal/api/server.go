@@ -49,6 +49,7 @@ type Config struct {
 	OAuth    *auth.OAuth
 	Poller   Poller
 	Merger   Merger
+	Reviewer Reviewer
 	Jira     Jira
 	Accounts poller.Accounts
 	// Events serves GET /events, the server-sent events stream.

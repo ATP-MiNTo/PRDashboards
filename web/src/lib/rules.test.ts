@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { pr, snapshot, ticket } from '@/test-fixtures';
-import { preferList, projectKey, projectsOf, statusesOf, statusKey, withCurrent } from './rules';
+import { newRule } from './rules';
+import {
+  MODE_CHOICES,
+  MULTI_PR_HINT,
+  preferList,
+  projectKey,
+  projectsOf,
+  ruleName,
+  ruleProblem,
+  statusesOf,
+  statusKey,
+  TRIGGERS,
+  triggerLabel,
+  withCurrent,
+} from './rules';
 
 describe('rule form choices', () => {
   const snap = snapshot([
@@ -61,5 +75,56 @@ describe('statusKey', () => {
     ['', ''],
   ])('%j gives %j', (name, key) => {
     expect(statusKey(name)).toBe(key);
+  });
+});
+
+describe('triggers', () => {
+  it('lists every trigger of the API once, the two approval triggers with their words', () => {
+    expect(TRIGGERS.map((t) => t.value).sort()).toEqual(
+      [
+        'changes_requested',
+        'ci_failing',
+        'ci_passing',
+        'commit_stale',
+        'merged',
+        'no_review_yet',
+        'ready_for_review',
+        'review_approved',
+        'review_requested',
+        'review_submitted',
+        'waiting_approvals',
+      ].sort(),
+    );
+    expect(triggerLabel('no_review_yet')).toBe('No review yet');
+    expect(triggerLabel('waiting_approvals')).toBe(
+      'The pull request is waiting for more approvals',
+    );
+  });
+
+  it('names an unnamed rule after its trigger and target', () => {
+    expect(ruleName({ ...newRule(), trigger: 'no_review_yet', target: 'In Review' })).toBe(
+      'No review yet to In Review',
+    );
+  });
+
+  it('needs no hours for the new triggers, only a target', () => {
+    for (const trigger of ['no_review_yet', 'waiting_approvals'] as const) {
+      expect(ruleProblem({ ...newRule(), trigger, target: 'In Review' })).toBeNull();
+      expect(ruleProblem({ ...newRule(), trigger, target: '' })).toBe(
+        'Choose the status to move tickets to.',
+      );
+    }
+  });
+});
+
+describe('the mode of shared tickets', () => {
+  it('words the two modes of the API for the "Tickets shared by several PRs" select', () => {
+    expect(MODE_CHOICES).toEqual([
+      { value: 'all', label: 'When the last PR meets it' },
+      { value: 'any', label: 'When the first PR meets it' },
+    ]);
+    expect(MULTI_PR_HINT).toBe(
+      'When a ticket is linked to several PRs. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.',
+    );
   });
 });

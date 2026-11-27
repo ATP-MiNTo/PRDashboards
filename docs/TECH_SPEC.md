@@ -322,6 +322,8 @@ Triggers in v1:
 | `commit_stale` | Latest commit is older than N hours (N in the rule) | head SHA |
 | `ci_failing` / `ci_passing` | CI rollup state changes to that value | head SHA + state |
 | `merged` | PR is merged | merged PR id |
+| `no_review_yet` | PR is open, not a draft, has no review and no review decision | head SHA + `:unreviewed` |
+| `waiting_approvals` | PR is open, not a draft, and has at least one approval but fewer than its repository requires | head SHA + `:waiting` |
 
 Filters (all optional, AND): repo (exact or glob), target branch (exact or glob), Jira project,
 Jira issue type, current Jira status.
@@ -531,6 +533,8 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/tickets/assigned` | Picker source |
 | `PUT /api/prs/{id}/tickets` | Set manual links and removed keys |
 | `POST /api/prs/{id}/merge` | Merge and transition (7.7) |
+| `POST /api/prs/{id}/approve`, `POST /api/prs/{id}/request-changes`, `POST /api/prs/{id}/ready` | Review actions and mark ready, checked again on the server like the merge ([features/review-actions.md](features/review-actions.md)) |
+| `GET/PUT /api/repos`, `GET/PUT /api/repos/{id}` | Per repository: default method, branch rules, approvals required ([features/merge-method.md](features/merge-method.md), [features/review-actions.md](features/review-actions.md)) |
 | `GET /api/retries` | Failed transitions waiting for a retry |
 | `POST /api/retries/{id}` | Retry a failed transition |
 | `DELETE /api/retries/{id}` | Dismiss a failed transition |

@@ -7,16 +7,16 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Starts the single binary, serves the embedded UI and the API on `127.0.0.1`, and signs the browser
 in with a one-time launch URL. `/` is the dashboard ([command-table.md](command-table.md)) and
 `/accounts/` shows "Signed in", the server version and the Connected accounts panel
-([auth.md](auth.md)); the dashboard shows the same panel in its Account side panel. The poller runs inside the binary ([poller.md](poller.md)).
+([auth.md](auth.md)); the dashboard shows it in its Accounts dialog. The poller runs inside the binary ([poller.md](poller.md)).
 
 Differences from the spec:
 
 - `GET /events` streams server-sent events ([poller.md](poller.md)). The web app manifest and
   service worker are described in [installable-app.md](installable-app.md).
-- The dashboard has a left sidebar with the Settings content, toggled by a floating burger ([sidebar-shell.md](sidebar-shell.md)), and a right-hand side panel for the Account button of the top bar ([settings.md](settings.md)).
+- The dashboard has two floating header pills ([header.md](header.md)), a left sidebar with the Settings content toggled by the burger in the left pill ([sidebar-shell.md](sidebar-shell.md)), and a right-hand side panel for the Connected accounts, opened by "Manage accounts" at the bottom of the sidebar ([settings.md](settings.md)). Toasts at the top right confirm a refresh and a theme choice ([toast.md](toast.md)).
 - The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
-- Tailwind CSS 3.4 and daisyUI 4.12 are build-time dev dependencies of the web app. Preflight is off and daisyUI's root styles are off, so the existing CSS Modules and `globals.css` render unchanged. Components built later use Tailwind utilities and daisyUI classes. Only the `winter` (light) and `night` (dark) themes are generated ([theme.md](theme.md)).
+- Tailwind CSS 3.4 and daisyUI 4.12 are build-time dev dependencies of the web app. Preflight is off and daisyUI's root styles are off, so the CSS Modules and `globals.css` own the base look: fonts, page background, colour tokens, glass panes, shared control classes and cursors ([theme.md](theme.md)). Components may use Tailwind utilities and daisyUI classes. Only the `winter` (light) and `night` (dark) themes are generated, and their variables (`--b1`, `--bc` and so on) are the base of the tokens.
 
 ## Data model
 
@@ -115,7 +115,7 @@ None.
   on purpose: a write deadline would cut off the long-lived SSE stream (`/events`). The hub sets a
   deadline per write instead. Handlers that must not hang rely on the request context and the outbound client
   timeouts instead.
-- The web app has no inline script beyond what Next emits, no external fonts or CDNs (Tailwind and daisyUI are compiled into the static CSS at build time), no inline `<style>` blocks or `style` attributes (`csp-hashes.mjs` fails the build on either, because the CSP allows only `style-src 'self'`), and no
+- The web app has no inline script beyond what Next emits, no external fonts or CDNs (Tailwind and daisyUI are compiled into the static CSS at build time, and the Inter and Space Grotesk font files are emitted under `_next/static/media/` from the `@fontsource-variable` packages, so `font-src 'self'` is enough), no inline `<style>` blocks or `style` attributes (`csp-hashes.mjs` fails the build on either, because the CSP allows only `style-src 'self'`), and no
   `dangerouslySetInnerHTML` (ESLint enforces it).
 - Generated code (`server/internal/api/gen`, `web/src/api/schema.d.ts`) is committed and never
   edited by hand. `pnpm gen` regenerates it, and CI fails when the result differs.
