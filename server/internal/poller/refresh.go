@@ -105,7 +105,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	version := p.version
 	snap := build(buildInput{
 		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos, st.DefaultMethod), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
-		GitHub: p.ghSrc, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
+		GitHub: p.ghSrc, RateLimit: p.rl, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
 	})
 	p.mu.Unlock()
 
@@ -175,7 +175,7 @@ func (p *Poller) fetchGitHub(ctx context.Context, now time.Time) ([]store.Resolu
 	if err != nil {
 		if errors.Is(err, auth.ErrNotConnected) {
 			p.mu.Lock()
-			p.gh, p.ghSrc = ghData{loaded: true}, gen.SourceStatus{State: "disconnected"}
+			p.gh, p.ghSrc, p.rl = ghData{loaded: true}, gen.SourceStatus{State: "disconnected"}, github.RateLimit{}
 			p.mu.Unlock()
 			return nil, false
 		}
@@ -240,10 +240,10 @@ func (p *Poller) failGitHub(now time.Time, err error) {
 		src.ResetAt = tptr(p.ghBackoff)
 	case errors.Is(err, github.ErrBadCredentials):
 		src.State, src.Error = "disconnected", sptr("GitHub rejected the token")
-		p.gh = ghData{loaded: true}
+		p.gh, p.rl = ghData{loaded: true}, github.RateLimit{}
 	case errors.Is(err, auth.ErrNeedsReconnect):
 		src.State, src.Error = "disconnected", sptr("Reconnect GitHub")
-		p.gh = ghData{loaded: true}
+		p.gh, p.rl = ghData{loaded: true}, github.RateLimit{}
 	default:
 		wait, _ := p.cfg.Backoff.Delay(http.Header(nil), p.ghFails)
 		p.ghBackoff = now.Add(wait)

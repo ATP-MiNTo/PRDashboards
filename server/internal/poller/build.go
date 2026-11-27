@@ -53,18 +53,46 @@ type buildInput struct {
 	Linked  []linked
 	// Repos holds the merge settings of the repos the store knows. A repo missing from it is seen for
 	// the first time and gets NewRepo.
-	Repos    map[string]merge.Repo
-	NewRepo  merge.Repo
-	Issues   map[string]jira.Issue
-	Site     jira.Site
-	GitHub   gen.SourceStatus
-	Jira     gen.SourceStatus
-	Blocked  []github.OrgBlocked
-	Warnings []gen.Warning
+	Repos   map[string]merge.Repo
+	NewRepo merge.Repo
+	Issues  map[string]jira.Issue
+	Site    jira.Site
+	GitHub  gen.SourceStatus
+	// RateLimit is the GitHub budget the last refresh saw; the zero value (no data) leaves it out.
+	RateLimit github.RateLimit
+	Jira      gen.SourceStatus
+	Blocked   []github.OrgBlocked
+	Warnings  []gen.Warning
 	// Waiting is the hint of each ticket whose mode all rule is waiting on other pull requests.
 	Waiting map[string]gen.TicketWaiting
 	// Plans maps "prID|ticket" to the merge plan of that ticket on that row.
 	Plans map[string]gen.TicketMergePlan
+}
+
+// rateLimitUsage maps the budget GitHub reported with the searches to the snapshot's used and limit
+// (used is limit minus remaining, never below 0 or above the limit). It is nil when GitHub reported
+// no limit, so the UI shows nothing.
+func rateLimitUsage(rl github.RateLimit) *gen.RateLimitUsage {
+	if rl.Limit <= 0 {
+		return nil
+	}
+	out := &gen.RateLimitUsage{Used: min(max(rl.Limit-rl.Remaining, 0), rl.Limit), Limit: rl.Limit}
+	if !rl.ResetAt.IsZero() {
+		out.ResetAt = tptr(rl.ResetAt)
+	}
+	return out
+}
+
+// rateLimitOf is the inverse of rateLimitUsage, for a snapshot read back from the store.
+func rateLimitOf(u *gen.RateLimitUsage) github.RateLimit {
+	if u == nil || u.Limit <= 0 {
+		return github.RateLimit{}
+	}
+	rl := github.RateLimit{Limit: u.Limit, Remaining: max(u.Limit-u.Used, 0)}
+	if u.ResetAt != nil {
+		rl.ResetAt = *u.ResetAt
+	}
+	return rl
 }
 
 func ptr[T comparable](v T) *T {
@@ -91,12 +119,14 @@ func build(in buildInput) gen.Snapshot {
 	}
 	stackOf := stacks.Detect(sp)
 
+	ghSrc := in.GitHub
+	ghSrc.RateLimit = rateLimitUsage(in.RateLimit)
 	snap := gen.Snapshot{
 		Version:     in.Version,
 		GeneratedAt: in.Now,
 		Prs:         make([]gen.SnapshotPr, 0, len(ls)),
 		Warnings:    in.Warnings,
-		Sources:     gen.Sources{Github: in.GitHub, Jira: in.Jira, BlockedOrgs: make([]gen.BlockedOrg, len(in.Blocked))},
+		Sources:     gen.Sources{Github: ghSrc, Jira: in.Jira, BlockedOrgs: make([]gen.BlockedOrg, len(in.Blocked))},
 	}
 	if snap.Warnings == nil {
 		snap.Warnings = []gen.Warning{}

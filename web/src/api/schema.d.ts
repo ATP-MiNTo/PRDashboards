@@ -639,6 +639,18 @@ export interface components {
             error: string | null;
             /** Format: date-time */
             resetAt: string | null;
+            rateLimit?: components["schemas"]["RateLimitUsage"];
+        };
+        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
+        RateLimitUsage: {
+            /** @description Points spent in the current window (limit minus remaining). */
+            used: number;
+            limit: number;
+            /**
+             * Format: date-time
+             * @description When the window resets, null when GitHub did not say.
+             */
+            resetAt: string | null;
         };
         BlockedOrg: {
             /** @description The organization login, or an empty string when GitHub did not name it. */

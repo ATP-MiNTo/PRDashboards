@@ -16,3 +16,6 @@ func NewLoopForTest(p *Poller, after func(time.Duration) <-chan time.Time) *Loop
 
 // Run runs the poller loop.
 func (l *Loop) Run(ctx context.Context) { l.p.Run(ctx) }
+
+// RateLimitUsage exposes the mapping of the GitHub budget to the snapshot field.
+var RateLimitUsage = rateLimitUsage

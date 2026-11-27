@@ -230,6 +230,10 @@ func (p *Poller) Load(ctx context.Context) error {
 	p.mu.Lock()
 	p.version = stored.Version
 	p.ghSrc, p.jira.state = snap.Sources.Github, snap.Sources.Jira.State
+	// The budget of the last refresh before the restart (absent in older snapshots) is kept, so a
+	// build before the first refresh still shows it and the interval still honours a low budget.
+	p.rl = rateLimitOf(p.ghSrc.RateLimit)
+	p.ghSrc.RateLimit = nil
 	if t := snap.Sources.Jira.SyncedAt; t != nil {
 		p.jira.syncedAt = *t
 	}
