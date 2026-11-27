@@ -415,7 +415,7 @@ func TestGitHubNeedsReconnectIsDisconnectedWithAClearMessage(t *testing.T) {
 	r.accounts.set(func(a *fakeAccounts) { a.tokenEr = fmt.Errorf("refresh: %w", auth.ErrNeedsReconnect) })
 	r.sync()
 	s := r.snapshot()
-	if s.Sources.Github.State != "disconnected" || s.Sources.Github.Error == nil || *s.Sources.Github.Error != "Reconnect GitHub" || len(s.Prs) != 0 {
+	if s.Sources.Github.State != "disconnected" || s.Sources.Github.Error == nil || *s.Sources.Github.Error != `Reconnect GitHub token "Token (octocat)"` || len(s.Prs) != 0 {
 		t.Fatalf("%+v", s.Sources.Github)
 	}
 }

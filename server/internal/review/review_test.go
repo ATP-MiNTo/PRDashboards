@@ -30,10 +30,13 @@ type fakeGitHub struct {
 	pulls      int
 	reviews    []submit
 	readyCalls []string
+	// pullTokens and readyTokens are the tokens of the node query and the ready mutation.
+	pullTokens, readyTokens []string
 }
 
-func (f *fakeGitHub) PullRequest(context.Context, string, string) (github.PR, error) {
+func (f *fakeGitHub) PullRequest(_ context.Context, token, _ string) (github.PR, error) {
 	f.pulls++
+	f.pullTokens = append(f.pullTokens, token)
 	return f.pr, f.prErr
 }
 
@@ -42,22 +45,36 @@ func (f *fakeGitHub) SubmitReview(_ context.Context, token, repo string, number 
 	return f.reviewErr
 }
 
-func (f *fakeGitHub) MarkReady(_ context.Context, _ string, id string) error {
+func (f *fakeGitHub) MarkReady(_ context.Context, token string, id string) error {
+	f.readyTokens = append(f.readyTokens, token)
 	f.readyCalls = append(f.readyCalls, id)
 	return f.readyErr
 }
 
-type fakeSnapshot struct{ known bool }
+type fakeSnapshot struct {
+	known bool
+	// tokenID is the token the snapshot says the repository is read and written with.
+	tokenID string
+}
 
-func (s fakeSnapshot) Linked(string) (merge.Linked, bool) { return merge.Linked{}, s.known }
+func (s fakeSnapshot) Linked(string) (merge.Linked, bool) {
+	return merge.Linked{TokenID: s.tokenID}, s.known
+}
 
 type fakeAccounts struct {
 	tokenErr error
 	login    string
+	// creds are the credentials by id; any other id (and the empty one) is the primary token "tok"
+	// of the account login.
+	creds map[string]auth.GitHubCredential
 }
 
-func (a fakeAccounts) GitHubToken(context.Context) (string, error) { return "tok", a.tokenErr }
-func (a fakeAccounts) GitHubLogin(context.Context) string          { return a.login }
+func (a fakeAccounts) GitHubToken(_ context.Context, id string) (auth.GitHubCredential, error) {
+	if c, ok := a.creds[id]; ok {
+		return c, a.tokenErr
+	}
+	return auth.GitHubCredential{ID: "main0000", Name: "Main", Login: a.login, Token: "tok"}, a.tokenErr
+}
 
 type rig struct {
 	svc       *review.Service
@@ -251,7 +268,7 @@ func TestUnknownPullRequestAndConnectionProblems(t *testing.T) {
 // named reports whether the permission error names the repository of the pull request.
 func named(err error) bool {
 	var p *github.PermissionError
-	return errors.As(err, &p) && strings.HasPrefix(p.Detail(), "This token can't write to acme/web: it needs the GitHub permission pull_requests: write.")
+	return errors.As(err, &p) && strings.HasPrefix(p.Detail(), "The token \"Main\" can't write to acme/web: it needs the GitHub permission pull_requests: write.")
 }
 
 func TestGitHubAnswersAreMapped(t *testing.T) {

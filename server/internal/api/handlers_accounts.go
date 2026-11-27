@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
@@ -55,18 +56,6 @@ func (h *handlers) PutSetupClient(_ context.Context, req gen.PutSetupClientReque
 	return gen.PutSetupClient204Response{}, nil
 }
 
-func (h *handlers) PutGithubPat(ctx context.Context, req gen.PutGithubPatRequestObject) (gen.PutGithubPatResponseObject, error) {
-	if req.Body == nil {
-		return nil, problem(http.StatusBadRequest, mw.CodeInvalidBody, "")
-	}
-	tok, err := h.cfg.OAuth.SetPAT(ctx, strings.TrimSpace(req.Body.Token))
-	if err != nil {
-		return nil, githubProblem(err)
-	}
-	h.kick()
-	return gen.PutGithubPat200JSONResponse(githubAccount(tok, true)), nil
-}
-
 // githubProblem maps errors of the GitHub client and the PAT check to problems.
 func githubProblem(err error) error {
 	var scope *auth.ScopeError
@@ -88,10 +77,22 @@ func githubProblem(err error) error {
 	return problem(http.StatusBadGateway, codeUpstream, "GitHub could not be reached")
 }
 
-func githubAccount(t auth.GitHubToken, connected bool) gen.GithubAccount {
-	if !connected {
+// githubSummary is the GitHub connection as one account: connected when any token is stored, the
+// login, method and warning of the primary (first) token, and needsReconnect when any token needs
+// it.
+func (h *handlers) githubSummary() (gen.GithubAccount, error) {
+	list, err := h.cfg.OAuth.GitHubTokens()
+	if err != nil {
+		return gen.GithubAccount{}, err
+	}
+	return githubAccount(list), nil
+}
+
+func githubAccount(list []auth.GitHubToken) gen.GithubAccount {
+	if len(list) == 0 {
 		return gen.GithubAccount{}
 	}
+	t := list[0]
 	out := gen.GithubAccount{Connected: true, Login: &t.Login}
 	if m := gen.GithubAccountMethod(t.Method); m.Valid() {
 		out.Method = &m
@@ -99,8 +100,9 @@ func githubAccount(t auth.GitHubToken, connected bool) gen.GithubAccount {
 	if t.Warning != "" {
 		out.Warning = &t.Warning
 	}
-	if t.NeedsReconnect {
-		out.NeedsReconnect = &t.NeedsReconnect
+	if slices.ContainsFunc(list, func(t auth.GitHubToken) bool { return t.NeedsReconnect }) {
+		reconnect := true
+		out.NeedsReconnect = &reconnect
 	}
 	return out
 }
@@ -116,11 +118,16 @@ func hasSite(sites []auth.Site, id string) bool {
 
 func (h *handlers) accounts(ctx context.Context) (gen.Accounts, error) {
 	var out gen.Accounts
-	gh, connected, err := h.cfg.OAuth.GitHubAccount()
+	tokens, err := h.cfg.OAuth.GitHubTokens()
 	if err != nil {
 		return out, err
 	}
-	out.Github = githubAccount(gh, connected)
+	out.Github = githubAccount(tokens)
+	out.GithubTokens = make([]gen.GithubToken, len(tokens))
+	for i, t := range tokens {
+		out.GithubTokens[i] = githubToken(t)
+	}
+	out.GithubTokenLimit = auth.MaxGitHubTokens
 
 	atl, connected, err := h.cfg.OAuth.AtlassianAccount()
 	if err != nil {

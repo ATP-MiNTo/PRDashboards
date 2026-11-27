@@ -132,13 +132,15 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 			return Result{}, &Error{Code: CodeTicketNotLinked, Detail: t.Key + " is not linked to this pull request"}
 		}
 	}
-	token, err := s.cfg.Accounts.GitHubToken(ctx)
+	// The pull request is read and written with the token of its repository, as the snapshot chose.
+	cred, err := s.cfg.Accounts.GitHubToken(ctx, view.TokenID)
 	if err != nil {
 		if notConnected(err) {
 			return Result{}, &Error{Code: CodeNotConnected, Detail: "GitHub is not connected"}
 		}
 		return Result{}, err
 	}
+	token := cred.Token
 	pr, err := s.cfg.GitHub.PullRequest(ctx, token, req.PRID)
 	switch {
 	case errors.Is(err, github.ErrPRNotFound):
@@ -163,7 +165,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 	var failed *github.MergeFailedError
 	merged, err := s.cfg.GitHub.Merge(ctx, token, pr.Repo.NameWithOwner, pr.Number, string(req.Method), req.ExpectedHeadSHA)
 	// A refused write names the repository, so a token of another owner is told as such.
-	err = github.WithRepo(err, pr.Repo.NameWithOwner, "merge in")
+	err = github.WithToken(github.WithRepo(err, pr.Repo.NameWithOwner, "merge in"), cred.Name)
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
 		return Result{}, &Error{Code: CodeHeadMoved, Detail: "the branch changed while the merge was prepared", Fresh: FreshOf(pr)}
@@ -194,7 +196,7 @@ func (s *Service) run(ctx context.Context, req Request) (Result, error) {
 		Summary: "Merged " + name + " with " + req.Method.Label(),
 	}}
 	if req.DeleteBranch {
-		step, act := s.deleteBranch(ctx, token, pr, s.cfg.Snapshot.Refs(pr.Repo.ID))
+		step, act := s.deleteBranch(ctx, cred, pr, s.cfg.Snapshot.Refs(pr.Repo.ID))
 		res.Steps = append(res.Steps, step)
 		if act != nil {
 			acts = append(acts, *act)
@@ -404,7 +406,7 @@ func parallel[T any](n int, fn func(i int) T) []T {
 
 // deleteBranch is step 5: the head branch goes only when it lives in the base repository and no
 // other open pull request uses it as its base. A failure is reported and not retried.
-func (s *Service) deleteBranch(ctx context.Context, token string, pr github.PR, refs []Ref) (Step, *store.ActivityRow) {
+func (s *Service) deleteBranch(ctx context.Context, cred auth.GitHubCredential, pr github.PR, refs []Ref) (Step, *store.ActivityRow) {
 	step := Step{Kind: StepDeleteBranch, State: StateSkipped}
 	if pr.CrossRepo {
 		step.Message = "Branch kept: it lives in a fork"
@@ -417,11 +419,11 @@ func (s *Service) deleteBranch(ctx context.Context, token string, pr github.PR, 
 		}
 	}
 	act := store.ActivityRow{Kind: "branch_delete", PRID: pr.ID, TriggeredBy: "manual"}
-	if err := s.cfg.GitHub.DeleteBranch(ctx, token, pr.Repo.NameWithOwner, pr.HeadRef); err != nil {
+	if err := s.cfg.GitHub.DeleteBranch(ctx, cred.Token, pr.Repo.NameWithOwner, pr.HeadRef); err != nil {
 		s.cfg.Log.WarnContext(ctx, "delete branch", "pr", pr.ID, "err", err)
 		step.State, step.Message = StateFailed, "The branch could not be deleted"
 		var perm *github.PermissionError
-		if errors.As(github.WithRepo(err, pr.Repo.NameWithOwner, "delete branches in"), &perm) {
+		if errors.As(github.WithToken(github.WithRepo(err, pr.Repo.NameWithOwner, "delete branches in"), cred.Name), &perm) {
 			// The merge stays; only the person can fix the token, so say how.
 			step.Message += ". " + perm.Detail()
 		}

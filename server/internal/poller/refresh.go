@@ -16,6 +16,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/tokenpick"
 )
 
 // ErrNoSite means Jira is connected but no site is selected.
@@ -106,7 +107,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	version := p.version
 	snap := build(buildInput{
 		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos, st.DefaultMethod), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
-		GitHub: p.ghSrc, RateLimit: p.rl, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
+		GitHub: p.ghSrc, RateLimit: p.rlShown, RepoTokens: p.gh.tokens, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
 	})
 	p.mu.Unlock()
 
@@ -169,25 +170,48 @@ func prRows(prs []github.PR) []store.PRRow {
 	return out
 }
 
-// fetchGitHub runs the search, and the merged search when pull requests left the list. It returns
-// the resolutions to store and whether the list was replaced by fresh data.
+// fetchGitHub runs the searches of every connected GitHub token, one token after the other (the
+// three searches of one token run together, so no more than four requests are in flight), merges
+// them by pull request and chooses a token for each repository (package tokenpick). It runs the
+// merged search when pull requests left the list. If any token fails the whole refresh fails like
+// it does for one token: the last list stays, and the source error names the token. It returns the
+// resolutions to store and whether the list was replaced by fresh data.
 func (p *Poller) fetchGitHub(ctx context.Context, now time.Time) ([]store.Resolution, bool) {
-	token, err := p.cfg.Accounts.GitHubToken(ctx)
-	if err != nil {
-		if errors.Is(err, auth.ErrNotConnected) {
-			p.mu.Lock()
-			p.gh, p.ghSrc, p.rl = ghData{loaded: true}, gen.SourceStatus{State: "disconnected"}, github.RateLimit{}
-			p.mu.Unlock()
+	creds, err := p.cfg.Accounts.GitHubTokens(ctx)
+	if err != nil && !errors.Is(err, auth.ErrNotConnected) {
+		p.failGitHub(now, err, "")
+		return nil, false
+	}
+	var found []tokenpick.Found
+	var access []string
+	for _, c := range creds {
+		cred, err := p.cfg.Accounts.GitHubToken(ctx, c.ID)
+		if errors.Is(err, auth.ErrNotConnected) || errors.Is(err, auth.ErrTokenNotFound) {
+			continue // removed since the list was read
+		}
+		if err != nil {
+			p.failGitHub(now, err, c.Name)
 			return nil, false
 		}
-		p.failGitHub(now, err)
+		res, err := p.cfg.GitHub.SearchOpen(ctx, cred.Token)
+		if err != nil {
+			if errors.Is(err, github.ErrBadCredentials) {
+				p.cfg.Accounts.GitHubRejected(ctx, c.ID)
+			}
+			p.failGitHub(now, err, c.Name)
+			return nil, false
+		}
+		found = append(found, tokenpick.Found{Token: tokenpick.Token{ID: c.ID, Name: c.Name, Login: c.Login}, Result: res})
+		access = append(access, cred.Token)
+	}
+	if len(found) == 0 {
+		p.mu.Lock()
+		p.gh, p.ghSrc, p.rl, p.rlShown = ghData{loaded: true}, gen.SourceStatus{State: "disconnected"}, github.RateLimit{}, github.RateLimit{}
+		p.mu.Unlock()
 		return nil, false
 	}
-	res, err := p.cfg.GitHub.SearchOpen(ctx, token)
-	if err != nil {
-		p.failGitHub(now, err)
-		return nil, false
-	}
+	merged := tokenpick.Merge(found)
+	res := merged.Result
 
 	var warnings []gen.Warning
 	if res.Capped {
@@ -202,16 +226,16 @@ func (p *Poller) fetchGitHub(ctx context.Context, now time.Time) ([]store.Resolu
 	var resolved []store.Resolution
 	if !res.Incomplete && !res.Capped && len(res.Errors) == 0 && len(res.Blocked) == 0 {
 		var w *gen.Warning
-		resolved, w = p.resolveLeft(ctx, token, res.PRs)
+		resolved, w = p.resolveLeft(ctx, access, res.PRs)
 		if w != nil {
 			warnings = append(warnings, *w)
 		}
 	}
 
 	p.mu.Lock()
-	p.gh = ghData{prs: res.PRs, blocked: res.Blocked, warnings: warnings, loaded: true}
+	p.gh = ghData{prs: res.PRs, tokens: merged.Repos, blocked: res.Blocked, warnings: warnings, loaded: true}
 	p.ghSrc = gen.SourceStatus{State: "ok", SyncedAt: &now}
-	p.rl = res.RateLimit
+	p.rl, p.rlShown = merged.Lowest, merged.Tightest
 	p.ghFails, p.ghBackoff = 0, time.Time{}
 	p.mu.Unlock()
 	return resolved, true
@@ -224,7 +248,9 @@ func truncate(s string, n int) string {
 	return s[:n] + "..."
 }
 
-func (p *Poller) failGitHub(now time.Time, err error) {
+// failGitHub records a failed GitHub fetch. name is the token that failed, empty when it is not one
+// token's failure.
+func (p *Poller) failGitHub(now time.Time, err error, name string) {
 	p.cfg.Log.Warn("github refresh failed", "err", err)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -241,10 +267,16 @@ func (p *Poller) failGitHub(now time.Time, err error) {
 		src.ResetAt = tptr(p.ghBackoff)
 	case errors.Is(err, github.ErrBadCredentials):
 		src.State, src.Error = "disconnected", sptr("GitHub rejected the token")
-		p.gh, p.rl = ghData{loaded: true}, github.RateLimit{}
+		if name != "" {
+			src.Error = sptr("GitHub token \"" + name + "\" was rejected")
+		}
+		p.gh, p.rl, p.rlShown = ghData{loaded: true}, github.RateLimit{}, github.RateLimit{}
 	case errors.Is(err, auth.ErrNeedsReconnect):
 		src.State, src.Error = "disconnected", sptr("Reconnect GitHub")
-		p.gh, p.rl = ghData{loaded: true}, github.RateLimit{}
+		if name != "" {
+			src.Error = sptr("Reconnect GitHub token \"" + name + "\"")
+		}
+		p.gh, p.rl, p.rlShown = ghData{loaded: true}, github.RateLimit{}, github.RateLimit{}
 	default:
 		wait, _ := p.cfg.Backoff.Delay(http.Header(nil), p.ghFails)
 		p.ghBackoff = now.Add(wait)
@@ -254,8 +286,10 @@ func (p *Poller) failGitHub(now time.Time, err error) {
 }
 
 // resolveLeft settles the pull requests that were open at the last refresh and are not in the list
-// now, with one merged search for all of them.
-func (p *Poller) resolveLeft(ctx context.Context, token string, current []github.PR) ([]store.Resolution, *gen.Warning) {
+// now, with one merged search for all of them per token (the tokens are asked one after the other
+// and their answers joined, because a pull request merged in a repository of one token is only
+// found with that one). If any of them fails, none is settled yet.
+func (p *Poller) resolveLeft(ctx context.Context, tokens []string, current []github.PR) ([]store.Resolution, *gen.Warning) {
 	stored, err := p.cfg.Store.OpenPRs(ctx)
 	if err != nil {
 		p.cfg.Log.Warn("read open pull requests", "err", err)
@@ -280,10 +314,18 @@ func (p *Poller) resolveLeft(ctx context.Context, token string, current []github
 		return nil, nil
 	}
 	slices.Sort(left)
-	merged, err := p.cfg.GitHub.SearchMerged(ctx, token, oldest.Add(-time.Minute))
-	if err != nil {
-		p.cfg.Log.Warn("merged pull request search failed", "err", err)
-		return nil, &gen.Warning{Code: "merged_lookup_failed", Message: "Pull requests that left the list could not be checked yet. They will be checked again."}
+	merged := github.MergedResult{Merged: map[string]time.Time{}}
+	for _, token := range tokens {
+		res, err := p.cfg.GitHub.SearchMerged(ctx, token, oldest.Add(-time.Minute))
+		if err != nil {
+			p.cfg.Log.Warn("merged pull request search failed", "err", err)
+			return nil, &gen.Warning{Code: "merged_lookup_failed", Message: "Pull requests that left the list could not be checked yet. They will be checked again."}
+		}
+		for id, at := range res.Merged {
+			if have, ok := merged.Merged[id]; !ok || at.Before(have) {
+				merged.Merged[id] = at
+			}
+		}
 	}
 	out := make([]store.Resolution, len(left))
 	for i, id := range left {

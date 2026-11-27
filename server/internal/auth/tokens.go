@@ -38,7 +38,7 @@ func (p Provider) clientItem() string {
 
 func (p Provider) tokenItem() string {
 	if p == GitHub {
-		return secrets.GitHubToken
+		return secrets.GitHubTokens
 	}
 	return secrets.AtlassianToken
 }
@@ -72,8 +72,13 @@ const (
 	MethodPAT = "pat"
 )
 
-// GitHubToken is the item github.token. A zero ExpiresAt means the token does not expire.
+// GitHubToken is one entry of the item github.tokens (the former item github.token holds the same
+// fields without ID, Name and FineGrained). A zero ExpiresAt means the token does not expire.
 type GitHubToken struct {
+	// ID is 8 random hex digits, stable for the life of the entry.
+	ID string `json:"id,omitempty"`
+	// Name is the person's name for it, 1 to 40 characters, unique ignoring case.
+	Name           string    `json:"name,omitempty"`
 	Token          string    `json:"token"`
 	Method         string    `json:"method"` // MethodApp, MethodOAuth or MethodPAT
 	Login          string    `json:"login"`
@@ -81,6 +86,8 @@ type GitHubToken struct {
 	RefreshToken   string    `json:"refreshToken,omitempty"`
 	ExpiresAt      time.Time `json:"expiresAt,omitzero"`
 	NeedsReconnect bool      `json:"needsReconnect,omitempty"`
+	// FineGrained marks a fine-grained personal access token, which works for one owner only.
+	FineGrained bool `json:"fineGrained,omitempty"`
 }
 
 var slugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,99}$`)

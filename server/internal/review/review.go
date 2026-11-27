@@ -35,12 +35,12 @@ type Snapshot interface {
 	Linked(id string) (merge.Linked, bool)
 }
 
-// Accounts says who the review acts as. GitHubToken returns an error that wraps
-// auth.ErrNotConnected (or auth.ErrNeedsReconnect) when GitHub cannot be used. GitHubLogin is the
-// login of the connected account, empty when it is not known.
+// Accounts says who the review acts as. GitHubToken returns the GitHub token with the id (the
+// primary one for an empty id or an id that is gone), with its name and the login of its account
+// (empty when not known), or an error that wraps auth.ErrNotConnected (or auth.ErrNeedsReconnect)
+// when GitHub cannot be used.
 type Accounts interface {
-	GitHubToken(ctx context.Context) (string, error)
-	GitHubLogin(ctx context.Context) string
+	GitHubToken(ctx context.Context, tokenID string) (auth.GitHubCredential, error)
 }
 
 // Config holds the collaborators of a Service.
@@ -106,16 +106,19 @@ func notConnected(err error) bool {
 }
 
 func (s *Service) run(ctx context.Context, action string, req Request) (Result, error) {
-	if _, ok := s.cfg.Snapshot.Linked(req.PRID); !ok {
+	view, ok := s.cfg.Snapshot.Linked(req.PRID)
+	if !ok {
 		return Result{}, &merge.Error{Code: merge.CodeNotFound, Detail: "unknown pull request"}
 	}
-	token, err := s.cfg.Accounts.GitHubToken(ctx)
+	// The pull request is read and written with the token of its repository, as the snapshot chose.
+	cred, err := s.cfg.Accounts.GitHubToken(ctx, view.TokenID)
 	if err != nil {
 		if notConnected(err) {
 			return Result{}, &merge.Error{Code: merge.CodeNotConnected, Detail: "GitHub is not connected"}
 		}
 		return Result{}, err
 	}
+	token := cred.Token
 	pr, err := s.cfg.GitHub.PullRequest(ctx, token, req.PRID)
 	switch {
 	case errors.Is(err, github.ErrPRNotFound):
@@ -126,12 +129,12 @@ func (s *Service) run(ctx context.Context, action string, req Request) (Result, 
 		s.cfg.Log.WarnContext(ctx, "pull request re-check failed", "pr", req.PRID, "action", action, "err", err)
 		return Result{}, err
 	}
-	if e := s.check(ctx, action, pr, req); e != nil {
+	if e := s.check(action, cred.Login, pr, req); e != nil {
 		s.cfg.Refresh()
 		return Result{}, e
 	}
 	// A refused write names the repository, so a token of another owner is told as such.
-	err = github.WithRepo(s.send(ctx, action, token, pr, req), pr.Repo.NameWithOwner, "")
+	err = github.WithToken(github.WithRepo(s.send(ctx, action, token, pr, req), pr.Repo.NameWithOwner, ""), cred.Name)
 	var rejected *github.ReviewRejectedError
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
@@ -160,8 +163,9 @@ func (s *Service) run(ctx context.Context, action string, req Request) (Result, 
 }
 
 // check is the re-check against the pull request GitHub just reported: it is open, a draft when it
-// is to be marked ready, still at the commit the person saw, and not opened by the reviewer.
-func (s *Service) check(ctx context.Context, action string, pr github.PR, req Request) *merge.Error {
+// is to be marked ready, still at the commit the person saw, and not opened by the reviewer (the
+// login of the token that is used, which is the repository's, not the primary's).
+func (s *Service) check(action, login string, pr github.PR, req Request) *merge.Error {
 	refuse := func(code, detail string) *merge.Error {
 		return &merge.Error{Code: code, Detail: detail, Fresh: merge.FreshOf(pr)}
 	}
@@ -174,7 +178,7 @@ func (s *Service) check(ctx context.Context, action string, pr github.PR, req Re
 		return refuse(merge.CodeHeadMoved, "the branch changed since the page loaded")
 	}
 	if action != ActionReady && pr.Author != "" {
-		if login := s.cfg.Accounts.GitHubLogin(ctx); login != "" && strings.EqualFold(login, pr.Author) {
+		if login != "" && strings.EqualFold(login, pr.Author) {
 			return refuse(merge.CodeOwnPullRequest, "GitHub does not let you review a pull request you opened")
 		}
 	}

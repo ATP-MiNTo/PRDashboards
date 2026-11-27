@@ -300,17 +300,24 @@ func TestPAT(t *testing.T) {
 	if strings.Contains(w.Body.String(), "ghp_pat") {
 		t.Fatal("token echoed")
 	}
-	if raw, _ := g.secrets.Get(secrets.GitHubToken); !strings.Contains(string(raw), "ghp_pat") {
+	if raw, _ := g.secrets.Get(secrets.GitHubTokens); !strings.Contains(string(raw), "ghp_pat") {
 		t.Fatal("token not in the secrets store")
 	}
 
 	g.prov.githubScopes.Store("")
+	// With a token stored, PUT adds the token next to it: the answer is still the summary of the
+	// primary one, and the new token is in the list with its warning.
 	acc = decode[map[string]any](t, put("github_pat_x"))
-	if acc["warning"] == nil || acc["warning"] == "" {
-		t.Fatalf("fine-grained token needs a warning: %v", acc)
+	if acc["connected"] != true || acc["warning"] != nil || acc["login"] != "octocat" {
+		t.Fatalf("summary of the primary token: %v", acc)
+	}
+	tokens := accounts(t, g, l).GithubTokens
+	if len(tokens) != 2 || tokens[1].Warning == nil || *tokens[1].Warning == "" || !tokens[1].FineGrained || tokens[0].FineGrained {
+		t.Fatalf("fine-grained token needs a warning: %+v", tokens)
 	}
 
 	g.prov.githubScopes.Store("repo")
+	_ = g.secrets.Delete(secrets.GitHubTokens)
 	w = put("ghp_pat")
 	wantProblem(t, w, http.StatusUnprocessableEntity, "insufficient_scopes")
 	if !strings.Contains(w.Body.String(), "read:org") {
@@ -334,8 +341,20 @@ func TestPAT(t *testing.T) {
 	}
 }
 
+type githubTokenBody struct {
+	ID             string
+	Name           string
+	Method         string
+	FineGrained    bool
+	Login          string
+	Warning        *string
+	NeedsReconnect bool
+}
+
 type accountsBody struct {
-	Github struct {
+	GithubTokens     []githubTokenBody
+	GithubTokenLimit int
+	Github           struct {
 		Connected bool
 		Login     string
 		Method    string
@@ -449,7 +468,7 @@ func TestCheckAccount(t *testing.T) {
 	if w := g.do(http.MethodPost, "/api/accounts/github/check", "", l.write()...); w.Code != 200 {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	_ = g.secrets.Set(secrets.GitHubToken, []byte(`{"token":"revoked","method":"pat","login":"x"}`))
+	_ = g.secrets.Set(secrets.GitHubTokens, []byte(`[{"id":"0a0b0c0d","name":"Token (x)","token":"revoked","method":"pat","login":"x"}]`))
 	wantProblem(t, g.do(http.MethodPost, "/api/accounts/github/check", "", l.write()...), http.StatusUnprocessableEntity, "invalid_token")
 
 	_ = g.oauth.SetClient(auth.Atlassian, auth.ClientCredentials{ClientID: "id", ClientSecret: "s"})

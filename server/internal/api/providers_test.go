@@ -56,8 +56,8 @@ func newFakeProviders(t *testing.T) *fakeProviders {
 			_, _ = io.WriteString(w, `{"data":{"viewer":null},"errors":[{"type":"FORBIDDEN","message":"The `+"`acme`"+` organization forbids access via a personal access token (classic)."}]}`)
 			return
 		}
-		switch strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") {
-		case "gho_abc", "ghp_pat", "github_pat_x":
+		switch tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "); {
+		case tok == "gho_abc", tok == "ghp_pat", tok == "github_pat_x", strings.HasPrefix(tok, "ghp_extra"):
 		default:
 			w.WriteHeader(http.StatusUnauthorized)
 			return

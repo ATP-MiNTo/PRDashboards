@@ -2,6 +2,7 @@ package poller_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
@@ -66,6 +68,13 @@ type fakeGitHub struct {
 	lastSince   time.Time
 	gate        chan struct{}
 	entered     chan struct{}
+	// byToken, when set, gives each token its own search answer (errByToken its own failure); a
+	// token it does not know is rejected. mergedByToken is the same for the merged search.
+	byToken       map[string]github.SearchResult
+	errByToken    map[string]error
+	mergedByToken map[string]map[string]time.Time
+	openTokens    []string
+	mergedTokens  []string
 }
 
 func (f *fakeGitHub) SearchOpen(_ context.Context, token string) (github.SearchResult, error) {
@@ -73,6 +82,17 @@ func (f *fakeGitHub) SearchOpen(_ context.Context, token string) (github.SearchR
 	f.openCalls++
 	gate, entered := f.gate, f.entered
 	res, err := f.result, f.err
+	f.openTokens = append(f.openTokens, token)
+	if f.byToken != nil {
+		var ok bool
+		if res, ok = f.byToken[token]; !ok {
+			err = github.ErrBadCredentials
+		} else {
+			err = f.errByToken[token]
+		}
+		f.mu.Unlock()
+		return res, err
+	}
 	f.mu.Unlock()
 	if token != "tok" {
 		return github.SearchResult{}, github.ErrBadCredentials
@@ -89,11 +109,15 @@ func (f *fakeGitHub) SearchOpen(_ context.Context, token string) (github.SearchR
 	return res, err
 }
 
-func (f *fakeGitHub) SearchMerged(_ context.Context, _ string, since time.Time) (github.MergedResult, error) {
+func (f *fakeGitHub) SearchMerged(_ context.Context, token string, since time.Time) (github.MergedResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.mergedCalls++
 	f.lastSince = since
+	f.mergedTokens = append(f.mergedTokens, token)
+	if f.mergedByToken != nil {
+		return github.MergedResult{Merged: f.mergedByToken[token]}, f.mergedErr
+	}
 	return github.MergedResult{Merged: f.merged}, f.mergedErr
 }
 
@@ -205,18 +229,61 @@ func (f *fakeJira) searchLog() [][]string {
 	return append([][]string(nil), f.searches...)
 }
 
-type fakeAccounts struct {
-	mu      sync.Mutex
-	token   string
-	tokenEr error
-	site    jira.Site
-	siteErr error
+// fakeCred is one GitHub credential of fakeAccounts.
+type fakeCred struct {
+	id, name, login, token string
+	err                    error
 }
 
-func (a *fakeAccounts) GitHubToken(context.Context) (string, error) {
+// fakeAccounts has one credential (token, tokenEr) unless creds lists several.
+type fakeAccounts struct {
+	mu       sync.Mutex
+	token    string
+	tokenEr  error
+	creds    []fakeCred
+	rejected []string
+	site     jira.Site
+	siteErr  error
+}
+
+func (a *fakeAccounts) list() []fakeCred {
+	if len(a.creds) > 0 {
+		return a.creds
+	}
+	if errors.Is(a.tokenEr, auth.ErrNotConnected) {
+		return nil
+	}
+	return []fakeCred{{id: "t1", name: "Token (octocat)", login: "octocat", token: a.token, err: a.tokenEr}}
+}
+
+func (a *fakeAccounts) GitHubTokens(context.Context) ([]auth.GitHubCredential, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.token, a.tokenEr
+	var out []auth.GitHubCredential
+	for _, c := range a.list() {
+		out = append(out, auth.GitHubCredential{ID: c.id, Name: c.name, Login: c.login})
+	}
+	return out, nil
+}
+
+func (a *fakeAccounts) GitHubToken(_ context.Context, id string) (auth.GitHubCredential, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, c := range a.list() {
+		if c.id == id {
+			if c.err != nil {
+				return auth.GitHubCredential{ID: c.id, Name: c.name}, c.err
+			}
+			return auth.GitHubCredential{ID: c.id, Name: c.name, Login: c.login, Token: c.token}, nil
+		}
+	}
+	return auth.GitHubCredential{}, auth.ErrTokenNotFound
+}
+
+func (a *fakeAccounts) GitHubRejected(_ context.Context, id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.rejected = append(a.rejected, id)
 }
 
 func (a *fakeAccounts) JiraSite(context.Context) (jira.Site, error) {

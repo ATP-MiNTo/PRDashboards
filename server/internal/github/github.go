@@ -366,6 +366,9 @@ type PermissionError struct {
 	Repo string
 	// Action is the verb phrase that goes before Repo in Detail ("merge in"); empty reads "write to".
 	Action string
+	// Token is the name the person gave the token that was refused, set with WithToken by the
+	// callers that know it. Empty reads "This token".
+	Token string
 }
 
 func (e *PermissionError) Error() string {
@@ -382,16 +385,32 @@ func WithRepo(err error, repo, action string) error {
 	return err
 }
 
+// WithToken records the name of the token the refused call used on a *PermissionError inside err,
+// so Detail can name it. Other errors, and nil, pass through.
+func WithToken(err error, name string) error {
+	var perm *PermissionError
+	if errors.As(err, &perm) {
+		perm.Token = name
+	}
+	return err
+}
+
 // oneOwner is the cause worth saying: a fine-grained token belongs to one user or organization,
-// so a repository of another owner cannot be written with it whatever its permissions are.
-const oneOwner = "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner."
+// so a repository of another owner cannot be written with it whatever its permissions are. The
+// person can connect a token of that owner as well.
+const oneOwner = "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner. Add one in Accounts."
 
 // Detail is a sentence for the person. It is plain text. Without a repository it says which
 // permission to add, built from the validated Accepted entries ("contents=write" reads
 // "contents: write"), or GitHub's message when it named none. With a repository it names the
 // repository and adds the cause that adding a permission would not fix: the token belongs to
-// another owner.
+// another owner, so a token of that owner has to be added. It names the token by the name the
+// person gave it, when it is known.
 func (e *PermissionError) Detail() string {
+	token := "The token"
+	if e.Token != "" {
+		token = `The token "` + e.Token + `"`
+	}
 	names := make([]string, len(e.Accepted))
 	for i, a := range e.Accepted {
 		names[i] = strings.Replace(a, "=", ": ", 1)
@@ -399,17 +418,20 @@ func (e *PermissionError) Detail() string {
 	if e.Repo == "" {
 		switch len(names) {
 		case 0:
-			return "The token lacks a GitHub permission this action needs: " + e.Message
+			return token + " lacks a GitHub permission this action needs: " + e.Message
 		case 1:
-			return "The token needs the GitHub permission " + names[0]
+			return token + " needs the GitHub permission " + names[0]
 		}
-		return "The token needs one of these GitHub permissions: " + strings.Join(names, " or ")
+		return token + " needs one of these GitHub permissions: " + strings.Join(names, " or ")
 	}
 	action := e.Action
 	if action == "" {
 		action = "write to"
 	}
-	head := "This token can't " + action + " " + e.Repo
+	if e.Token == "" {
+		token = "This token"
+	}
+	head := token + " can't " + action + " " + e.Repo
 	switch len(names) {
 	case 0:
 		if says := strings.TrimRight(e.Message, ". "); says != "" {

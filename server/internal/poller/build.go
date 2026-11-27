@@ -16,6 +16,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/stacks"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/tokenpick"
 )
 
 // linked is a pull request with its resolved tickets.
@@ -58,6 +59,8 @@ type buildInput struct {
 	Issues  map[string]jira.Issue
 	Site    jira.Site
 	GitHub  gen.SourceStatus
+	// RepoTokens maps a repository id to the GitHub token it was read with.
+	RepoTokens map[string]tokenpick.Token
 	// RateLimit is the GitHub budget the last refresh saw; the zero value (no data) leaves it out.
 	RateLimit github.RateLimit
 	Jira      gen.SourceStatus
@@ -205,6 +208,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 			Id: pr.Repo.ID, NameWithOwner: pr.Repo.NameWithOwner, IsNew: repo.IsNew,
 			SquashAllowed: pr.Repo.SquashAllowed, MergeAllowed: pr.Repo.MergeAllowed, RebaseAllowed: pr.Repo.RebaseAllowed,
 			ViewerPermission: viewerPermission(pr.Repo.ViewerPermission),
+			TokenId:          ptr(in.RepoTokens[pr.Repo.ID].ID), TokenName: ptr(in.RepoTokens[pr.Repo.ID].Name),
 		},
 		IsDraft:          pr.Draft,
 		Roles:            rolesOf(pr.Roles),
