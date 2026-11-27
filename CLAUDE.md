@@ -55,7 +55,7 @@ the Playwright specs in `e2e/` with Chromium from `PW_CHROMIUM_PATH` (else
 
 ## Calls and storage
 
-- No N+1 calls: three paginated GraphQL searches for PRs (assigned, authored and review requested), one JQL per 100 ticket keys, transitions
+- No N+1 calls: three paginated GraphQL searches for PRs (assigned, authored and review requested) per connected GitHub token (at most 10), one JQL per 100 ticket keys, transitions
   only for tickets being moved.
 - One refresh at a time. Browser tabs never trigger outside calls on their own.
 - One SQLite writer. Multi-row changes in one transaction. No per-row loops against the database.

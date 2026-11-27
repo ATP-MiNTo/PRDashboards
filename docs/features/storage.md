@@ -1,6 +1,6 @@
 # Storage and secrets
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 6.1 and 6.2. Related: [auth.md](auth.md), [security.md](security.md), [app-shell.md](app-shell.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 6.1 and 6.2. Related: [auth.md](auth.md), [github-tokens.md](github-tokens.md), [security.md](security.md), [app-shell.md](app-shell.md).
 
 ## Purpose
 
@@ -28,7 +28,8 @@ Secrets, kept in `vault.enc` (or the same names in `secrets.enc`):
 | --- | --- |
 | `session.key` | 32 random bytes, HMAC key of the session cookie and CSRF token |
 | `github.oauth.client`, `atlassian.oauth.client` | JSON `{clientId, clientSecret}`, and `appSlug` (GitHub App URL name, optional) for GitHub |
-| `github.token` | JSON `{token, method (app, pat, or legacy oauth), login, warning, refreshToken, expiresAt, needsReconnect}`. Without `expiresAt` the token does not expire |
+| `github.tokens` | JSON array, at most 10 entries, primary first: `{id, name, token, method (app, pat, or legacy oauth), fineGrained, login, warning, refreshToken, expiresAt, needsReconnect}`. Without `expiresAt` the token does not expire. See [github-tokens.md](github-tokens.md) |
+| `github.token` | Legacy, before several tokens: one object without `id` and `name`. The first read of the list (and the start) moves it into `github.tokens` and deletes it |
 | `atlassian.token` | JSON `{accessToken, refreshToken, expiresAt, sites, needsReconnect}` |
 
 Keychain, service `prdashboards`: one item, `vault.key`, 32 random bytes (base64 as every keychain

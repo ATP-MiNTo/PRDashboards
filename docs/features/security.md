@@ -1,6 +1,6 @@
 # Security middleware
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 8.1 to 8.5. Related: [review-actions.md](review-actions.md), [app-shell.md](app-shell.md), [storage.md](storage.md), [auth.md](auth.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 8.1 to 8.5. Related: [github-tokens.md](github-tokens.md), [review-actions.md](review-actions.md), [app-shell.md](app-shell.md), [storage.md](storage.md), [auth.md](auth.md).
 
 ## Purpose
 
@@ -55,10 +55,11 @@ Differences from the spec:
 | 502 | `oauth_exchange_failed`, `upstream_error` | provider rejected the code, or could not be reached |
 | 422 | `invalid_token`, `insufficient_scopes`, `unknown_site` | PAT rejected or short of scopes, site not reachable with the account |
 | 403 | `org_blocked` | PAT validation hit an SSO-enforcing organization |
+| 409 | `token_limit`, `token_duplicate`, `token_name_taken` | adding or renaming a GitHub token: 10 are connected, the same token string is stored, or another token has the name ([github-tokens.md](github-tokens.md)) |
 | 409 | `not_connected`, `provider_not_configured` | account operation without a connection, or without client credentials |
 | 409 | `not_open`, `head_moved`, `not_draft`, `own_pull_request` | review action refused from fresh GitHub data ([review-actions.md](review-actions.md)) |
 | 422 | `body_required`, `review_rejected` | request changes without a text, or GitHub refused the review |
-| 403 | `missing_permission` | the token lacks a GitHub permission on the repository (a review needs `pull_requests: write`); the detail names the repository and says a fine-grained token works for one owner only |
+| 403 | `missing_permission` | the token lacks a GitHub permission on the repository (a review needs `pull_requests: write`); the detail names the token and the repository and says a fine-grained token works for one owner only |
 
 ## Code map
 
@@ -133,8 +134,9 @@ None.
 - `SameSite=Strict` is why the OAuth callback cannot carry the cookie. It redirects to a static
   page that completes the flow with a protected `POST` ([auth.md](auth.md)). Do not add a session
   requirement to the callback, and do not add any other cookie-less route that takes input.
-- `TestProtectedSurface` lists which paths are protected, so a new route has to be classified.
-- The write endpoints `POST /api/prs/{id}/approve`, `/request-changes` and `/ready` pass the whole chain like the merge (session, CSRF, Origin, Sec-Fetch-Site, Host, rate limit, 64 KiB body, schema with `additionalProperties: false` and a hex `expectedHeadSha`), then re-check the pull request on GitHub (open, draft, head SHA, not opened by the viewer) before one write with the viewer's token through `github` and `netguard`. They are not proxies: each sends one fixed GitHub call built from validated parts ([review-actions.md](review-actions.md)). The browser disabling Merge and Ready for a read-only repository (`SnapshotRepo.viewerPermission`) is a convenience only: the server never trusts it, re-checks on fresh data, and GitHub itself refuses a write the account or token may not do.
+- `TestProtectedSurface` lists which paths are protected, so a new route has to be classified. It includes `/api/github/pat`, `/api/github/tokens`, `/api/github/tokens/{id}` and `/api/github/tokens/{id}/check`.
+- The token routes (`PUT /api/github/pat`, `POST /api/github/tokens`, `PUT` and `DELETE /api/github/tokens/{id}`, `POST /api/github/tokens/{id}/check`) pass the whole chain: [tokens_api_test.go](../../server/internal/api/tokens_api_test.go) `TestTokenRoutesPassTheWholeMiddlewareStack` runs each through the wrong host, cross-site, no or forged session, a missing or wrong CSRF value, a foreign or missing Origin, CORS preflight, a wrong content type, an oversized body, unknown fields and a wrong shape. The `{id}` must match `^[0-9a-f]{8}$` (schema), no body or response carries a token value, and a write to the list takes `tokenMu` ([github-tokens.md](github-tokens.md)).
+- The write endpoints `POST /api/prs/{id}/approve`, `/request-changes` and `/ready` pass the whole chain like the merge (session, CSRF, Origin, Sec-Fetch-Site, Host, rate limit, 64 KiB body, schema with `additionalProperties: false` and a hex `expectedHeadSha`), then re-check the pull request on GitHub (open, draft, head SHA, not opened by the viewer) before one write with the token of the pull request's repository through `github` and `netguard`. They are not proxies: each sends one fixed GitHub call built from validated parts ([review-actions.md](review-actions.md)). The browser disabling Merge and Ready for a read-only repository (`SnapshotRepo.viewerPermission`) is a convenience only: the server never trusts it, re-checks on fresh data, and GitHub itself refuses a write the account or token may not do.
 
 ## Tests
 

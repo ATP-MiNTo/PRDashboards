@@ -224,7 +224,8 @@ with a saved slug, the install link `https://github.com/apps/<slug>/installation
 
 ### 6.1 Secrets
 
-Items: `github.oauth.client`, `github.token`, `atlassian.oauth.client`, `atlassian.token`
+Items: `github.oauth.client`, `github.tokens` (a JSON list of up to 10 tokens, each with an id and a name; the
+former single `github.token` is moved into it at start), `atlassian.oauth.client`, `atlassian.token`
 (access + refresh + expiry + sites as JSON, over 3 KB), `session.key` (HMAC key for cookies).
 
 With a keychain, the keychain (service `prdashboards`) holds exactly one item, `vault.key`: 32
@@ -550,7 +551,8 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/jira/options` | Jira status names (one call, cached 10 minutes) and project keys (from memory) for the rule form |
 | `GET /api/activity` | Activity log, paginated |
 | `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |
-| `PUT /api/github/pat` | Store a PAT |
+| `PUT /api/github/pat` | Store a PAT (the first token, or one more) |
+| `POST /api/github/tokens`, `PUT` and `DELETE /api/github/tokens/{id}`, `POST /api/github/tokens/{id}/check` | Add, rename, remove and check one of the GitHub tokens (up to 10) |
 
 Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head_moved`,
 `not_mergeable`, `transition_unavailable`, `rate_limited`, ...).
@@ -568,8 +570,11 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
 
 ### 10.2 GitHub calls per refresh
 
-1. Three paginated GraphQL searches, 50 per page, run concurrently and merged by PR id (a PR that is
-   assigned to me and opened by me appears once, with both roles):
+1. Three paginated GraphQL searches per connected GitHub token (at most 10), 50 per page. The three of
+   one token run concurrently, the tokens one after the other, and the results are merged by PR id (a PR
+   that is assigned to me and opened by me appears once, with both roles, and one that several tokens
+   see appears once, from the token with the highest role on its repository, see
+   [features/github-tokens.md](features/github-tokens.md)):
    `search(query: "is:pr is:open assignee:@me archived:false", type: ISSUE, first: 50, after: $c)`, and
    the same with `author:@me` and with `review-requested:@me` (the pull requests waiting on my review).
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
@@ -586,7 +591,7 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
    pending, skipped, neutral or cancelled. `app` is the check suite's app name, or null for a
    commit status. When `totalCount` is larger than the 50 returned, the snapshot keeps `total`
    and the UI shows "+N more" linking to the PR's checks page.
-2. Three searches (assigned, authored and review requested) for recently merged PRs (7.5), only when PRs left the open list.
+2. Three searches (assigned, authored and review requested) per token for recently merged PRs (7.5), only when PRs left the open list.
 
 No per-PR follow-up calls. The only single-PR call is the re-check right before a merge.
 

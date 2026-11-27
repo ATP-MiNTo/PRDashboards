@@ -1,6 +1,6 @@
 # Review actions and approvals
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 7.7, 8 and 9. Related: [merge-and-transition.md](merge-and-transition.md), [settings.md](settings.md), [poller.md](poller.md), [security.md](security.md), [auth.md](auth.md), [command-table.md](command-table.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 7.7, 8 and 9. Related: [github-tokens.md](github-tokens.md), [merge-and-transition.md](merge-and-transition.md), [settings.md](settings.md), [poller.md](poller.md), [security.md](security.md), [auth.md](auth.md), [command-table.md](command-table.md).
 
 ## Purpose
 
@@ -30,6 +30,7 @@ against fresh data and acts as the viewer.
 - [server/internal/github/review.go](../../server/internal/github/review.go) and [review.graphql](../../server/internal/github/review.graphql): `SubmitReview` (REST) and `MarkReady` (GraphQL mutation), error mapping, `ErrOwnPullRequest`, `ErrNotDraft`, `ReviewRejectedError`.
 - [server/internal/api/handlers_review.go](../../server/internal/api/handlers_review.go): `ApprovePr`, `RequestChangesPr`, `MarkPrReady`; `providerFailure` in [handlers_merge.go](../../server/internal/api/handlers_merge.go) maps GitHub's refusals for the merge and the review actions alike.
 - [server/internal/poller/build.go](../../server/internal/poller/build.go): `approvalsOf`, `fillApprovals`; [store/repos.go](../../server/internal/store/repos.go): `ApprovalsRequired` in `RepoConfig`, `PutRepo` and `PutRepos`.
+- [server/internal/review/tokens_test.go](../../server/internal/review/tokens_test.go): the token of each call, the fallback to the primary token, the own-pull-request check with the chosen login, the permission detail with the token name.
 - [server/internal/fake](../../server/internal/fake) (e2e build tag): `POST .../pulls/{n}/reviews`, the ready mutation, the config `review` (acme/review #31 with one approval, #32 a draft, #33 opened by the viewer) and the token `github_pat_pulls_read` (Pull requests read only).
 - Web, controls: [ReviewCell.tsx](../../web/src/components/CommandTable/ReviewCell.tsx) (the Review cell), [RequestChangesDialog.tsx](../../web/src/components/CommandTable/RequestChangesDialog.tsx), [MergeCell.tsx](../../web/src/components/CommandTable/MergeCell.tsx) (the Ready button and its frost sweep), [web/src/lib/review.ts](../../web/src/lib/review.ts) (`myReview`, `reviewBadge`, `reviewAccess`), `describeReviewProblem` in [web/src/lib/problems.ts](../../web/src/lib/problems.ts); the shared [PopMenu](../../web/src/components/PopMenu/PopMenu.tsx), [Modal](../../web/src/components/Modal/Modal.tsx) and [Tip](../../web/src/components/Tip/Tip.tsx) ([dialog-and-popover.md](dialog-and-popover.md)).
 - Web: [web/src/api/client.ts](../../web/src/api/client.ts) `approvePr`, `requestChangesPr`, `markPrReady`; [queries.ts](../../web/src/api/queries.ts) `useApprove`, `useRequestChanges`, `useMarkReady`, `useSaveApprovals`, `approvalsUpdate`; [web/src/lib/snapshot.ts](../../web/src/lib/snapshot.ts) `approvalsBlock` and `blockOf`.
@@ -37,9 +38,9 @@ against fresh data and acts as the viewer.
 ## Key flows
 
 1. The card sends the action with the head SHA it shows (and the text, for a request for changes). The router has already applied the checks of [security.md](security.md): Host, Origin, Sec-Fetch-Site, session, CSRF, content type, body size and schema.
-2. `Service.run`: the pull request must be in the current snapshot (`not_found` otherwise), the GitHub token is read (`not_connected`), and one GraphQL node query fetches the pull request again.
-3. `check` against the fresh data: open (`not_open`), a draft when marking ready (`not_draft`), head equal to `expectedHeadSha` (`head_moved`), and for approve and request changes not opened by the connected user (`own_pull_request`, compared case-insensitively with the stored login of the account; GitHub refuses it too, and that refusal is mapped to the same code). A refusal carries the fresh state, and starts a refresh so the card catches up.
-4. The write: approve and request changes are `POST /repos/{o}/{r}/pulls/{n}/reviews` with the event, the text and `commit_id` set to `expectedHeadSha`, so GitHub itself refuses a commit that is no longer the head (`head_moved`). Mark ready is the GraphQL mutation `markPullRequestReadyForReview` and succeeds only when GitHub answers with the pull request no longer a draft. The viewer's own token is used.
+2. `Service.run`: the pull request must be in the current snapshot (`not_found` otherwise), the GitHub token of its repository is read (`Linked.TokenID`, the token the poller chose, [github-tokens.md](github-tokens.md); the primary token for a snapshot without one or a token removed since; `not_connected` when none works), and one GraphQL node query fetches the pull request again with that token.
+3. `check` against the fresh data: open (`not_open`), a draft when marking ready (`not_draft`), head equal to `expectedHeadSha` (`head_moved`), and for approve and request changes not opened by the connected user (`own_pull_request`, compared case-insensitively with the stored login of the chosen token's account, so with several tokens it is the account that would write the review; GitHub refuses it too, and that refusal is mapped to the same code). A refusal carries the fresh state, and starts a refresh so the card catches up.
+4. The write: approve and request changes are `POST /repos/{o}/{r}/pulls/{n}/reviews` with the event, the text and `commit_id` set to `expectedHeadSha`, so GitHub itself refuses a commit that is no longer the head (`head_moved`). Mark ready is the GraphQL mutation `markPullRequestReadyForReview` and succeeds only when GitHub answers with the pull request no longer a draft. The token of the pull request's repository is used, and a refusal for a missing permission names it and the repository (`github.WithToken`, `The token "Work" can't approve in acme/web: ...`).
 5. After a success `Refresh` starts one refresh (`Poller.Trigger`, joining a running one), the same call a merge makes. It is the usual three searches, so there is no call per pull request and no polling of its own; the `snapshot` event it publishes is what the browser already listens to. The web hooks also invalidate the snapshot query when the request ends, whatever the outcome.
 6. Merge: `check` counts the approvals of the fresh pull request against `Linked.ApprovalsRequired`. The card's Merge cell uses `blockOf`, which applies the same rule to `SnapshotPr.approvals` with the same words, after "Changes requested" and before "Review required".
 
@@ -56,7 +57,7 @@ against fresh data and acts as the viewer.
 
 ## Outside calls
 
-- Per action: one GraphQL node query (the re-check) and one write: one REST review POST, or one GraphQL mutation. Then one refresh (three searches, [poller.md](poller.md)).
+- Per action: one GraphQL node query (the re-check) and one write: one REST review POST, or one GraphQL mutation, both with the token of the repository. Then one refresh (three searches per token, [poller.md](poller.md)).
 - Nothing from the browser to GitHub. Saving the approvals setting makes no outside call: it rebuilds the snapshot from cached data (`Relink`).
 
 ## Rules and invariants
