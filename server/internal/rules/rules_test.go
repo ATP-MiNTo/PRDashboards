@@ -87,6 +87,8 @@ func TestTriggers(t *testing.T) {
 		{"waiting for approvals with none yet", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsNeed = 2 }), "", false},
 		{"waiting for approvals with enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 2 }), "", false},
 		{"waiting for approvals with more than enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 3, 2 }), "", false},
+		{"waiting for approvals with nothing required", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 0 }), "", false},
+		{"waiting for approvals with nothing required and none given", rule("r", rules.WaitingApprovals), pr("A"), "", false},
 		{"waiting for approvals with an unknown need", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave = 1 }), "", false},
 		{"waiting for approvals for a draft", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.Draft, p.ApprovalsHave, p.ApprovalsNeed = true, 1, 2 }), "", false},
 		{"waiting for approvals without a head", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.HeadSHA, p.ApprovalsHave, p.ApprovalsNeed = "", 1, 2 }), "", false},

@@ -36,12 +36,14 @@ func deleteBranchOf(c *gen.DeleteBranchChoice) string {
 	return string(*c)
 }
 
-// approvalsOf is the approvals a repo update asks for, 0 (keep what is stored) when it leaves them out.
-func approvalsOf(n *gen.ApprovalsRequired) int {
+// approvalsOf is the approvals a repo update asks for, nil (keep what is stored) when it leaves them
+// out. 0 is a value of its own: nothing required.
+func approvalsOf(n *gen.ApprovalsRequired) *int {
 	if n == nil {
-		return 0
+		return nil
 	}
-	return *n
+	v := *n
+	return &v
 }
 
 func (h *handlers) ListRepos(ctx context.Context, _ gen.ListReposRequestObject) (gen.ListReposResponseObject, error) {

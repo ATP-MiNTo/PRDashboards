@@ -111,7 +111,8 @@ type PR struct {
 	CI string
 	// ApprovalsHave is the number of reviewers whose latest review is an approval, and
 	// ApprovalsNeed the number the repository requires. The caller counts them, so this package
-	// stays pure. A zero ApprovalsNeed means the count is unknown.
+	// stays pure. A zero ApprovalsNeed means the repository requires no approvals (the default), so
+	// WaitingApprovals never holds for it.
 	ApprovalsHave int
 	ApprovalsNeed int
 }

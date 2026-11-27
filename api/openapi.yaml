@@ -1406,11 +1406,11 @@ components:
           $ref: '#/components/schemas/MergeMethodName'
     ApprovalsRequired:
       type: integer
-      minimum: 1
+      minimum: 0
       maximum: 10
       description: >
         Approvals a pull request of the repository needs before the dashboard lets it merge, counted
-        as distinct reviewers whose latest review is an approval. 1 when never set.
+        as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required.
     DeleteBranchChoice:
       type: string
       enum: [default, 'yes', 'no']

@@ -75,8 +75,8 @@ type Linked struct {
 	NameWithOwner string
 	Number        int
 	Tickets       []string
-	// ApprovalsRequired is the repository's approvals setting as the current snapshot has it; a
-	// value outside 1 to 10 counts as the default of 1 (NeedOf).
+	// ApprovalsRequired is the repository's approvals setting as the current snapshot has it, 0 to
+	// 10; 0 means nothing is required and a value outside the range means the same (NeedOf).
 	ApprovalsRequired int
 }
 

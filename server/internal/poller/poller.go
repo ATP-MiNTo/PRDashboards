@@ -246,7 +246,7 @@ func (p *Poller) Load(ctx context.Context) error {
 }
 
 // approvalsNeeded reads the stored approvals setting of every repo once and returns a lookup that
-// gives 1 for a repo it does not know. A failed read is not an error here: the snapshot only gets
+// gives 0 (nothing required) for a repo it does not know. A failed read is not an error here: the snapshot only gets
 // the default until the next refresh.
 func (p *Poller) approvalsNeeded(ctx context.Context) func(repoID string) int {
 	need := map[string]int{}

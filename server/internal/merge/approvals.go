@@ -6,9 +6,10 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 )
 
-// Approvals a repository can ask for before the dashboard lets a pull request merge.
+// Approvals a repository can ask for before the dashboard lets a pull request merge: 0 (nothing
+// required, the default) to 10.
 const (
-	DefaultApprovals = 1
+	DefaultApprovals = 0
 	MaxApprovals     = 10
 )
 
@@ -24,16 +25,16 @@ const (
 type Approvals struct {
 	// Have is the number of distinct reviewers whose latest review is an approval.
 	Have int
-	// Need is the repository's approvalsRequired, 1 to 10.
+	// Need is the repository's approvalsRequired, 0 to 10; 0 means nothing is required.
 	Need int
 	// ChangesRequested is the number of reviewers whose latest review requests changes.
 	ChangesRequested int
 }
 
-// NeedOf is the number of approvals a repository requires: a value outside 1 to 10, which is an
-// unset one, means the default of 1.
+// NeedOf is the number of approvals a repository requires: 0 to 10 as it is, anything outside that
+// range means the default of 0.
 func NeedOf(n int) int {
-	if n < DefaultApprovals || n > MaxApprovals {
+	if n < 0 || n > MaxApprovals {
 		return DefaultApprovals
 	}
 	return n
@@ -64,11 +65,12 @@ func CountApprovals(reviews []github.Review, need int) Approvals {
 	return a
 }
 
-// Met reports whether enough reviewers approved.
+// Met reports whether enough reviewers approved. It always does when nothing is required.
 func (a Approvals) Met() bool { return a.Have >= NeedOf(a.Need) }
 
 // Block is why the approvals alone keep the pull request from merging, in the words of the Merge
-// column ("Needs 2 approvals, has 1"), or "" when there are enough.
+// column ("Needs 2 approvals, has 1"), or "" when there are enough, which includes a repository that
+// requires none.
 func (a Approvals) Block() string {
 	if a.Met() {
 		return ""
