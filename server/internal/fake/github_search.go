@@ -38,7 +38,12 @@ type fixturePR struct {
 	author               string
 	updatedAgo           time.Duration
 	additions, deletions int
+	// extra are the reviews the viewer submitted through the fake.
+	extra []fakeReview
 }
+
+// viewerOpened reports whether the viewer (octocat) opened the pull request.
+func (p fixturePR) viewerOpened() bool { return p.authored }
 
 // matchesViewer reports whether the search query selects the pull request for the viewer.
 // A query with neither assignee:@me nor author:@me matches everything.
@@ -100,6 +105,25 @@ func stackedPRs() []fixturePR {
 	}
 }
 
+// reviewPRs are the pull requests of the review actions, all in acme/review: #31 has one approval,
+// #32 is a draft and #33 was opened by the viewer.
+func reviewPRs() []fixturePR {
+	return []fixturePR{
+		{
+			repo: "acme/review", org: "acme", number: 31, title: "REV-31 Needs two approvals", head: "feat/rev-31", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", reviewApproved: true, committedAgo: time.Hour, rollup: "SUCCESS",
+		},
+		{
+			repo: "acme/review", org: "acme", number: 32, title: "REV-32 Draft to finish", head: "feat/rev-32", base: "main", draft: true,
+			mergeable: "MERGEABLE", mergeState: "DRAFT", decision: "", committedAgo: 2 * time.Hour, rollup: "",
+		},
+		{
+			repo: "acme/review", org: "acme", number: 33, title: "REV-33 My own change", head: "feat/rev-33", base: "main", authored: true,
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 3 * time.Hour, rollup: "SUCCESS",
+		},
+	}
+}
+
 // fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
 // requests the config asks for.
 func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
@@ -110,9 +134,23 @@ func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
 	if cfg.Stacked {
 		prs = append(prs, stackedPRs()...)
 	}
+	if cfg.Review {
+		prs = append(prs, reviewPRs()...)
+	}
 	for i, p := range prs {
 		if slices.Contains(cfg.Approved, p.number) {
 			prs[i].decision, prs[i].reviewApproved = "APPROVED", true
+		}
+		// What the review actions changed: a draft marked ready, and the viewer's reviews.
+		if slices.Contains(cfg.ready, p.id()) {
+			prs[i].draft, prs[i].mergeState = false, "CLEAN"
+		}
+		for _, rv := range cfg.reviews {
+			if rv.PR != p.id() {
+				continue
+			}
+			prs[i].extra = append(prs[i].extra, rv)
+			prs[i].decision = map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}[rv.Event]
 		}
 	}
 	return prs
@@ -217,6 +255,15 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 		reviews = append(reviews, map[string]any{
 			"id": fmt.Sprintf("RV_%d", p.number), "state": "APPROVED",
 			"submittedAt": now.Add(-time.Hour).UTC().Format(time.RFC3339), "author": map[string]any{"login": "alice"},
+		})
+	}
+	// The viewer's latest review replaces the one before it, as latestReviews does.
+	if n := len(p.extra); n > 0 {
+		last := p.extra[n-1]
+		state := map[string]string{"APPROVE": "APPROVED", "REQUEST_CHANGES": "CHANGES_REQUESTED"}[last.Event]
+		reviews = append(reviews, map[string]any{
+			"id": fmt.Sprintf("RV_%d_viewer", p.number), "state": state,
+			"submittedAt": now.UTC().Format(time.RFC3339), "author": map[string]any{"login": "octocat"},
 		})
 	}
 	requests := []any{}
