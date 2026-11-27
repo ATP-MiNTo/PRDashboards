@@ -1,6 +1,6 @@
 # Command Table
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 10.5 and 11. Related: [toolbar-pager-footer.md](toolbar-pager-footer.md), [sidebar-shell.md](sidebar-shell.md), [poller.md](poller.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [theme.md](theme.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 10.5 and 11. Related: [review-actions.md](review-actions.md), [toolbar-pager-footer.md](toolbar-pager-footer.md), [sidebar-shell.md](sidebar-shell.md), [poller.md](poller.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [theme.md](theme.md).
 
 ## Purpose
 
@@ -9,7 +9,7 @@ the merge panel inside the card, the Account panel, and the left sidebar with th
 
 Differences from the spec:
 
-- The Merge column shows why a PR cannot be merged, computed in the browser from the snapshot (`blockOf`). The server checks the same things again when merging ([merge-and-transition.md](merge-and-transition.md)).
+- The Merge column shows why a PR cannot be merged, computed in the browser from the snapshot (`blockOf`, including "Needs N approvals, has M" from `SnapshotPr.approvals`). The server checks the same things again when merging ([merge-and-transition.md](merge-and-transition.md)). The review actions the cards will offer (approve, request changes, ready) and the approvals counts are served by [review-actions.md](review-actions.md); the controls are not drawn yet.
 - There is no full-width top bar. Two floating pills ([header.md](header.md)) hold the burger that toggles the left sidebar with Settings ([sidebar-shell.md](sidebar-shell.md)), the search ([search.md](search.md)), Refresh and the theme circle. The source status moved into the popover of Refresh.
 - The list is cards, not a table. Each card has the avatar, the title, a meta line (repository and number, author, the age of the last update and of the last commit), the Jira row with the size of the change (+added, -removed), and a controls row (Hide, Review, CI, Method, Merge) with dividers. The design draws other controls in that row; they come with the merge and review slices, and until then the card keeps the controls of the app.
 - The stat strip is four tiles: Showing, Ready to merge, Running CI and Stacks. They count what the Show, hidden and search switches leave, and each tile is a button that filters the list to its pull requests ("Showing" lifts the filter). The status chips (All, Ready, Blocked, Draft, Stale) and the Blocked, Draft and Stale filters are gone; a PR's block reason still shows in its Merge cell. The sort, "Show" and "Hidden PRs" toolbar and the legend sit under the strip. Cards can be hidden, the list is paged at the bottom, and a footer with a GitHub button ends the page. All of it is client-side over the snapshot and is described in [toolbar-pager-footer.md](toolbar-pager-footer.md).

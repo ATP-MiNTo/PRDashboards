@@ -1,6 +1,6 @@
 # Security middleware
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 8.1 to 8.5. Related: [app-shell.md](app-shell.md), [storage.md](storage.md), [auth.md](auth.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 8.1 to 8.5. Related: [review-actions.md](review-actions.md), [app-shell.md](app-shell.md), [storage.md](storage.md), [auth.md](auth.md).
 
 ## Purpose
 
@@ -56,6 +56,9 @@ Differences from the spec:
 | 422 | `invalid_token`, `insufficient_scopes`, `unknown_site` | PAT rejected or short of scopes, site not reachable with the account |
 | 403 | `org_blocked` | PAT validation hit an SSO-enforcing organization |
 | 409 | `not_connected`, `provider_not_configured` | account operation without a connection, or without client credentials |
+| 409 | `not_open`, `head_moved`, `not_draft`, `own_pull_request` | review action refused from fresh GitHub data ([review-actions.md](review-actions.md)) |
+| 422 | `body_required`, `review_rejected` | request changes without a text, or GitHub refused the review |
+| 403 | `missing_permission` | the token lacks a GitHub permission (a review needs `pull_requests: write`) |
 
 ## Code map
 
@@ -131,6 +134,7 @@ None.
   page that completes the flow with a protected `POST` ([auth.md](auth.md)). Do not add a session
   requirement to the callback, and do not add any other cookie-less route that takes input.
 - `TestProtectedSurface` lists which paths are protected, so a new route has to be classified.
+- The write endpoints `POST /api/prs/{id}/approve`, `/request-changes` and `/ready` pass the whole chain like the merge (session, CSRF, Origin, Sec-Fetch-Site, Host, rate limit, 64 KiB body, schema with `additionalProperties: false` and a hex `expectedHeadSha`), then re-check the pull request on GitHub (open, draft, head SHA, not opened by the viewer) before one write with the viewer's token through `github` and `netguard`. They are not proxies: each sends one fixed GitHub call built from validated parts ([review-actions.md](review-actions.md)).
 
 ## Tests
 
@@ -142,4 +146,5 @@ None.
 - [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): data dir modes, private file refusal, lock contention, bind address.
 - [server/internal/api/mw/mw_test.go](../../server/internal/api/mw/mw_test.go) `TestProtectedSurface` and [oauth_api_test.go](../../server/internal/api/oauth_api_test.go): the cookie-less callback, start protection and the complete step.
 - [e2e/github.spec.ts](../../e2e/github.spec.ts): the cross-site callback in a real browser.
+- [server/internal/api/review_api_test.go](../../server/internal/api/review_api_test.go) `TestReviewEndpointsAreGuardedLikeTheMerge` (session, CSRF, Origin, Sec-Fetch-Site, Host, content type, size, one JSON value) and [e2e/review.spec.ts](../../e2e/review.spec.ts).
 - [web/src/api/client.test.ts](../../web/src/api/client.test.ts) and [web/scripts/csp-hashes.test.ts](../../web/scripts/csp-hashes.test.ts).

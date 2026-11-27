@@ -163,6 +163,7 @@ sequenceDiagram
 | Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |
 | Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
+| Review actions and approvals | [features/review-actions.md](features/review-actions.md) | Built |
 | Status sync rules and Multi-PR tickets | [features/status-sync-rules.md](features/status-sync-rules.md) | Built |
 | Header, floating pills | [features/header.md](features/header.md) | Built |
 | Search | [features/search.md](features/search.md) | Built |

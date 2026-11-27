@@ -18,7 +18,7 @@ Differences from the spec:
 
 - `repos.default_method`, `repos.is_new` and `repo_branch_rules(repo_id, position, pattern, method)` ([storage.md](storage.md)). A new repo is seeded with the rules `main` to merge commit and `production` to merge commit (`store.SeedRules`).
 - `Settings.defaultMethodForNewRepos` is the default of a repo seen for the first time.
-- API schemas: `MergeMethodName`, `MethodResolution {method, default, source, allowed, warning}` (the `mergeMethod` field of every `SnapshotPr`), `BranchRule`, `RepoSettings`, `Repos`, `RepoUpdate {defaultMethod, branchRules (at most 50), clearNew}`.
+- API schemas: `MergeMethodName`, `MethodResolution {method, default, source, allowed, warning}` (the `mergeMethod` field of every `SnapshotPr`), `BranchRule`, `RepoSettings`, `Repos`, `RepoUpdate {defaultMethod, branchRules (at most 50), clearNew, approvalsRequired?}`. `approvalsRequired` (1 to 10, default 1) is the repo's approvals setting, documented in [review-actions.md](review-actions.md); an update that leaves it out keeps the stored value.
 - `source` is `rule: <pattern>`, `repo default` or `new repo default`.
 
 ## Code map

@@ -531,6 +531,8 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET /api/tickets/assigned` | Picker source |
 | `PUT /api/prs/{id}/tickets` | Set manual links and removed keys |
 | `POST /api/prs/{id}/merge` | Merge and transition (7.7) |
+| `POST /api/prs/{id}/approve`, `POST /api/prs/{id}/request-changes`, `POST /api/prs/{id}/ready` | Review actions and mark ready, checked again on the server like the merge ([features/review-actions.md](features/review-actions.md)) |
+| `GET/PUT /api/repos`, `GET/PUT /api/repos/{id}` | Per repository: default method, branch rules, approvals required ([features/merge-method.md](features/merge-method.md), [features/review-actions.md](features/review-actions.md)) |
 | `GET /api/retries` | Failed transitions waiting for a retry |
 | `POST /api/retries/{id}` | Retry a failed transition |
 | `DELETE /api/retries/{id}` | Dismiss a failed transition |

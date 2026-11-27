@@ -317,6 +317,7 @@ It has these sections:
 | The browser shows "Open the app with scripts/start.sh" | Your session ended. Run the start script again; it opens a fresh sign-in link |
 | "The launch link expired or was already used" | Launch links last 2 minutes and work once. Run the start script again |
 | "access blocked, authorize org" banner | Click Authorize and approve the app for that organization. If the organization blocks this kind of token (policy), use a token type it allows |
+| "The token needs the GitHub permission pull_requests: write" | Approving, requesting changes and marking a pull request ready need Pull requests: Read and write on the token (or the GitHub App) |
 | "The token needs the GitHub permission contents: write" | Edit the token (or the GitHub App's permissions): Contents must be Read and write to merge and delete branches, with Pull requests Read and write |
 | A stacked pull request merges and the app waits a few seconds | GitHub merges stacked pull requests only through its asynchronous merge API, and the app polls it for up to 90 seconds. Merging a pull request also merges the ones below it. "GitHub is still merging" means the wait ended first: refresh in a moment |
 | "Added to the merge queue" | The repository uses a merge queue. The pull request is not merged yet and no ticket is moved; the app moves the tickets once the pull request has merged |

@@ -1,6 +1,6 @@
 # Merge and transition
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.7. Related: [status-sync-rules.md](status-sync-rules.md), [merge-method.md](merge-method.md), [command-table.md](command-table.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [settings.md](settings.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 7.7. Related: [review-actions.md](review-actions.md), [status-sync-rules.md](status-sync-rules.md), [merge-method.md](merge-method.md), [command-table.md](command-table.md), [ticket-linking.md](ticket-linking.md), [stacked-prs.md](stacked-prs.md), [settings.md](settings.md).
 
 ## Purpose
 
@@ -20,6 +20,7 @@ Differences from the spec:
 - `activity` (now with `summary`), `pending_retries` (now with `pr_id` and `to_status`), `rule_firings` ([storage.md](storage.md)).
 - API: `POST /api/prs/{id}/merge` (`MergeRequest {method, expectedHeadSha, deleteBranch, tickets[{key, transitionId|null, fields}]}`, at most 20 tickets, header `Idempotency-Key` UUID) answers `MergeResult {prId, method, sha, steps[]}`. A step is `{kind: merge|delete_branch|transition, ticket, state: ok|failed|skipped|queued, message, toStatus, retryId}`. A refusal is `MergeProblem` (a problem with `pr`, the fresh state, for 409).
 - `GET /api/retries`, `POST /api/retries/{id}` (answers `RetryResult {step}`), `DELETE /api/retries/{id}`, `GET /api/activity?limit&cursor` (newest first, limit 1 to 100, `nextCursor` is the last id of the page or null).
+- The order of the review checks is: changes requested ("changes were requested"), approvals ("Needs N approvals, has M", counted from the reviews of the fresh pull request against the repo's `approvalsRequired`), the merge state, a required review. All are `not_mergeable`; the web's `blockOf` applies the same rule to `SnapshotPr.approvals`.
 - Problem codes: 409 `head_moved`, `not_mergeable`, `merge_failed`, `merge_pending`, `stack_base_open`, `draft`, `not_open`, `transition_unavailable`, `not_connected`; 404 `not_found`; 422 `method_not_allowed`, `ticket_not_linked`, `missing_field`, `invalid_field`, `idempotency_key_reused`; 429 `rate_limited`; 403 `org_blocked`, `missing_permission`; 502 `upstream_error`.
 
 ## Code map
@@ -37,7 +38,7 @@ Differences from the spec:
 1. The Merge button of a ready row opens the panel under the row. The panel remembers the head SHA of the row and makes an `Idempotency-Key` with `crypto.randomUUID`.
 2. Every linked ticket is listed with "Don't move". "Move..." loads that ticket's transitions, then a dropdown chooses one. Required fields of the transition render inline (a list for fields with allowed values, text otherwise). Each moved ticket needs its confirm checkbox. With no ticket moved the button reads "Merge without ticket" and needs its own confirmation.
 3. The button reads "Merge & move to <status>" for one moved ticket, "Merge & update N tickets" for several. It is disabled, with the reason beside it, while a row block (`blockOf`), a missing required field or a missing confirmation applies.
-4. `Merge` runs the steps of spec 7.7: an `Idempotency-Key` that was already used returns the stored result (a key used for another PR is `idempotency_key_reused`; two requests with the same key at once share one run). Then one GraphQL node query and the checks (open, not a draft, stack base not open, head equals `expectedHeadSha`, mergeable, clean or has hooks, no review missing), the repo allows the method, every requested transition is in the ticket's current list with its required fields.
+4. `Merge` runs the steps of spec 7.7: an `Idempotency-Key` that was already used returns the stored result (a key used for another PR is `idempotency_key_reused`; two requests with the same key at once share one run). Then one GraphQL node query and the checks (open, not a draft, stack base not open, head equals `expectedHeadSha`, mergeable, the repo's approvals met ("Needs N approvals, has M", [review-actions.md](review-actions.md)), no changes requested, clean or has hooks, no review missing), the repo allows the method, every requested transition is in the ticket's current list with its required fields.
 5. `PUT /repos/{o}/{r}/pulls/{n}/merge` with `merge_method` and `sha`. 409 is `head_moved`, 405 is `not_mergeable`; both carry the fresh state and start a refresh.
    A 403 whose message says stacked PRs must use the asynchronous merge endpoint is not a permission problem: see "Asynchronous merge" below.
 6. Branch delete when asked: only a branch of the same repo, and not one another open PR uses as its base ("Branch kept: ..." otherwise). A failed delete is a failed step, nothing more.
@@ -93,7 +94,7 @@ Every refusal by GitHub is logged at WARN by the client (`github refused a call`
 
 ## Tests
 
-- [server/internal/merge](../../server/internal/merge): `flow_test.go` (every refusal, partial failure, retry, idempotent replay, concurrent same key, parallelism of 4, branch rules), `calls_test.go` (outbound call counts and one `RecordMerge`), `resolve_test.go`.
+- [server/internal/merge](../../server/internal/merge): `flow_test.go` (every refusal, the approvals rule, partial failure, retry, idempotent replay, concurrent same key, parallelism of 4, branch rules), `calls_test.go` (outbound call counts and one `RecordMerge`), `resolve_test.go`.
 - [server/internal/github/merge_async_test.go](../../server/internal/github/merge_async_test.go) (stack message detection, submit answers, id validation, polling outcomes and cap, header, cancel), [server/internal/merge/async_test.go](../../server/internal/merge/async_test.go) (enqueued, failed, pending), [server/internal/github/pr_test.go](../../server/internal/github/pr_test.go), [permission_test.go](../../server/internal/github/permission_test.go) (classification, header parsing, REST and node refusals, logging), [server/internal/jira/jira_test.go](../../server/internal/jira/jira_test.go), [server/internal/store/merges_test.go](../../server/internal/store/merges_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go).
 - [MergePanel.test.tsx](../../web/src/components/CommandTable/MergePanel.test.tsx), [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx).
 - [e2e/merge.spec.ts](../../e2e/merge.spec.ts): merge and move with a required field, a failed move that is retried, a head that moved, a token without Contents write (fake `github_pat_contents_read`), a stacked pull request merged through the asynchronous API.

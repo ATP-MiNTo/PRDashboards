@@ -21,7 +21,7 @@ Differences from the spec:
   token. The Jira site list is kept. A GitHub token that needs a reconnect is kept until the person
   signs in again.
 - No private key, app ID or JWT: only user access tokens are used. GitHub ignores `scope` for a
-  GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup).
+  GitHub App, so none is sent. Permissions come from the App's settings (README, First-time setup). Approving, requesting changes and marking a draft ready need Pull requests: write on a fine-grained token or the App (a classic token needs `repo`); without it the API answers `missing_permission` naming `pull_requests: write` ([review-actions.md](review-actions.md)).
 - Setup is under `/setup`. The PAT form is on the same page. The Connected accounts panel is also
   in the Account side panel of the dashboard, opened from the Account button ([settings.md](settings.md)).
 
