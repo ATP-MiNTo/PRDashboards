@@ -1,32 +1,101 @@
+/*
+ * Design tokens and shared control styles. The look is the approved glass design:
+ * Inter for text, Space Grotesk for headings, a tinted page behind frosted panes.
+ *
+ * The daisyUI themes `winter` (light) and `night` (dark) supply the base colours as the variables
+ * --b1 (surface), --b2 (page), --bc (ink), --p, --s, --a and --n. They are always present, because
+ * winter is the default of :root and useTheme sets data-theme together with data-mode. Every token
+ * below is built from them or from a fixed value of the design. Dark overrides follow the light block.
+ */
+
 :root {
-  --page-bg: #eaf3fc;
-  --surface: #f7fbff;
-  --surface2: #d6e8f9;
-  --line: #c3daef;
-  --text: #1b2b3d;
-  --sub: #4a617a;
-  --accent: #a9d3f5;
-  --accent-fg: #0f2a47;
-  --accent-bd: #6aa6d8;
+  --font-ui:
+    'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-display:
+    'Space Grotesk Variable', 'Space Grotesk', 'Inter Variable', Inter, system-ui, sans-serif;
+
+  /* Radius scale: controls, stack groups, popovers, glass panes, pills. */
+  --radius-ctl: 0.5rem;
+  --radius-stack: 0.6rem;
+  --radius-box: 1rem;
+  --radius-glass: 1.1rem;
+  --radius-pill: 9999px;
+  --ctl-h: 2rem;
+
+  /* Text: ink, and the muted steps. The design mutes text to 70% (65% for eyebrows), which gives
+     3.3 to 3.8:1 on the glass in light mode. These steps are the lowest that reach 4.5:1 on every
+     surface of the page, tinted rows and stack banners included. */
+  --text: oklch(var(--bc));
+  --sub: oklch(var(--bc) / 0.85);
+  --eyebrow: oklch(var(--bc) / 0.85);
   --link: #1d5a94;
-  --hover: #deecf9;
-  --tb-bg: #fbfaff;
-  --tb-fg: #26242f;
-  --tb-line: #e0dcec;
-  --tb-sub: #5a566e;
-  --tb-ctl: #f0edf8;
-  --focus: #3b4fc4;
+  --focus: oklch(var(--bc));
+
+  /* The page: a tinted base with soft colour glows, fixed behind the content. */
+  --page-bg: oklch(var(--b2));
+  --page-image:
+    radial-gradient(60rem 40rem at 10% -10%, oklch(var(--p) / 0.28), transparent 60%),
+    radial-gradient(50rem 40rem at 100% 10%, oklch(var(--s) / 0.22), transparent 60%),
+    radial-gradient(40rem 30rem at 40% 110%, oklch(var(--a) / 0.2), transparent 60%);
+
+  /* Glass: the frosted surface for panes (.glass, or these tokens in a CSS module). */
+  --glass-bg: oklch(var(--b1) / 0.55);
+  --glass-line: oklch(var(--bc) / 0.12);
+  --glass-border: 1px solid var(--glass-line);
+  --glass-blur: blur(16px) saturate(140%);
+  --glass-shadow: none;
+
+  /* Solid surfaces (popovers, pickers, the FAB), soft insets and hovers. */
+  --surface: oklch(var(--b1));
+  --surface2: oklch(var(--bc) / 0.07);
+  --line: oklch(var(--bc) / 0.12);
+  --hover: oklch(var(--bc) / 0.08);
+  --shadow: oklch(var(--bc) / 0.18);
+
+  /* Controls. Outline button (btn-outline), select and input (bordered), ghost (btn-ghost). */
+  --btn-bg: transparent;
+  --btn-border: oklch(var(--bc));
+  --btn-hover-bg: oklch(var(--bc));
+  --btn-hover-fg: oklch(var(--b1));
+  --btn-hover-border: oklch(var(--bc));
+  --btn-off-bg: oklch(var(--n) / 0.2);
+  --btn-off-fg: oklch(var(--bc) / 0.2);
+  --ghost-hover: oklch(var(--bc) / 0.2);
+  --ctl-bg: oklch(var(--b1));
+  --ctl-border: oklch(var(--bc) / 0.2);
+
+  /* Primary action (daisyUI btn-primary). */
+  --accent: oklch(var(--p));
+  --accent-fg: #fff;
+  --accent-hover: color-mix(in oklab, oklch(var(--p)) 90%, #000);
+
+  /* Merge: the blue of the Merge button and its aura. */
+  --merge: #007fff;
+  --merge-hover: #1a8cff;
+
+  /* Roles and stacks. */
+  --rc-a: #bfeaf1;
+  --rc-r: #f9c9c9;
+  --stack: #8b6cf0;
+  --role-assigned: color-mix(in oklab, var(--rc-a), oklch(var(--bc)) 25%);
+  --role-assigned-bg: color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1)));
+  --role-assigned-hover: color-mix(in oklab, var(--rc-a) 40%, oklch(var(--b1)));
+  --role-authored: color-mix(in oklab, var(--rc-r), oklch(var(--bc)) 25%);
+  --role-authored-bg: color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1)));
+  --role-authored-hover: color-mix(in oklab, var(--rc-r) 40%, oklch(var(--b1)));
+  --stack-bg: color-mix(in oklab, var(--stack) 18%, oklch(var(--b1)));
+  --stack-fg: oklch(var(--bc));
+
+  /* Toolbar names, kept for the existing modules. */
+  --tb-bg: oklch(var(--b1));
+  --tb-fg: var(--text);
+  --tb-line: var(--ctl-border);
+  --tb-sub: var(--sub);
+  --tb-ctl: var(--ctl-bg);
+
+  /* Status colours. */
   --on-fill: #2b1d00;
-  --stack: #9a86e0;
-  --stack-bg: #e7e0f8;
-  --stack-fg: #43347f;
-  --role-assigned: #1fa3c4;
-  --role-assigned-bg: #e1f4fa;
-  --role-assigned-hover: #cfebf4;
-  --role-authored: #e0507a;
-  --role-authored-bg: #fde6ec;
-  --role-authored-hover: #fad4de;
-  --shadow: rgba(40, 36, 60, 0.1);
   --good: #14603a;
   --good-bg: #cdeedd;
   --good-fill: #7ad3a5;
@@ -43,8 +112,20 @@
   --mute-bg: #e6e3ef;
   --mute-fill: #b9b4cc;
 
+  /* Fixed hex colours for the manifest and the app icons, read by scripts/pwa-assets.mjs. */
+  --pwa-bar: #eaf3fc;
+  --pwa-page: #eaf3fc;
+  --pwa-accent: #6aa6d8;
+
+  /* Cursors: static files in /cursors, each with a standard fallback. */
+  --cursor-arrow: url('/cursors/arrow.svg') 5 3, default;
+  --cursor-hand: url('/cursors/hand.svg') 12 4, pointer;
+  --cursor-merge: url('/cursors/merge.svg') 16 16, pointer;
+  --cursor-ready: url('/cursors/ready.svg') 16 16, pointer;
+  --cursor-no: url('/cursors/no.svg') 16 16, not-allowed;
+
   /* Names used by the setup and accounts pages. */
-  --bg: var(--page-bg);
+  --bg: var(--ctl-bg);
   --fg: var(--text);
   --muted: var(--sub);
   --card: var(--surface);
@@ -54,33 +135,46 @@
 }
 
 :root[data-mode='dark'] {
-  --page-bg: #111a24;
-  --surface: #192634;
-  --surface2: #20324a;
-  --line: #2c4259;
-  --text: #e3eef8;
-  --sub: #9fb4c8;
-  --accent-fg: #0b1a2b;
-  --accent-bd: #a9d3f5;
+  --page-bg: #0d1226;
+  --page-image:
+    radial-gradient(48rem 34rem at 8% -8%, rgba(124, 108, 255, 0.3), transparent 62%),
+    radial-gradient(44rem 34rem at 100% 0%, rgba(56, 189, 210, 0.2), transparent 62%),
+    radial-gradient(40rem 30rem at 45% 115%, rgba(236, 120, 170, 0.16), transparent 62%),
+    linear-gradient(160deg, #0d1226, #0a0f1f 55%, #0c1424);
+
+  --glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
+  --glass-line: rgba(255, 255, 255, 0.11);
+  --glass-blur: blur(22px) saturate(150%);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+
+  --line: rgba(255, 255, 255, 0.11);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --surface2: rgba(255, 255, 255, 0.07);
+
+  --btn-bg: rgba(255, 255, 255, 0.06);
+  --btn-border: rgba(255, 255, 255, 0.18);
+  --btn-off-bg: rgba(255, 255, 255, 0.04);
+  --btn-off-fg: rgba(255, 255, 255, 0.3);
+  --ctl-bg: rgba(255, 255, 255, 0.06);
+  --ctl-border: rgba(255, 255, 255, 0.16);
+
+  --accent-fg: oklch(var(--pc));
   --link: #a9d3f5;
-  --hover: #1f3145;
-  --tb-bg: #1d1b27;
-  --tb-fg: #ece9f5;
-  --tb-line: #343148;
-  --tb-sub: #aaa5c0;
-  --tb-ctl: #2a2738;
-  --focus: #9fb4ff;
+  --sub: oklch(var(--bc) / 0.8);
+  --eyebrow: oklch(var(--bc) / 0.76);
+
+  --rc-a: #1d5560;
+  --rc-r: #6a363c;
+  --stack: #a994ff;
+  --role-assigned: #56c4d6;
+  --role-assigned-bg: rgba(86, 196, 214, 0.14);
+  --role-assigned-hover: rgba(86, 196, 214, 0.22);
+  --role-authored: #f08096;
+  --role-authored-bg: rgba(240, 128, 150, 0.14);
+  --role-authored-hover: rgba(240, 128, 150, 0.22);
+  --stack-bg: rgba(150, 130, 255, 0.18);
+
   --on-fill: #1a1400;
-  --stack: #a898e6;
-  --stack-bg: #2c2748;
-  --stack-fg: #d6ccff;
-  --role-assigned: #4cc6e4;
-  --role-assigned-bg: #173748;
-  --role-assigned-hover: #1d4458;
-  --role-authored: #f07a9c;
-  --role-authored-bg: #40222f;
-  --role-authored-hover: #4d2b3a;
-  --shadow: rgba(0, 0, 0, 0.4);
   --good: #a6e8c4;
   --good-bg: #1f3d30;
   --good-fill: #4aa57a;
@@ -103,24 +197,223 @@
   box-sizing: border-box;
 }
 
+html {
+  background-color: var(--page-bg);
+  background-image: var(--page-image);
+  background-attachment: fixed;
+}
+
 html,
 body {
   margin: 0;
-  background: var(--page-bg);
   color: var(--text);
-  font:
-    14px/1.45 system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  font: 400 1rem/1.5 var(--font-ui);
+}
+
+body {
+  min-height: 100vh;
+  cursor: var(--cursor-arrow);
+}
+
+h1,
+h2,
+.display {
+  font-family: var(--font-display);
+  text-wrap: balance;
 }
 
 a {
   color: inherit;
 }
 
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* Cursors: the hand on everything that acts, the text cursor on text fields, the "no" cursor on
+   disabled controls. Merge and Ready buttons have their own. */
+button,
+[role='tab'],
+[role='button'],
+summary,
+select,
+a[href],
+label:has(input[type='checkbox'], input[type='radio']),
+input[type='checkbox'],
+input[type='radio'],
+input[type='range'] {
+  cursor: var(--cursor-hand);
+}
+
+input[type='search'],
+input[type='text'],
+input[type='number'],
+input:not([type]),
+textarea {
+  cursor: text;
+}
+
+button:disabled,
+select:disabled,
+input:disabled,
+label:has(input:disabled) {
+  cursor: var(--cursor-no);
+}
+
+/* Every button follows the design's daisyUI behaviour: a 0.2s transition on the usual properties
+   and a press that scales to 0.95. Components set their own transition where they need another. */
+button {
+  transition:
+    color 0.2s,
+    background-color 0.2s,
+    border-color 0.2s,
+    opacity 0.2s,
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+
+button:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+
+  button:not(:disabled):active {
+    transform: none;
+  }
+}
+
+/* Glass pane. */
+.glass {
+  border: var(--glass-border);
+  border-radius: var(--radius-glass);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+/* Outline button: daisyUI "btn btn-sm btn-outline" with the glass tweaks of the design. An element
+   gets it with `composes: ui-btn from global` in its CSS module. A container gets it for every
+   button and field inside with `composes: ui-controls from global`; the container's own module
+   then overrides what a borderless button needs, with a selector of two classes. */
+.ui-btn,
+.ui-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--ctl-h);
+  padding: 0 0.75rem;
+  border: 1px solid var(--btn-border);
+  border-radius: var(--radius-ctl);
+  background: var(--btn-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.ui-btn:hover:not(:disabled),
+.ui-controls button:hover:not(:disabled) {
+  border-color: var(--btn-hover-border);
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-fg);
+}
+
+.ui-btn:disabled,
+.ui-controls button:disabled {
+  border-color: transparent;
+  background: var(--btn-off-bg);
+  color: var(--btn-off-fg);
+  opacity: 1;
+}
+
+/* Ghost button (btn-ghost): no border or fill until hovered. */
+.ui-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-ctl);
+  background: transparent;
+  color: inherit;
+  font-weight: 600;
+}
+
+.ui-ghost:hover:not(:disabled) {
+  background: var(--ghost-hover);
+}
+
+/* Select (daisyUI "select select-sm") and bordered input. */
+.ui-select,
+.ui-controls select {
+  min-height: var(--ctl-h);
+  padding: 0 2rem 0 0.75rem;
+  border: 1px solid var(--ctl-border);
+  border-radius: var(--radius-ctl);
+  background-color: var(--ctl-bg);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentcolor 50%),
+    linear-gradient(135deg, currentcolor 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) calc(1px + 50%),
+    calc(100% - 16px) calc(1px + 50%);
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  color: var(--text);
+  font-size: 0.875rem;
+  line-height: 2;
+  appearance: none;
+}
+
+.ui-select:disabled,
+.ui-controls select:disabled {
+  opacity: 0.6;
+}
+
+.ui-input,
+.ui-controls input[type='text'],
+.ui-controls input[type='search'],
+.ui-controls input[type='number'] {
+  min-height: var(--ctl-h);
+  padding: 0 0.75rem;
+  border: 1px solid var(--ctl-border);
+  border-radius: var(--radius-ctl);
+  background: var(--ctl-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+/* Checkbox (daisyUI "checkbox checkbox-xs"): 1rem, filled with ink when checked. */
+input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: oklch(var(--bc));
+}
+
+/* The theme switch crossfades the whole page. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.9s;
+  animation-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none;
+  }
 }

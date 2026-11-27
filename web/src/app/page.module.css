@@ -6,11 +6,9 @@
 }
 
 .card {
+  composes: glass from global;
   max-width: 420px;
   padding: 24px 28px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--card);
 }
 
 .title {
@@ -62,31 +60,20 @@
 
 .button,
 .link {
-  display: inline-block;
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--card);
-  color: var(--fg);
-  font: inherit;
+  composes: ui-btn from global;
   text-decoration: none;
-  cursor: pointer;
 }
 
-.button:hover,
-.link:hover {
-  border-color: var(--muted);
-}
-
-.button:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.primary {
+.primary,
+.primary:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-fg);
+}
+
+.primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
 }
 
 .field {
@@ -97,18 +84,20 @@
 
 .field input,
 .field select {
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
+  min-height: var(--ctl-h);
+  padding: 0 0.75rem;
+  border: 1px solid var(--ctl-border);
+  border-radius: var(--radius-ctl);
+  background: var(--ctl-bg);
   color: var(--fg);
   font: inherit;
+  font-size: 0.875rem;
 }
 
 .code {
   padding: 2px 6px;
-  border-radius: 6px;
-  background: var(--bg);
+  border-radius: var(--radius-ctl);
+  background: var(--surface2);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.875rem;
   overflow-wrap: anywhere;

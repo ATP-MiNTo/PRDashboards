@@ -13,6 +13,7 @@ import { describeProblem } from '@/lib/problems';
 import { blockOf } from '@/lib/snapshot';
 import { Dropdown } from '../Dropdown/Dropdown';
 import styles from './CommandTable.module.css';
+import { MergeIcon } from './MergeIcon';
 import { MergeSteps } from './MergeSteps';
 
 interface Draft {
@@ -298,6 +299,7 @@ export function MergePanel({
           onClick={send}
         >
           {merge.isPending ? 'Merging' : label}
+          <MergeIcon />
         </button>
         <button type="button" className={styles.linkButton} onClick={onClose}>
           Cancel

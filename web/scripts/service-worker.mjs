@@ -24,7 +24,8 @@ export function urlOf(rel) {
   if (path === 'index.html') return '/';
   if (path.endsWith('/index.html')) return `/${path.slice(0, -'index.html'.length)}`;
   if (path.startsWith('_next/static/') && !path.endsWith('.map')) return `/${path}`;
-  if (path.startsWith('icons/') || path === 'manifest.webmanifest') return `/${path}`;
+  if (path.startsWith('icons/') || path.startsWith('cursors/') || path === 'manifest.webmanifest')
+    return `/${path}`;
   return null;
 }
 

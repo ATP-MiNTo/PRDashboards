@@ -6,6 +6,7 @@ import { roleKind } from '@/lib/show';
 import { blockOf, githubPrUrl, isStale, lastGoodGithub } from '@/lib/snapshot';
 import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
+import { MergeIcon } from './MergeIcon';
 import { MergePanel } from './MergePanel';
 import { MethodCell } from './MethodCell';
 import { Pill, type Tone } from './Pill';
@@ -141,6 +142,7 @@ function RowView({ id, hidden, dim, leaving, onHide }: RowProps) {
             onClick={() => setPanel((open) => !open)}
           >
             Merge
+            <MergeIcon />
           </button>
           <div className={block.reason ? styles.reason : styles.ready}>
             {block.reason ?? 'Ready to merge'}

@@ -1,4 +1,5 @@
 .body {
+  composes: ui-controls from global;
   display: grid;
   gap: 20px;
 }
@@ -10,12 +11,12 @@
 
 .section h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .section h4 {
   margin: 4px 0 0;
-  font-size: 13px;
+  font-size: 0.875rem;
 }
 
 .muted {
@@ -31,7 +32,7 @@
 .note {
   margin: 0;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-ctl);
   background: var(--info-bg);
   color: var(--info);
 }
@@ -48,40 +49,27 @@
   gap: 6px;
 }
 
-.body button,
-.body select,
-.body input[type='text'],
-.body input[type='search'] {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
-  color: var(--text);
-  font: inherit;
-}
-
-.body button {
-  cursor: pointer;
-}
-
-.body button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
 .body button:focus-visible,
 .body input:focus-visible,
 .body select:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
 .body input[aria-invalid='true'] {
   border-color: var(--bad);
 }
 
-.primary {
+/* Primary action (btn-primary). Two classes, to win over the outline button of the container. */
+.body .primary {
+  border-color: var(--accent);
   background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.body .primary:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
   color: var(--accent-fg);
 }
 
@@ -92,12 +80,12 @@
   width: 40px;
   height: 40px;
   color: var(--text);
-  cursor: pointer;
+  cursor: var(--cursor-hand);
 }
 
 .swap[data-disabled] {
   opacity: 0.6;
-  cursor: default;
+  cursor: var(--cursor-no);
 }
 
 .swapInput {
@@ -141,7 +129,7 @@
 .swap:has(.swapInput:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
-  border-radius: 8px;
+  border-radius: var(--radius-ctl);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -163,18 +151,27 @@
 
 .repo {
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: var(--radius-stack);
+  background: var(--surface2);
 }
 
 .body .repoHead {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
+  padding: 0.25rem 0.75rem;
   border: 0;
   background: none;
+  color: var(--text);
+  font-weight: 400;
   text-align: left;
+}
+
+.body .repoHead:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .repoBody {
@@ -199,8 +196,8 @@
 .log li {
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
+  border-radius: var(--radius-ctl);
+  background: var(--surface2);
 }
 
 .stack {
@@ -213,8 +210,8 @@
   gap: 8px;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: var(--radius-stack);
+  background: var(--surface2);
 }
 
 .filters {
@@ -223,12 +220,12 @@
   margin: 0;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-ctl);
 }
 
 .preview {
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-ctl);
   background: var(--info-bg);
   color: var(--info);
 }
@@ -257,8 +254,8 @@
   gap: 8px;
   padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface);
+  border-radius: var(--radius-ctl);
+  background: var(--surface2);
 }
 
 .ruleMain {
@@ -283,8 +280,9 @@
 }
 
 .body .info {
+  min-height: 0;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   line-height: 1.4;
 }
 
@@ -297,11 +295,11 @@
   width: min(360px, 80vw);
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-box);
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 4px 12px var(--shadow);
-  font-size: 13px;
+  font-size: 0.875rem;
   font-weight: 400;
 }
 
@@ -323,26 +321,19 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
 }
 
 .body .chip[aria-pressed='true'] {
+  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-fg);
 }
 
 .body .chip[aria-pressed='false'] {
+  border-color: transparent;
   background: var(--stack-bg);
   color: var(--stack-fg);
-}
-
-.body input[type='number'] {
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--surface2);
-  color: var(--text);
-  font: inherit;
 }
 
 .sessionNote {
@@ -366,18 +357,26 @@
   align-items: center;
   gap: 6px;
   margin: 0;
-  font-size: 14px;
+  font-size: 1rem;
 }
 
 .body .foldButton {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
+  min-height: 0;
   padding: 0;
   border: 0;
   background: none;
-  font-size: 14px;
+  color: var(--text);
+  font-size: 1rem;
   font-weight: 600;
+}
+
+.body .foldButton:hover:not(:disabled) {
+  background: none;
+  color: var(--text);
 }
 
 .foldButton::before {
@@ -396,5 +395,5 @@
 .hint {
   margin: 0;
   color: var(--sub);
-  font-size: 13px;
+  font-size: 0.875rem;
 }
