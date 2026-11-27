@@ -357,4 +357,50 @@ describe('RepoModal', () => {
       await screen.findByText('Could not save the repository.', {}, { timeout: 2000 }),
     ).toBeInTheDocument();
   });
+
+  it('names the token in the info tip, with the role', async () => {
+    api.getAccounts.mockResolvedValue({
+      github: { connected: true, login: 'me', method: 'pat', needsReconnect: false },
+      githubTokens: [
+        {
+          id: 'aaaaaaaa',
+          name: 'Work',
+          method: 'pat',
+          fineGrained: true,
+          login: 'minto',
+          warning: null,
+          needsReconnect: false,
+        },
+      ],
+      githubTokenLimit: 10,
+      jira: { connected: false, sites: [], selectedSiteId: null, needsReconnect: false },
+    });
+    api.getSnapshot.mockResolvedValue(
+      snapshot([
+        pr('a', 1, {
+          repo: {
+            ...pr('a', 1).repo,
+            tokenId: 'aaaaaaaa',
+            tokenName: 'Work',
+            viewerPermission: 'WRITE',
+          },
+        }),
+      ]),
+    );
+    await open();
+    const tip = screen.getByRole('button', { name: 'About this repository' });
+    await waitFor(() => expect(tip).toHaveAccessibleDescription(/^Fetched with Work /));
+    expect(tip).toHaveAccessibleDescription(
+      'Fetched with Work (fine-grained token, minto). Your role here: Write. A fine-grained token works for one owner only. "Use default" follows the Repositories defaults.',
+    );
+  });
+
+  it('says how GitHub is connected when the snapshot has no token for the repository', async () => {
+    await open();
+    expect(
+      screen.getByRole('button', { name: 'About this repository' }),
+    ).toHaveAccessibleDescription(
+      'Fetched via a classic token. "Use default" follows the Repositories defaults.',
+    );
+  });
 });

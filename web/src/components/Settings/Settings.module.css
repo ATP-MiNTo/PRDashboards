@@ -280,11 +280,16 @@
   min-width: 0;
 }
 
-/* daisyUI "badge badge-ghost badge-xs". */
+/* daisyUI "badge badge-ghost badge-xs". It carries the token's name, so it is cut with an ellipsis
+   at about 9rem; the hint beside it says the whole name. */
 .via {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
+  display: inline-block;
+  box-sizing: border-box;
+  flex: 0 1 auto;
+  max-width: 9rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   height: 1rem;
   padding: 0 0.313rem;
   border: 1px solid oklch(var(--b2));
