@@ -71,10 +71,12 @@ func (a Allowed) List() []Method {
 }
 
 // Repo is the merge configuration of one repository. IsNew marks a repo whose settings the person
-// has not looked at yet, so its default still comes from the global default for new repos.
+// has not looked at yet, so its default still comes from the global default for new repos. Follows
+// marks a repo that follows the global default: Default is then that global default.
 type Repo struct {
 	Default Method
 	IsNew   bool
+	Follows bool
 	Rules   []Rule
 	// Approvals is how many approvals a pull request needs before it may merge; outside 1 to 10 it
 	// means the default of 1 (NeedOf).
@@ -87,7 +89,7 @@ type Resolution struct {
 	Method Method
 	// Default is the configured method, before the fallback for a disallowed one.
 	Default Method
-	// Source says where Default came from: "rule: <pattern>", "repo default" or "new repo default".
+	// Source says where Default came from: "rule: <pattern>", "repo default" or "new repo default" (also for a repo that follows the global default).
 	Source  string
 	Allowed []Method
 	// Warning is set when the configured method is not allowed and Method is a fallback.
@@ -98,7 +100,7 @@ type Resolution struct {
 // then the fallback to the first allowed method in the order merge commit, squash, rebase.
 func Resolve(repo Repo, base string, allowed Allowed) Resolution {
 	res := Resolution{Default: repo.Default, Source: "repo default", Allowed: allowed.List()}
-	if repo.IsNew {
+	if repo.IsNew || repo.Follows {
 		res.Source = "new repo default"
 	}
 	for _, r := range repo.Rules {

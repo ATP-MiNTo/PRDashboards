@@ -31,6 +31,7 @@ func TestResolve(t *testing.T) {
 		{"no rule uses the repo default", merge.Repo{Default: merge.Rebase, Rules: rules}, "develop", all, merge.Rebase, merge.Rebase, "repo default", "", nil},
 		{"no rules at all", merge.Repo{Default: merge.Squash}, "main", all, merge.Squash, merge.Squash, "repo default", "", nil},
 		{"new repo default", merge.Repo{Default: merge.Squash, IsNew: true, Rules: rules}, "develop", all, merge.Squash, merge.Squash, "new repo default", "", nil},
+		{"a repo that follows the default says so", merge.Repo{Default: merge.Squash, Follows: true, Rules: rules}, "develop", all, merge.Squash, merge.Squash, "new repo default", "", nil},
 		{"a rule beats the new repo default", merge.Repo{Default: merge.Squash, IsNew: true, Rules: rules}, "main", all, merge.Merge, merge.Merge, "rule: main", "", nil},
 		{"squash disallowed falls back to merge commit", merge.Repo{Default: merge.Squash}, "develop", merge.Allowed{Merge: true, Rebase: true}, merge.Merge, merge.Squash, "repo default",
 			"Repo disallows squash merge, using merge commit", []merge.Method{merge.Merge, merge.Rebase}},

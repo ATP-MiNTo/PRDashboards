@@ -123,7 +123,7 @@ func mergeRepos(repos []store.RepoConfig, global string) map[string]merge.Repo {
 		if r.InheritMethod {
 			method = global
 		}
-		out[r.ID] = merge.Repo{Default: merge.Method(method), IsNew: r.IsNew, Rules: rules, Approvals: r.ApprovalsRequired}
+		out[r.ID] = merge.Repo{Default: merge.Method(method), IsNew: r.IsNew, Follows: r.InheritMethod, Rules: rules, Approvals: r.ApprovalsRequired}
 	}
 	return out
 }
