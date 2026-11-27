@@ -14,6 +14,8 @@ const api = vi.hoisted(() => ({
   getRetries: vi.fn(),
   getAccounts: vi.fn(),
   getSetup: vi.fn(),
+  getRules: vi.fn(),
+  getJiraOptions: vi.fn(),
 }));
 const renders = vi.hoisted(() => new Map<string, number>());
 
@@ -86,6 +88,8 @@ beforeEach(() => {
   api.getRepos.mockResolvedValue({ repos: [] });
   api.getActivity.mockResolvedValue({ items: [], nextCursor: null });
   api.getRetries.mockResolvedValue({ retries: [] });
+  api.getRules.mockResolvedValue({ rules: [] });
+  api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
   api.getAccounts.mockResolvedValue({
     github: { connected: false, login: null, method: null, warning: null },
     jira: { connected: false, needsReconnect: false, sites: [], selectedSiteId: null },
@@ -360,6 +364,22 @@ describe('CommandTable', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(burger).toHaveFocus();
+  });
+
+  it('opens the status sync rules dialog from the sidebar and gives the focus back on close', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const button = await screen.findByRole('button', { name: 'Status sync rules' });
+    expect(screen.queryByRole('dialog', { name: 'Status sync rules' })).toBeNull();
+    button.focus();
+    fireEvent.click(button);
+    const dialog = await screen.findByRole('dialog', { name: 'Status sync rules' });
+    expect(await within(dialog).findByText('No rules yet.')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Status sync rules' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
+    expect(button).toHaveFocus();
   });
 
   it('opens the account panel from Manage accounts in the sidebar', async () => {

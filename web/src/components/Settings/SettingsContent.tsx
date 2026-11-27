@@ -4,13 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useRevokeAll, useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { POLLING_STEPS, pollingLabel, stepPolling } from '@/lib/polling';
-import { reducedMotion } from '@/lib/storage';
 import { useTheme } from '@/theme/useTheme';
 import { DARK_FROM_HOUR, LIGHT_FROM_HOUR } from '@/theme/theme';
-import { ActivitySection } from './ActivitySection';
-import { MultiPrSection } from './MultiPrSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { RulesSection } from './RulesSection';
 import styles from './Settings.module.css';
 
 /** How long after the last step the new intervals are saved, so a flick of the wheel is one request. */
@@ -81,16 +77,8 @@ function PollInput({
   );
 }
 
-/** Opens the status sync rules: they are listed further down this sidebar for now. */
-function goToRules() {
-  const heading = document.getElementById('set-rules');
-  if (!heading) return;
-  heading.focus({ preventScroll: true });
-  heading.scrollIntoView?.({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' });
-}
-
-/** GitHub and Jira polling, and the way to the status sync rules. */
-function PollingSection() {
+/** GitHub and Jira polling, and the button that opens the status sync rules. */
+function PollingSection({ onOpenRules }: { onOpenRules: () => void }) {
   const settings = useSettings();
   const { mutate, isError } = useSaveSettings();
   const current = settings.data;
@@ -139,7 +127,7 @@ function PollingSection() {
         value={draft.jiraSec ?? current.polling.jiraSec}
         onStep={stepField('jiraSec')}
       />
-      <button type="button" onClick={goToRules}>
+      <button type="button" aria-haspopup="dialog" onClick={onOpenRules}>
         Status sync rules
       </button>
       {isError && (
@@ -222,18 +210,15 @@ function SessionsSection() {
   );
 }
 
-/** The Settings sections, shown in the left sidebar. */
-export function SettingsContent() {
+/** The Settings sections, shown in the left sidebar. The rules open in their own dialog. */
+export function SettingsContent({ onOpenRules }: { onOpenRules: () => void }) {
   return (
     <div className={styles.body}>
       <RepositoriesSection />
-      <PollingSection />
+      <PollingSection onOpenRules={onOpenRules} />
       <DeleteBranchSection />
-      <RulesSection />
-      <MultiPrSection />
       <SessionsSection />
       <ThemeSection />
-      <ActivitySection />
     </div>
   );
 }

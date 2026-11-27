@@ -15,6 +15,7 @@ import { Footer } from '../Toolbar/Footer';
 import { Toolbar } from '../Toolbar/Toolbar';
 import { useListPrefs } from '../Toolbar/useListPrefs';
 import { SidePanel } from '../SidePanel/SidePanel';
+import { RulesModal } from '../RulesModal/RulesModal';
 import { SettingsContent } from '../Settings/SettingsContent';
 import { Header } from '../Header/Header';
 import { SearchBox } from '../Header/SearchBox';
@@ -36,7 +37,8 @@ export function CommandTable() {
   const shown = useSnapshot(showCounts).data ?? NO_SHOW_COUNTS;
   const prefs = useListPrefs(ids);
   const [account, setAccount] = useState(false);
-  const sidebar = useSidebar({ hold: account });
+  const [rules, setRules] = useState(false);
+  const sidebar = useSidebar({ hold: account || rules });
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
@@ -59,7 +61,7 @@ export function CommandTable() {
           returnFocus={burger}
           footer={<SidebarAccounts onManage={() => setAccount(true)} />}
         >
-          <SettingsContent />
+          <SettingsContent onOpenRules={() => setRules(true)} />
         </Sidebar>
         <div className={styles.main}>
           <Header
@@ -114,6 +116,7 @@ export function CommandTable() {
         <SidePanel open={account} onClose={() => setAccount(false)} title="Account">
           <AccountsPanel />
         </SidePanel>
+        {rules && <RulesModal onClose={() => setRules(false)} />}
       </div>
     </ToastProvider>
   );
