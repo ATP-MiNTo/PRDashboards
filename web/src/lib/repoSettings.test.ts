@@ -4,17 +4,21 @@ import { pr, snapshot } from '@/test-fixtures';
 import {
   allowedOf,
   branchesOf,
+  deleteDefaultOf,
   deleteLabel,
+  DEFAULT_APPROVALS,
   draftChanged,
   draftOf,
   draftValid,
   isCustom,
   methodChoices,
   methodLabel,
+  MIN_APPROVALS,
   SEED_RULES,
   stepApprovals,
   updateOf,
   validPattern,
+  withMethod,
 } from './repoSettings';
 
 const repo = (over: Partial<RepoSettings> = {}): RepoSettings => ({
@@ -25,7 +29,7 @@ const repo = (over: Partial<RepoSettings> = {}): RepoSettings => ({
   defaultMethod: 'squash',
   inheritMethod: true,
   deleteBranch: 'default',
-  approvalsRequired: 1,
+  approvalsRequired: 0,
   branchRules: [...SEED_RULES],
   ...over,
 });
@@ -51,7 +55,7 @@ describe('the draft of a repository', () => {
     expect(own).toMatchObject({ defaultMethod: 'merge', inheritMethod: false, clearNew: true });
     const follow = updateOf(draftOf(repo({ defaultMethod: 'rebase' })));
     expect(follow).toMatchObject({ defaultMethod: 'rebase', inheritMethod: true });
-    expect(follow).toMatchObject({ deleteBranch: 'default', approvalsRequired: 1 });
+    expect(follow).toMatchObject({ deleteBranch: 'default', approvalsRequired: 0 });
     expect(follow.branchRules).toEqual(SEED_RULES);
   });
 
@@ -111,11 +115,35 @@ describe('the rolls', () => {
 });
 
 describe('stepApprovals', () => {
-  it('steps by one and stays between 1 and 10', () => {
+  it('steps by one and stays between 0 and 10', () => {
+    expect(MIN_APPROVALS).toBe(0);
+    expect(DEFAULT_APPROVALS).toBe(0);
     expect(stepApprovals(1, 1)).toBe(2);
     expect(stepApprovals(5, -1)).toBe(4);
-    expect(stepApprovals(1, -1)).toBe(1);
+    expect(stepApprovals(1, -1)).toBe(0);
+    expect(stepApprovals(0, -1)).toBe(0);
+    expect(stepApprovals(0, 1)).toBe(1);
     expect(stepApprovals(10, 1)).toBe(10);
+  });
+});
+
+describe('the two states of a roll', () => {
+  it('stands for the default delete-branch choice with a value, No while it is unknown', () => {
+    expect(deleteDefaultOf(true)).toBe('yes');
+    expect(deleteDefaultOf(false)).toBe('no');
+    expect(deleteDefaultOf(undefined)).toBe('no');
+  });
+
+  it('keeps the method that was chosen while the default is on, and takes it back', () => {
+    const d = draftOf(repo({ inheritMethod: false, defaultMethod: 'squash' }));
+    const own = withMethod(d, 'rebase');
+    expect(own).toMatchObject({ method: 'rebase', ownMethod: 'rebase' });
+    const dflt = withMethod(own, 'default');
+    expect(dflt).toMatchObject({ method: 'default', ownMethod: 'rebase' });
+    expect(updateOf(dflt)).toMatchObject({ defaultMethod: 'rebase', inheritMethod: true });
+    // Already on the default: nothing changes.
+    expect(withMethod(dflt, 'default')).toBe(dflt);
+    expect(withMethod(dflt, 'merge')).toMatchObject({ method: 'merge', ownMethod: 'merge' });
   });
 });
 
@@ -135,6 +163,7 @@ describe('isCustom', () => {
   it.each([
     ['a delete-branch choice', { deleteBranch: 'no' as const }],
     ['a method of its own', { inheritMethod: false }],
+    ['one approval required', { approvalsRequired: 1 }],
     ['more approvals', { approvalsRequired: 2 }],
     ['other branch rules', { branchRules: [{ pattern: 'release/*', method: 'rebase' as const }] }],
     ['no branch rules', { branchRules: [] }],
