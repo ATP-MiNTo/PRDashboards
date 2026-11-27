@@ -225,7 +225,9 @@ func TestValidateRestoresBody(t *testing.T) {
 func TestProtectedSurface(t *testing.T) {
 	cases := map[string]bool{
 		"/api": true, "/api/": true, "/api/settings": true, "/events": true,
-		"/oauth/github/start": true, "/oauth/atlassian/start": true, "/oauth/x/start": true,
+		"/api/github/pat": true, "/api/github/tokens": true, "/api/github/tokens/0a0b0c0d": true,
+		"/api/github/tokens/0a0b0c0d/check": true,
+		"/oauth/github/start":               true, "/oauth/atlassian/start": true, "/oauth/x/start": true,
 		"/oauth/github/callback": false, "/oauth/finish/": false, "/oauth//start": false,
 		"/oauth/github/start/": false, "/oauth/github/start/x": false, "/oauth/start": false,
 		"/": false, "/setup/": false, "/auth/done/": false, "/apix": false,
