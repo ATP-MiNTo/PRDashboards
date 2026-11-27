@@ -22,6 +22,21 @@ function Page({
 }
 
 describe('Modal', () => {
+  it('is the narrow box unless it is wide', () => {
+    const { rerender } = render(
+      <Modal labelledBy="t" onClose={vi.fn()}>
+        <h3 id="t">Title</h3>
+      </Modal>,
+    );
+    expect(screen.getByRole('dialog').className).not.toMatch(/wide/);
+    rerender(
+      <Modal labelledBy="t" onClose={vi.fn()} wide>
+        <h3 id="t">Title</h3>
+      </Modal>,
+    );
+    expect(screen.getByRole('dialog').className).toMatch(/wide/);
+  });
+
   it('is a labelled modal dialog at the end of the body, with the focus inside', () => {
     render(<Page />);
     const dialog = screen.getByRole('dialog', { name: 'Title' });

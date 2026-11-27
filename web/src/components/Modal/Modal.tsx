@@ -11,6 +11,8 @@ export interface ModalProps {
   onClose: () => void;
   /** While false the scrim and Escape do nothing, for a request that must finish first. */
   dismissible?: boolean;
+  /** The wide box of the rules dialog: at most 48rem instead of 32rem. */
+  wide?: boolean;
   children: ReactNode;
 }
 
@@ -19,7 +21,13 @@ export interface ModalProps {
  * block for fixed children), focus moves into it, Tab stays inside, Escape and a click on the scrim
  * close it, and focus goes back to where it was.
  */
-export function Modal({ labelledBy, onClose, dismissible = true, children }: ModalProps) {
+export function Modal({
+  labelledBy,
+  onClose,
+  dismissible = true,
+  wide = false,
+  children,
+}: ModalProps) {
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,7 +70,7 @@ export function Modal({ labelledBy, onClose, dismissible = true, children }: Mod
       />
       <div
         ref={box}
-        className={styles.box}
+        className={wide ? `${styles.box} ${styles.wide}` : styles.box}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy}

@@ -32,6 +32,11 @@
   overscroll-behavior: contain;
 }
 
+/* The rules dialog (daisyUI max-w-3xl). */
+.wide {
+  max-width: 48rem;
+}
+
 .box:focus {
   outline: none;
 }

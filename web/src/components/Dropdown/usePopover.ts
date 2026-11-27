@@ -9,6 +9,8 @@ export interface PopoverPlacement {
   gap?: number;
   /** Whether the popover is at least as wide as the anchor. Default true. */
   matchWidth?: boolean;
+  /** Pixels added to the left edge, before the popover is kept inside the viewport. Default 0. */
+  shift?: number;
 }
 
 const MARGIN = 8;
@@ -27,7 +29,7 @@ export function usePopover(
   placement: PopoverPlacement = {},
 ) {
   const pop = useRef<HTMLDivElement | null>(null);
-  const { side = 'below', align = 'start', gap = 2, matchWidth = true } = placement;
+  const { side = 'below', align = 'start', gap = 2, matchWidth = true, shift = 0 } = placement;
 
   const place = useCallback(
     (el: HTMLDivElement | null) => {
@@ -44,11 +46,11 @@ export function usePopover(
           box.bottom + gap + height > window.innerHeight &&
           box.top - gap - height >= 0);
       el.style.top = `${above ? box.top - gap - height : box.bottom + gap}px`;
-      const left = align === 'end' ? box.right - width : box.left;
+      const left = (align === 'end' ? box.right - width : box.left) + shift;
       const max = Math.max(MARGIN, window.innerWidth - width - MARGIN);
       el.style.left = `${Math.max(MARGIN, Math.min(left, max))}px`;
     },
-    [anchor, side, align, gap, matchWidth],
+    [anchor, side, align, gap, matchWidth, shift],
   );
 
   useEffect(() => {

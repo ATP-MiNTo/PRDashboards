@@ -53,6 +53,17 @@ describe('usePopover placement', () => {
     expect(pop.style.minWidth).toBe('');
   });
 
+  it('can shift the left edge before keeping the popover inside the viewport', () => {
+    rect({});
+    size(100, 50);
+    const { unmount } = render(<Harness placement={{ shift: -8 }} />);
+    expect(screen.getByTestId('pop').style.left).toBe('292px');
+    unmount();
+    rect({ left: 2, right: 62 });
+    render(<Harness placement={{ shift: -8 }} />);
+    expect(screen.getByTestId('pop').style.left).toBe('8px');
+  });
+
   it('goes above when asked, or when auto and there is no room below', () => {
     rect({ top: 700, bottom: 720 });
     size(100, 80);

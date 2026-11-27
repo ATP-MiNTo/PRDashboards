@@ -1,0 +1,52 @@
+/* The design's "i" button (daisyUI btn-circle btn-ghost btn-xs, a serif italic bold i) and its note
+   (a 13rem dark bubble under the button). */
+
+.info {
+  composes: ui-ghost from global;
+  box-sizing: border-box;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  border-radius: 9999px;
+  font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: 0.75rem;
+  font-style: italic;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.info span {
+  font-weight: 700;
+}
+
+.bubble {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box;
+  width: 13rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.375rem;
+  background: oklch(var(--n));
+  color: oklch(var(--nc));
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.375;
+  pointer-events: none;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
