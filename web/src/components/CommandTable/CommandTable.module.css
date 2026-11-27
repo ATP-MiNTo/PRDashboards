@@ -104,6 +104,24 @@
   background: oklch(var(--bc) / 0.08);
 }
 
+/* Blocked is red: a pastel wash and a dark red number, a deeper wash while it is the filter. */
+.statBlocked {
+  background: var(--blocked-bg);
+}
+
+.statBlocked:hover {
+  background: var(--blocked-bg-hover);
+}
+
+.statBlocked.statOn,
+.statBlocked.statOn:hover {
+  background: var(--blocked-bg-on);
+}
+
+.statBlocked .statValue {
+  color: var(--blocked-fg);
+}
+
 .statTitle {
   display: block;
   color: var(--sub);
@@ -148,6 +166,23 @@
 .csOn,
 .csOn:hover {
   background: oklch(var(--bc) / 0.12);
+}
+
+.csBlocked {
+  background: var(--blocked-bg);
+}
+
+.csBlocked:hover {
+  background: var(--blocked-bg-hover);
+}
+
+.csBlocked.csOn,
+.csBlocked.csOn:hover {
+  background: var(--blocked-bg-on);
+}
+
+.csBlocked .csValue {
+  color: var(--blocked-fg);
 }
 
 .csLabel {
