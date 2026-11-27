@@ -2,6 +2,19 @@
 setlocal
 cd /d "%~dp0.."
 
+rem VERSION goes into the linker flags, so every line of it must be plain MAJOR.MINOR.PATCH.
+findstr /v /r /x /c:"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*" VERSION >nul 2>&1
+if not errorlevel 1 (
+  echo error: VERSION must look like 1.2.3
+  exit /b 1
+)
+set "VER="
+set /p VER=<VERSION
+if not defined VER (
+  echo error: VERSION is empty
+  exit /b 1
+)
+
 where go >nul 2>&1
 if errorlevel 1 (
   echo error: go is not installed. Install it from https://go.dev/dl/
@@ -49,7 +62,6 @@ for %%f in (server\web\*) do if /i not "%%~nxf"==".gitkeep" del /q "%%f"
 xcopy /e /i /y /q web\out server\web >nul
 if errorlevel 1 exit /b 1
 echo ==^> go build
-set /p VER=<VERSION
 go build -trimpath -ldflags "-X main.version=%VER%" -o bin\prdash.exe .\server\cmd\prdash
 if errorlevel 1 exit /b 1
 >.build-hash echo %HASH%
