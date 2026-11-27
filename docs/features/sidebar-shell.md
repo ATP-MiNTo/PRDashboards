@@ -38,12 +38,12 @@ auto-collapse are not saved. Scroll position and the wide-screen media query are
 
 ## Outside calls
 
-None from the shell. The accounts block reads `GET /api/accounts`, which reads the local database and makes no GitHub or Jira call. The sidebar content mounts when the sidebar first opens (page load on a wide screen) and stays mounted after a collapse (hidden with the `hidden` attribute). On mount it runs only local queries (settings, repos, rules, activity, retries); the Jira options request, the one that reaches Jira, waits until a rule form or the Exclude statuses list opens ([settings.md](settings.md)). Browser tabs therefore make no outside call by loading the dashboard.
+None from the shell. The accounts block reads `GET /api/accounts`, which reads the local database and makes no GitHub or Jira call. The sidebar content mounts when the sidebar first opens (page load on a wide screen) and stays mounted after a collapse (hidden with the `hidden` attribute). On mount it runs only local queries (settings, repos); the rules, the activity and the Jira options request, the one that reaches Jira, wait until the Status sync rules dialog opens ([settings.md](settings.md), [status-sync-rules.md](status-sync-rules.md)). Browser tabs therefore make no outside call by loading the dashboard.
 
 ## Rules and invariants
 
 - Classes only: no `style` attribute and no `<style>` block, because the CSP is `style-src 'self'` ([security.md](security.md)). Dynamic state is a class or a data attribute.
-- The blur is on a `::before` layer of the sidebar, not on the sidebar: `backdrop-filter` on an ancestor would become the containing block of the fixed popovers in the Dropdown and MultiSelect.
+- The blur is on a `::before` layer of the sidebar, not on the sidebar: `backdrop-filter` on an ancestor would become the containing block of the fixed popovers in the Dropdown.
 - The burger ([header.md](header.md)) and the collapse chevron are buttons with accessible names ("Settings sidebar", "Collapse sidebar") and `aria-expanded`; both have `aria-controls`.
 - The sidebar column is 20rem wide, and the overlay is at most 20rem or 92vw. The table is sized to fit beside it at 1280px ([command-table.md](command-table.md)).
 - The Account side panel keeps its own shell ([settings.md](settings.md)) and is not part of the sidebar; the sidebar only opens it.
@@ -51,7 +51,7 @@ None from the shell. The accounts block reads `GET /api/accounts`, which reads t
 ## Tests
 
 - [Shell.test.tsx](../../web/src/components/Shell/Shell.test.tsx): open and close from a burger and the chevron, saved and restored state, blocked storage, overlay (dialog, Escape, scrim, focus return, Tab wrap), auto-collapse with fake timers (pointer, focus, hold).
-- [SettingsContent.test.tsx](../../web/src/components/Settings/SettingsContent.test.tsx) and [RulesSection.test.tsx](../../web/src/components/Settings/RulesSection.test.tsx): no Jira options request on mount, one when the rule form or the Exclude statuses list opens.
+- [SettingsContent.test.tsx](../../web/src/components/Settings/SettingsContent.test.tsx) and [RulesModal.test.tsx](../../web/src/components/RulesModal/RulesModal.test.tsx): no Jira options request from the sidebar, one when the rules dialog opens. [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): the "Status sync rules" button opens the dialog and the focus returns to it on close.
 - [idleTimer.test.ts](../../web/src/components/Shell/idleTimer.test.ts): fire, cancel, restart, held.
 - [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx) and [Header.test.tsx](../../web/src/components/Header/Header.test.tsx): the burger opens the sidebar, no Settings button, the accounts block with its badges and the Manage accounts flow.
-- [e2e/multipr.spec.ts](../../e2e/multipr.spec.ts): the rule is created and the activity read in the sidebar, opened with the burger (`openSettings` in [e2e/helpers.ts](../../e2e/helpers.ts)).
+- [e2e/multipr.spec.ts](../../e2e/multipr.spec.ts): the sidebar is opened with the burger (`openSettings` in [e2e/helpers.ts](../../e2e/helpers.ts)), the rule is created and the activity read in the Status sync rules dialog it opens.
