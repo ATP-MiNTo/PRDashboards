@@ -49,6 +49,7 @@ beforeEach(() => {
     theme: 'auto',
     defaultMethodForNewRepos: 'squash',
     deleteBranchAfterMerge: false,
+    multiPrTickets: 'all',
     jiraSiteId: null,
     excludedStatuses: ['Done'],
   });
@@ -166,6 +167,44 @@ describe('RepositoriesSection', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Delete branch after merge, default/ }));
     await waitFor(() => expect(api.putSettings).toHaveBeenCalledTimes(2));
     expect(api.putSettings.mock.calls[1]?.[0]).toMatchObject({ deleteBranchAfterMerge: true });
+  });
+
+  it('shows and saves the global setting for tickets shared by several PRs', async () => {
+    renderSection();
+    fireEvent.click(await fold());
+    const select = await screen.findByRole('combobox', { name: 'Multi-PR tickets move when' });
+    expect(select).toHaveValue('all');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual(['All PRs are merged', 'First PR is merged']);
+    fireEvent.change(select, { target: { value: 'any' } });
+    await waitFor(() => expect(api.putSettings).toHaveBeenCalledTimes(1));
+    expect(api.putSettings.mock.calls[0]?.[0]).toMatchObject({
+      multiPrTickets: 'any',
+      defaultMethodForNewRepos: 'squash',
+      deleteBranchAfterMerge: false,
+    });
+  });
+
+  it('shows the stored setting and says so when saving fails', async () => {
+    api.getSettings.mockResolvedValue({
+      polling: { githubSec: 60, jiraSec: 300 },
+      theme: 'auto',
+      defaultMethodForNewRepos: 'squash',
+      deleteBranchAfterMerge: false,
+      multiPrTickets: 'any',
+      jiraSiteId: null,
+      excludedStatuses: ['Done'],
+    });
+    api.putSettings.mockRejectedValue(new Error('no'));
+    renderSection();
+    fireEvent.click(await fold());
+    const select = await screen.findByRole('combobox', { name: 'Multi-PR tickets move when' });
+    expect(select).toHaveValue('any');
+    fireEvent.change(select, { target: { value: 'all' } });
+    expect(await screen.findByText('Could not save the settings.')).toBeInTheDocument();
   });
 
   it('opens the dialog of a repository from its gear', async () => {

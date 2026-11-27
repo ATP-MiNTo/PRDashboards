@@ -42,6 +42,7 @@ const settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: 's1',
   excludedStatuses: [],
 };

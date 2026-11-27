@@ -33,6 +33,7 @@ const settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: null,
   excludedStatuses: ['Done'],
 };

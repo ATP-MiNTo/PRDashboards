@@ -3,6 +3,9 @@ import { pr, snapshot, ticket } from '@/test-fixtures';
 import { newRule } from './rules';
 import {
   MODE_CHOICES,
+  modeChoices,
+  modeLabel,
+  MULTI_PR_CHOICES,
   MULTI_PR_HINT,
   preferList,
   projectKey,
@@ -124,7 +127,33 @@ describe('the mode of shared tickets', () => {
       { value: 'any', label: 'When the first PR meets it' },
     ]);
     expect(MULTI_PR_HINT).toBe(
-      'When a ticket is linked to several PRs. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.',
+      'When a ticket is linked to several PRs. Default: follows "Multi-PR tickets move when" in the Repositories setting of the sidebar. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.',
     );
+  });
+
+  it('words the global setting of the sidebar', () => {
+    expect(MULTI_PR_CHOICES).toEqual([
+      { value: 'all', label: 'All PRs are merged' },
+      { value: 'any', label: 'First PR is merged' },
+    ]);
+  });
+
+  it('offers the default first, worded with what the setting is now', () => {
+    expect(modeChoices('all')).toEqual([
+      { value: 'default', label: 'Default (when the last PR meets it)' },
+      { value: 'all', label: 'When the last PR meets it' },
+      { value: 'any', label: 'When the first PR meets it' },
+    ]);
+    expect(modeChoices('any')[0]).toEqual({
+      value: 'default',
+      label: 'Default (when the first PR meets it)',
+    });
+  });
+
+  it('starts a new rule in the mode that follows the setting', () => {
+    expect(newRule().mode).toBe('default');
+    expect(modeLabel('default')).toBe('Default');
+    expect(modeLabel('all')).toBe('All');
+    expect(modeLabel('any')).toBe('Any');
   });
 });

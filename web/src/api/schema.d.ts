@@ -562,6 +562,11 @@ export interface components {
             /** @enum {string} */
             defaultMethodForNewRepos: "squash" | "merge" | "rebase";
             deleteBranchAfterMerge: boolean;
+            /**
+             * @description When a ticket linked to several pull requests moves, for the status sync rules whose mode is "default": "all" when the last pull request meets the rule, "any" when the first one does. Defaults to "all".
+             * @enum {string}
+             */
+            multiPrTickets: "all" | "any";
             jiraSiteId: string | null;
             /** @description Jira statuses whose tickets no status sync rule ever moves. Compared without regard to case. Defaults to ["Done"]. */
             excludedStatuses: string[];
@@ -876,8 +881,11 @@ export interface components {
         };
         /** @enum {string} */
         RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged" | "no_review_yet" | "waiting_approvals";
-        /** @enum {string} */
-        RuleMode: "all" | "any";
+        /**
+         * @description How a ticket with several pull requests meets a rule. "all": when the last pull request meets it. "any": when the first one does. "default" follows Settings.multiPrTickets.
+         * @enum {string}
+         */
+        RuleMode: "all" | "any" | "default";
         /** @description Every filter is optional (an empty string is no filter) and they combine with AND. */
         RuleFilters: {
             repo: string;

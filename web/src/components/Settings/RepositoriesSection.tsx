@@ -1,9 +1,10 @@
 import { useId, useMemo, useState } from 'react';
-import type { MergeMethodName, RepoSettings } from '@/api/client';
+import type { MergeMethodName, MultiPrMode, RepoSettings } from '@/api/client';
 import { useAccounts, useRepos, useSaveSettings, useSettings } from '@/api/queries';
 import { SOURCE_SHORT, sourceOf } from '@/lib/accounts';
 import { METHOD_NAMES, METHOD_ORDER } from '@/lib/merge';
 import { isCustom } from '@/lib/repoSettings';
+import { MULTI_PR_CHOICES } from '@/lib/rules';
 import { InfoTip } from '../InfoTip/InfoTip';
 import { Marquee } from '../Marquee/Marquee';
 import { RollSwitch } from '../Toolbar/RollSwitch';
@@ -21,12 +22,16 @@ const TIP_DELETE =
 const TIP_REPOSITORY =
   'Blue gear: this repository has its own settings. Outline gear: it follows the defaults above.';
 
-/** The defaults every repository follows until it says otherwise: delete branch and the merge method. */
+/**
+ * The defaults every repository follows until it says otherwise: delete branch and the merge method,
+ * and the global "Multi-PR tickets move when" that the rules in mode Default follow.
+ */
 function Defaults() {
   const settings = useSettings();
   const save = useSaveSettings();
   const current = settings.data;
   const methodId = useId();
+  const multiPrId = useId();
   if (!current) return null;
   return (
     <div className={styles.defaults}>
@@ -61,6 +66,24 @@ function Defaults() {
           {METHOD_ORDER.map((m) => (
             <option key={m} value={m}>
               {METHOD_NAMES[m]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={styles.fieldLabel} htmlFor={multiPrId}>
+          Multi-PR tickets move when
+        </label>
+        <select
+          id={multiPrId}
+          value={current.multiPrTickets}
+          onChange={(e) =>
+            save.mutate({ ...current, multiPrTickets: e.target.value as MultiPrMode })
+          }
+        >
+          {MULTI_PR_CHOICES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
             </option>
           ))}
         </select>

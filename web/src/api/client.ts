@@ -198,6 +198,8 @@ export const getActivity = (cursor?: number) =>
 export type SyncRule = Schemas['SyncRule'];
 export type RuleTrigger = Schemas['RuleTrigger'];
 export type RuleMode = Schemas['RuleMode'];
+/** When a ticket shared by several PRs moves, for the rules that follow the default: all or any. */
+export type MultiPrMode = Settings['multiPrTickets'];
 export type RuleFilters = Schemas['RuleFilters'];
 export type RulePreview = Schemas['RulePreview'];
 export type RulesUpdate = Schemas['RulesUpdate'];

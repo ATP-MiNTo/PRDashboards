@@ -181,6 +181,7 @@ describe('api client operations', () => {
       theme: 'auto',
       defaultMethodForNewRepos: 'squash',
       deleteBranchAfterMerge: false,
+      multiPrTickets: 'all',
       jiraSiteId: null,
       excludedStatuses: ['Done'] as string[],
     } as const;

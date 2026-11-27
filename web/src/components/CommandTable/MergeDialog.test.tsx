@@ -77,6 +77,7 @@ beforeEach(() => {
     theme: 'auto',
     defaultMethodForNewRepos: 'squash',
     deleteBranchAfterMerge: true,
+    multiPrTickets: 'all',
     jiraSiteId: null,
   });
   api.getTransitions.mockImplementation((key: string) =>

@@ -1,4 +1,5 @@
 import type {
+  MultiPrMode,
   RuleFilters,
   RuleMode,
   RuleTrigger,
@@ -24,15 +25,33 @@ export const TRIGGERS: { value: RuleTrigger; label: string }[] = [
   { value: 'merged', label: 'The pull request is merged' },
 ];
 
-/** The hint of "Tickets shared by several PRs" (TECH_SPEC 7.5). */
+/** The hint of "Tickets shared by several PRs" (TECH_SPEC 7.5), with the third choice. */
 export const MULTI_PR_HINT =
-  'When a ticket is linked to several PRs. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.';
+  'When a ticket is linked to several PRs. Default: follows "Multi-PR tickets move when" in the Repositories setting of the sidebar. All: the ticket moves only when every linked PR meets the rule. Any: the first PR that meets it moves the ticket.';
 
-/** The two modes as the "Tickets shared by several PRs" select words them. */
-export const MODE_CHOICES: { value: RuleMode; label: string }[] = [
+/** The two explicit modes as the "Tickets shared by several PRs" select words them. */
+export const MODE_CHOICES: { value: Exclude<RuleMode, 'default'>; label: string }[] = [
   { value: 'all', label: 'When the last PR meets it' },
   { value: 'any', label: 'When the first PR meets it' },
 ];
+
+/** The global "Multi-PR tickets move when" select of the sidebar. */
+export const MULTI_PR_CHOICES: { value: MultiPrMode; label: string }[] = [
+  { value: 'all', label: 'All PRs are merged' },
+  { value: 'any', label: 'First PR is merged' },
+];
+
+/** The choices of the rule's select: first the one that follows the sidebar, showing what it is now. */
+export function modeChoices(global: MultiPrMode): { value: RuleMode; label: string }[] {
+  const now = MODE_CHOICES.find((m) => m.value === global) ?? MODE_CHOICES[0];
+  return [
+    {
+      value: 'default',
+      label: `Default (${now ? now.label.charAt(0).toLowerCase() + now.label.slice(1) : ''})`,
+    },
+    ...MODE_CHOICES,
+  ];
+}
 
 const GLOB = /^[A-Za-z0-9._/*-]*$/;
 const PROJECT = /^[A-Za-z0-9_]*$/;
@@ -45,7 +64,7 @@ export function emptyFilters(): RuleFilters {
   return { repo: '', branch: '', project: '', issueType: '', status: '' };
 }
 
-/** A new rule starts enabled and in mode All. */
+/** A new rule starts enabled and follows the default of the Repositories setting. */
 export function newRule(): SyncRule {
   return {
     id: crypto.randomUUID(),
@@ -55,7 +74,7 @@ export function newRule(): SyncRule {
     hours: 0,
     filters: emptyFilters(),
     target: '',
-    mode: 'all',
+    mode: 'default',
   };
 }
 
@@ -65,7 +84,7 @@ export function ruleName(r: SyncRule): string {
 }
 
 export function modeLabel(m: RuleMode): string {
-  return m === 'all' ? 'All' : 'Any';
+  return m === 'all' ? 'All' : m === 'any' ? 'Any' : 'Default';
 }
 
 export function describeFilters(f: RuleFilters): string[] {

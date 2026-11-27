@@ -1,9 +1,9 @@
 import { useId, useMemo, useState, type DragEvent } from 'react';
 import type { RuleFilters, RuleMode, RulePreview, RuleTrigger, SyncRule } from '@/api/client';
-import { usePreviewRule, useSaveRules } from '@/api/queries';
+import { usePreviewRule, useSaveRules, useSettings } from '@/api/queries';
 import {
   MAX_HOURS,
-  MODE_CHOICES,
+  modeChoices,
   MULTI_PR_HINT,
   ruleName,
   ruleProblem,
@@ -125,6 +125,7 @@ export function RuleCard({
   const [keep, setKeep] = useState(false);
   const preview = usePreviewRule();
   const save = useSaveRules();
+  const multiPr = useSettings().data?.multiPrTickets ?? 'all';
 
   const name = ruleName(rule);
   const key = previewKey(rule);
@@ -334,7 +335,7 @@ export function RuleCard({
                     disabled={busy}
                     onChange={(e) => onMode(e.target.value as RuleMode)}
                   >
-                    {MODE_CHOICES.map((m) => (
+                    {modeChoices(multiPr).map((m) => (
                       <option key={m.value} value={m.value}>
                         {m.label}
                       </option>
