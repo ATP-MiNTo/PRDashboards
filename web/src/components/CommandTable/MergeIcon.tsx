@@ -1,4 +1,4 @@
-import styles from './CommandTable.module.css';
+import styles from './Controls.module.css';
 
 /** The git-merge mark on a Merge button. Decorative: the button's text names the action. */
 export function MergeIcon() {

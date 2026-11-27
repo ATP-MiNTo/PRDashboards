@@ -59,3 +59,72 @@ export function LayersIcon() {
     </Icon>
   );
 }
+
+/** A caret on a menu button. */
+export function ChevronDownIcon() {
+  return (
+    <Icon size={16}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+/** The check of the Approve item. */
+export function CheckIcon() {
+  return (
+    <Icon size={16}>
+      <path d="m5 12 5 5 9-10" />
+    </Icon>
+  );
+}
+
+/** The mark of the Request change item. */
+export function AlertIcon() {
+  return (
+    <Icon size={16}>
+      <path d="M12 4v10M12 19v.01" />
+    </Icon>
+  );
+}
+
+/** The plus of the add-ticket button. */
+export function PlusIcon() {
+  return (
+    <Icon size={16} strokeWidth={3.2}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+/** The rocket of the merge launch. */
+export function RocketIcon() {
+  return (
+    <Icon size={16}>
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    </Icon>
+  );
+}
+
+/** A spinner for a running check: a ring with a gap that turns. */
+export function SpinnerIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="3"
+      strokeLinecap="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="12" cy="12" r="9" opacity="0.25" />
+      <path d="M12 3a9 9 0 0 1 9 9" />
+    </svg>
+  );
+}

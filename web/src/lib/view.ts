@@ -135,3 +135,48 @@ export function listStats(s: Snapshot, v: ListView): ListStats {
       : count(applyHidden(groupsOf(s, v.filter, v.show, v.terms), v.hidden, v.mode));
   return out;
 }
+
+/** Where a merged card was in the list when its launch began, so it can stay there while it plays. */
+export interface Launched {
+  id: string;
+  /** The key of the group the card was in, and whether that group is a stack. */
+  groupKey: string;
+  stacked: boolean;
+  /** The group's position in the list, and the card's position in the group. */
+  groupIndex: number;
+  index: number;
+}
+
+/** Where `id` is in `groups`, as the facts a `Launched` needs. */
+export function locate(groups: readonly Group[], id: string): Omit<Launched, 'id'> | null {
+  for (const [groupIndex, g] of groups.entries()) {
+    const index = g.ids.indexOf(id);
+    if (index >= 0) return { groupKey: g.key, stacked: g.stacked, groupIndex, index };
+  }
+  return null;
+}
+
+/**
+ * Puts launched cards back into the list after the snapshot dropped them, so the launch animation
+ * can finish before they leave. A card the snapshot still has stays where the list put it. One that
+ * was in a stack goes back into that stack while the stack is still listed, else alone at its old
+ * position.
+ */
+export function pinLaunched(
+  groups: Group[],
+  launched: readonly Launched[],
+  present: ReadonlySet<string>,
+): Group[] {
+  if (!launched.some((l) => !present.has(l.id))) return groups;
+  const out = groups.map((g) => ({ ...g, ids: [...g.ids] }));
+  for (const l of launched) {
+    if (present.has(l.id)) continue;
+    const home = l.stacked ? out.find((g) => g.stacked && g.key === l.groupKey) : undefined;
+    if (home) {
+      home.ids.splice(Math.min(l.index, home.ids.length), 0, l.id);
+    } else {
+      out.splice(Math.min(l.groupIndex, out.length), 0, { key: l.id, ids: [l.id], stacked: false });
+    }
+  }
+  return out;
+}

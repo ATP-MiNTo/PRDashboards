@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Snapshot } from '@/api/client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { MergeResult, Snapshot, SnapshotPr } from '@/api/client';
 import { useSnapshot } from '@/api/queries';
+import { mergeSummary } from '@/lib/merge';
 import { groupsOf, type Group } from '@/lib/snapshot';
 import { sortGroups } from '@/lib/sort';
 import { reducedMotion } from '@/lib/storage';
-import { applyHidden, paginate, shownIn } from '@/lib/view';
+import { applyHidden, locate, paginate, pinLaunched, shownIn, type Launched } from '@/lib/view';
 import { Pager } from '../Toolbar/Pager';
 import type { ListPrefs } from '../Toolbar/useListPrefs';
-import { Card, type Motion } from './Card';
+import { useToast } from '../Toast/Toast';
+import { Card, type Launch, type Motion } from './Card';
 import styles from './CommandTable.module.css';
 import { StackBanner } from './StackBanner';
 
@@ -15,6 +17,16 @@ import { StackBanner } from './StackBanner';
 export const GHOST_MS = 480;
 /** How long the one-shot dim and appear animations of a card last. */
 export const PULSE_MS = 500;
+/** How long a merged card plays its launch before it leaves the list and the toast says what happened. */
+export const LAUNCH_MS = 3000;
+/** The same under reduced motion: the card says "Merged" for a moment and goes. */
+export const LAUNCH_REDUCED_MS = 1200;
+
+const NO_GROUPS: Group[] = [];
+
+interface Playing extends Launch {
+  where: Launched;
+}
 
 /** The list's own message, in the glass surface of the design. */
 export function Notice({
@@ -38,15 +50,19 @@ export function Notice({
 
 export function List({ prefs }: { prefs: ListPrefs }) {
   const { filter, terms, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
+  // Merged cards stay in the list while their launch plays, even after the snapshot dropped them.
+  const [playing, setPlaying] = useState<ReadonlyMap<string, Playing>>(new Map());
+  const wheres = useMemo(() => [...playing.values()].map((p) => p.where), [playing]);
   const select = useCallback(
     (s: Snapshot) => {
       const byId = new Map(s.prs.map((p) => [p.id, p]));
       const groups = sortGroups(groupsOf(s, filter, show, terms), byId, sort, reversed);
-      return applyHidden(groups, hidden, mode);
+      return pinLaunched(applyHidden(groups, hidden, mode), wheres, new Set(byId.keys()));
     },
-    [filter, terms, sort, reversed, show, hidden, mode],
+    [filter, terms, sort, reversed, show, hidden, mode, wheres],
   );
-  const groups = useSnapshot<Group[]>(select).data ?? [];
+  const groups = useSnapshot<Group[]>(select).data ?? NO_GROUPS;
+  const toast = useToast();
   const pages = paginate(groups, pageSize);
   const current = Math.min(page, Math.max(0, pages.length - 1));
 
@@ -98,6 +114,40 @@ export function List({ prefs }: { prefs: ListPrefs }) {
     [hidden, motion, mode, play, toggleHidden],
   );
 
+  // The server accepted a merge: the card plays the launch, then leaves and the toast sums it up.
+  const merged = useCallback(
+    (pr: SnapshotPr, result: MergeResult) => {
+      const summary = mergeSummary(pr.number, result.steps);
+      if (!summary.merged) {
+        toast.show(summary.text, summary.failed ? 'error' : 'info');
+        return;
+      }
+      const where = locate(groups, pr.id);
+      const done = () => {
+        setPlaying((cur) => {
+          const next = new Map(cur);
+          next.delete(pr.id);
+          return next;
+        });
+        toast.show(summary.text, summary.failed ? 'error' : 'success');
+      };
+      if (!where) {
+        done();
+        return;
+      }
+      setPlaying((cur) => new Map(cur).set(pr.id, { pr, where: { id: pr.id, ...where } }));
+      const t = setTimeout(
+        () => {
+          timers.current.delete(t);
+          done();
+        },
+        reducedMotion() ? LAUNCH_REDUCED_MS : LAUNCH_MS,
+      );
+      timers.current.add(t);
+    },
+    [groups, toast],
+  );
+
   const card = (id: string) => {
     const m = motion.get(id) ?? null;
     return (
@@ -108,6 +158,8 @@ export function List({ prefs }: { prefs: ListPrefs }) {
         dim={mode === 'all' && hidden.has(id) && m !== 'out'}
         motion={m}
         onHide={hide}
+        launch={playing.get(id)}
+        onMerged={merged}
       />
     );
   };

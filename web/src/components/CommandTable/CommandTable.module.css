@@ -392,7 +392,8 @@
   text-decoration: underline;
 }
 
-/* The controls on the right of a card. Narrow: wrapped rows. Wide: five columns with dividers. */
+/* The controls on the right of a card. Narrow: wrapped rows. Wide: Hide, Review, CI and Merge in
+   four columns with dividers. */
 .controls {
   position: relative;
   z-index: 10;
@@ -419,7 +420,7 @@
   .controls {
     display: grid;
     flex: none;
-    grid-template-columns: 4.5rem 1px 8rem 1px 11rem 1px 9.5rem 1px 7rem;
+    grid-template-columns: 4.5rem 1px 6.4rem 1px 7.3rem 1px 6.1rem;
     gap: 8px;
     justify-content: end;
   }
@@ -445,18 +446,6 @@
 
 .hideBox {
   composes: ui-check from global;
-}
-
-.panel {
-  border-radius: var(--radius-ctl);
-  background: var(--surface2);
-  font-size: 0.875rem;
-}
-
-@media (min-width: 1024px) {
-  .panel {
-    flex: 0 0 100%;
-  }
 }
 
 /* A stack: its cards in one frame with a banner above. */
@@ -596,90 +585,6 @@
   color: var(--stack-fg);
 }
 
-.review,
-.ci {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-/* In a card the tickets sit in a wrapping row under the meta line. */
-.tickets {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 12px;
-}
-
-.ticketList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 12px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.checks,
-.options {
-  display: grid;
-  gap: 3px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.check {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 6px;
-  font-size: 12px;
-}
-
-.checkName {
-  color: var(--link);
-}
-
-.checkApp,
-.checkTime {
-  color: var(--sub);
-}
-
-.checkTime {
-  font-variant-numeric: tabular-nums;
-}
-
-.dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--mute-fill);
-}
-
-.dot_passing {
-  background: var(--good-fill);
-}
-
-.dot_failing {
-  background: var(--bad-fill);
-}
-
-.dot_running {
-  background: var(--info-fill);
-}
-
-.dot_pending {
-  background: var(--warn-fill);
-}
-
-.dot_cancelled {
-  background: var(--mute-fill);
-}
-
-.more,
 .linkButton {
   padding: 0;
   border: 0;
@@ -693,234 +598,12 @@
   opacity: 0.6;
 }
 
-.ticket {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0 6px;
-  font-size: 0.75rem;
-}
-
-.ticketHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.ticketKey {
-  color: var(--link);
-  font-weight: 600;
-}
-
-.ticketTitle {
-  max-width: 280px;
-}
-
-.source {
-  color: var(--sub);
-  font-size: 11px;
-}
-
-.unlink {
-  padding: 0 4px;
-  border: 0;
-  border-radius: var(--radius-ctl);
-  background: none;
-  color: var(--sub);
-  font-size: 16px;
-  line-height: 1;
-}
-
-.unlink:hover {
-  background: var(--hover);
-  color: var(--bad);
-}
-
-.lookupError {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  color: var(--bad);
-  font-size: 12px;
-}
-
-.picker {
-  display: grid;
-  gap: 6px;
-  width: 260px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-box);
-  background: var(--surface);
-  box-shadow: 0 4px 12px var(--shadow);
-}
-
-.picker input {
-  padding: 0 0.75rem;
-  border: 1px solid var(--ctl-border);
-  border-radius: var(--radius-ctl);
-  background: var(--ctl-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.875rem;
-  min-height: var(--ctl-h);
-}
-
-.options {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.option {
-  display: block;
-  width: 100%;
-  min-height: 0;
-  padding: 4px 6px;
-  border: 0;
-  border-radius: var(--radius-ctl);
-  background: none;
-  color: var(--text);
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 400;
-  text-align: left;
-}
-
-.option:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.mergeButton {
-  composes: ui-btn from global;
-  gap: 0.375rem;
-  border-color: var(--merge);
-  background: var(--merge);
-  color: #fff;
-  cursor: var(--cursor-merge);
-}
-
-/* Enabled: the blue of the design with an aura that pulses every 2.6s (keyframes in globals.css).
-   --merge in globals.css is the one value to edit to change the colour. */
-.mergeButton:not(:disabled) {
-  box-shadow: 0 0 12px 1px rgba(0, 127, 255, 0.45);
-  animation: aura 2.6s ease-in-out infinite;
-}
-
-@keyframes aura {
-  50% {
-    box-shadow:
-      0 0 0 4px rgba(0, 127, 255, 0.16),
-      0 0 22px 6px rgba(0, 127, 255, 0.32);
-  }
-}
-
-.mergeButton:hover:not(:disabled) {
-  border-color: var(--merge-hover);
-  background: var(--merge-hover);
-  color: #fff;
-}
-
-.mergeIcon {
-  flex: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mergeButton:not(:disabled) {
-    animation: none;
-  }
-}
-
-.reason {
-  margin-top: 4px;
-  color: var(--bad);
-  font-size: 12px;
-}
-
-.ready {
-  margin-top: 4px;
-  color: var(--good);
-  font-size: 12px;
-}
-
-.method {
-  display: grid;
-  justify-items: start;
-  gap: 2px;
-  font-size: 12px;
-}
-
-.warning {
-  color: var(--warn);
-}
-
-.panelRow td {
-  padding: 0;
-  background: var(--surface2);
-  font-size: 0.875rem;
-}
-
-.mergePanel {
-  display: grid;
-  gap: 10px;
-  padding: 12px 16px;
-}
-
-.mergeLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-}
-
-.moves,
 .steps {
   display: grid;
   gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.moveRow {
-  display: grid;
-  gap: 4px;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-ctl);
-  background: var(--glass-bg);
-}
-
-.moveChoice {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-}
-
-.field {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.field input,
-.field select {
-  min-height: var(--ctl-h);
-  padding: 0 0.5rem;
-  border: 1px solid var(--ctl-border);
-  border-radius: var(--radius-ctl);
-  background: var(--ctl-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 0.875rem;
-}
-
-.checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .step {
@@ -941,15 +624,4 @@
 .recent h2 {
   margin: 0;
   font-size: 1rem;
-}
-
-.waiting {
-  color: var(--warn);
-  font-size: 12px;
-}
-
-.mergeCell {
-  display: grid;
-  justify-items: center;
-  text-align: center;
 }

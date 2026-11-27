@@ -35,19 +35,30 @@ export function TicketBadge({
   ticketKey,
   status,
   url,
+  title,
 }: {
   ticketKey: string;
   status: string | null;
   url: string | null;
+  /** The tooltip, such as the ticket's summary. */
+  title?: string;
 }) {
   const text = status ? `${ticketKey} · ${status}` : ticketKey;
   const link = safeLink(url);
   return link ? (
-    <a className={styles.ticketBadge} href={link.href} target="_blank" rel="noopener noreferrer">
+    <a
+      className={styles.ticketBadge}
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={title}
+    >
       {text}
     </a>
   ) : (
-    <span className={styles.ticketBadge}>{text}</span>
+    <span className={styles.ticketBadge} title={title}>
+      {text}
+    </span>
   );
 }
 

@@ -128,7 +128,7 @@ describe('card', () => {
 
   it('puts its Jira tickets on the card', async () => {
     await show([pr('a', 1, { tickets: [ticket('INP-7')] })]);
-    expect(within(card('a')).getByRole('link', { name: 'INP-7' })).toBeInTheDocument();
+    expect(within(card('a')).getByRole('link', { name: 'INP-7 · In Review' })).toBeInTheDocument();
   });
 
   it('has no style attribute, anywhere in the list', async () => {

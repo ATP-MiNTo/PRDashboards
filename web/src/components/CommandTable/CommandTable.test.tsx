@@ -110,13 +110,17 @@ describe('CommandTable', () => {
       'href',
       'https://github.com/acme/web/pull/1',
     );
-    expect(screen.getByRole('link', { name: 'INP-1' })).toBeInTheDocument();
+    const own = screen.getByText('Add login').closest('article')!;
+    expect(within(own).getByRole('link', { name: 'INP-1 · In Review' })).toBeInTheDocument();
     const child = screen.getByText('SSO on top').closest('article')!;
-    expect(within(child).getByText('Merge after #1')).toBeInTheDocument();
-    expect(within(child).getByRole('button', { name: 'Merge' })).toBeDisabled();
+    const blocked = within(child).getByRole('button', { name: 'Merge' });
+    expect(blocked).toHaveAttribute('aria-disabled', 'true');
+    expect(blocked).toHaveAccessibleDescription('Merge after #1');
     expect(within(child).getByRole('checkbox', { name: 'Hide #2' })).toBeInTheDocument();
     const draft = screen.getByText('Plain fix').closest('article')!;
-    expect(within(draft).getByText('Draft', { selector: 'div' })).toBeInTheDocument();
+    expect(within(draft).getByText('Draft', { selector: 'span' })).toBeInTheDocument();
+    expect(within(draft).getByRole('button', { name: 'Ready' })).toBeInTheDocument();
+    expect(within(draft).queryByRole('button', { name: 'Merge' })).toBeNull();
     expect(screen.getByText('Merge conflicts')).toBeInTheDocument();
   });
 
@@ -126,7 +130,7 @@ describe('CommandTable', () => {
     const group = screen.getByRole('region', { name: 'Stack' });
     expect(within(group).getByText('STACK')).toBeInTheDocument();
     expect(within(group).getByText('2 PRs, merge in order')).toBeInTheDocument();
-    expect(within(group).getByText('INP-1')).toBeInTheDocument();
+    expect(within(group).getAllByText('INP-1 · In Review').length).toBeGreaterThan(0);
     expect(group.querySelectorAll('article[data-pr]')).toHaveLength(2);
     expect(within(group).getByText('Stack 1/2')).toBeInTheDocument();
     expect(within(group).getByText('Stack 2/2')).toBeInTheDocument();
@@ -302,7 +306,7 @@ describe('CommandTable', () => {
     for (const id of ['a', 'b', 'd']) expect(renders.get(id)).toBe(before.get(id));
   });
 
-  it('shows the resolved merge method in the Method column', async () => {
+  it('shows the resolved merge method and where it comes from in the merge dialog', async () => {
     api.getSnapshot.mockResolvedValue(
       snapshot([
         pr('a', 1, {
@@ -319,24 +323,26 @@ describe('CommandTable', () => {
     );
     renderWithClient(<CommandTable />);
     const row = (await screen.findByText('Add login')).closest('article')!;
-    expect(within(row).getByRole('combobox', { name: 'Merge method' })).toHaveTextContent(
-      'Merge commit (default)',
+    expect(within(row).queryByRole('combobox', { name: 'Merge method' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
+    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    expect(within(dialog).getByRole('button', { name: 'Merge method' })).toHaveTextContent(
+      'merge commit',
     );
-    expect(within(row).getByText('Branch rule main')).toBeInTheDocument();
+    expect(within(dialog).getByText(/from branch rule main/)).toBeInTheDocument();
     expect(
-      within(row).getByText('Repo disallows squash merge, using merge commit'),
+      within(dialog).getByText('Repo disallows squash merge, using merge commit'),
     ).toBeInTheDocument();
   });
 
-  it('opens the merge panel under a ready row and closes it again', async () => {
+  it('opens the merge dialog from a ready card and closes it again', async () => {
     renderWithClient(<CommandTable />);
     const row = (await screen.findByText('Add login')).closest('article')!;
-    const button = within(row).getByRole('button', { name: 'Merge' });
-    fireEvent.click(button);
-    expect(button).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('group', { name: 'Merge #1' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('group', { name: 'Merge #1' })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
+    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    expect(within(dialog).getByText('Add login')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Merge acme/web #1?' })).toBeNull();
   });
 
   it('opens the settings sidebar from the burger and closes it with Escape', async () => {

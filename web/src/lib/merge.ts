@@ -1,4 +1,4 @@
-import type { MergeMethodName, MethodResolution, Transition } from '@/api/client';
+import type { MergeMethodName, MergeStep, MethodResolution, Transition } from '@/api/client';
 import type { DropdownOption } from '@/components/Dropdown/Dropdown';
 
 export const METHOD_NAMES: Record<MergeMethodName, string> = {
@@ -7,22 +7,14 @@ export const METHOD_NAMES: Record<MergeMethodName, string> = {
   rebase: 'Rebase',
 };
 
-const ORDER: MergeMethodName[] = ['squash', 'merge', 'rebase'];
+/** The methods in the order the dialog and the settings list them. */
+export const METHOD_ORDER: readonly MergeMethodName[] = ['squash', 'merge', 'rebase'];
 
 /** Plain method choices, for settings that have no repository to disallow one. */
-export const METHOD_CHOICES: DropdownOption<MergeMethodName>[] = ORDER.map((value) => ({
+export const METHOD_CHOICES: DropdownOption<MergeMethodName>[] = METHOD_ORDER.map((value) => ({
   value,
   label: METHOD_NAMES[value],
 }));
-
-/** The options of a method dropdown: the resolved method is the default, the rest are not allowed. */
-export function methodOptions(r: MethodResolution): DropdownOption<MergeMethodName>[] {
-  return ORDER.map((m) => {
-    const allowed = r.allowed.includes(m);
-    const note = m === r.method ? ' (default)' : allowed ? '' : ' (not allowed)';
-    return { value: m, label: METHOD_NAMES[m] + note, disabled: !allowed };
-  });
-}
 
 /** The method to merge with: the person's choice if the repository still allows it. */
 export function effectiveMethod(
@@ -32,12 +24,19 @@ export function effectiveMethod(
   return chosen && r.allowed.includes(chosen) ? chosen : r.method;
 }
 
-/** How the resolved default came about, in words for the hint under the dropdown. */
-export function sourceHint(source: string): string {
-  return source.startsWith('rule: ')
-    ? `Branch rule ${source.slice(6)}`
-    : source.slice(0, 1).toUpperCase() + source.slice(1);
+/**
+ * Where the resolved method comes from, to follow "Method: squash, from ..." in the merge dialog:
+ * a branch rule, the repository's settings or the defaults of a new repository.
+ */
+export function methodFrom(source: string): string {
+  if (source.startsWith('rule: ')) return `branch rule ${source.slice(6)}`;
+  if (source === 'repo default') return 'the repo settings';
+  if (source === 'new repo default') return 'the defaults';
+  return source.toLowerCase();
 }
+
+/** A method as the dialog's sentence says it: lower case. */
+export const methodWord = (m: MergeMethodName): string => METHOD_NAMES[m].toLowerCase();
 
 export interface TicketChoice {
   key: string;
@@ -70,4 +69,38 @@ export function mergeBlock(moves: TicketChoice[], withoutTicketConfirmed: boolea
     if (!m.confirmed) return `Confirm the move of ${m.key}`;
   }
   return null;
+}
+
+/** The first and last word of the merge toast: what happened to the pull request and its tickets. */
+export interface MergeSummary {
+  /** "#490 merged, INP-104 moved to Done". */
+  text: string;
+  /** Whether a step failed, so the toast is an error and says where to retry. */
+  failed: boolean;
+  /** Whether GitHub merged it. False when it was only added to the merge queue. */
+  merged: boolean;
+}
+
+/** Sums up the steps of a finished merge for the toast. */
+export function mergeSummary(number: number, steps: readonly MergeStep[]): MergeSummary {
+  const merge = steps.find((s) => s.kind === 'merge');
+  const queued = merge?.state === 'queued';
+  const parts: string[] = [];
+  let failed = false;
+  for (const s of steps) {
+    if (s.state === 'failed') {
+      failed = true;
+      if (s.kind === 'transition') parts.push(`${s.ticket ?? 'a ticket'} did not move`);
+      else if (s.kind === 'delete_branch') parts.push('the branch was not deleted');
+    } else if (s.kind === 'transition' && s.state === 'ok') {
+      parts.push(`${s.ticket ?? 'a ticket'} moved${s.toStatus ? ` to ${s.toStatus}` : ''}`);
+    }
+  }
+  const head = queued ? `#${number} added to the merge queue` : `#${number} merged`;
+  const retry = failed ? '. Retry it under Recent merges' : '';
+  return {
+    text: `${head}${parts.length > 0 ? `, ${parts.join(', ')}` : ''}${retry}`,
+    failed,
+    merged: !queued,
+  };
 }
