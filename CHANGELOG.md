@@ -6,6 +6,24 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.1] - 2026-11-27
+
+### Fixed
+
+- The Blocked, Draft and Stale tiles are back in the stats strip (with Showing, Ready to merge, Running CI and Stacks), and
+  they filter the list.
+- The stats now stay visible: once the strip scrolls away, a compact summary slides into the floating header pill.
+- The settings sidebar no longer crops its content when a repository name is long, so the merge method select,
+  Select all and the per-repository settings buttons stay visible.
+- The sidebar folds 30 seconds after the pointer leaves it, even when a clicked button still has the focus. Keyboard focus
+  and open dialogs still keep it open.
+- The History view has its warm brown tint again, in light and dark.
+
+### Removed
+
+- The Theme block in the sidebar. The sun and moon button in the header is the only theme control; right-click,
+  Shift+click, Shift+Enter or the Menu key on it switches to Auto.
+
 ## [2.4.0] - 2026-11-27
 
 ### Changed
