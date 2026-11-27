@@ -6,6 +6,25 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.2] - 2026-11-27
+
+### Changed
+
+- Pull requests waiting on your review are now listed, in red. A third GitHub search (`review-requested:@me`, still one paginated
+  call per page of results, no per-PR calls) gives them the role "Review requested". Assigned and Opened by me share the same green.
+- The Show roller has three modes: All (default), Mine (green) and To review (red). The stat tiles and the count follow the mode.
+- The Blocked tile and its compact header button have a pastel red tint.
+- "Approvals required to merge" can be 0, and 0 is the default. Repositories that were still at the old default of 1 move to 0;
+  values from 2 to 10 are kept.
+- In the repository dialog, "Delete branch after merge" and "Merge method" open on the default. Click rolls between the choices only;
+  right-click, Shift+click or Shift+Enter switches between the default and a choice.
+- The accounts dialog no longer has the "Why" column.
+
+### Added
+
+- "Multi-PR tickets move when" in the Repositories setting of the sidebar (All PRs are merged, or First PR is merged). Status sync
+  rules can follow it with the new "Default" choice; existing rules keep their own choice.
+
 ## [2.4.1] - 2026-11-27
 
 ### Fixed
