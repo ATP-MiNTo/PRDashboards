@@ -115,8 +115,8 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	for _, m := range st.Merged {
 		ids = append(ids, m.ID)
 	}
-	if !slices.Equal(ids, []string{"P1", "P2"}) {
-		t.Fatalf("recent merge and the one just resolved: %v", ids)
+	if !slices.Equal(ids, []string{"P1", "P2", "P4"}) {
+		t.Fatalf("recent merge, the one just resolved, and the old one sharing INP-9 with an open pull request: %v", ids)
 	}
 	if m := st.Merged[0]; m.Repo != "acme/web" || m.Number != 1 || m.Base != "main" || !slices.Equal(m.Tickets, []string{"INP-1", "INP-2"}) {
 		t.Fatalf("%+v", m)
