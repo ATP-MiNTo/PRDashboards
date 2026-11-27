@@ -71,7 +71,7 @@ func TestPutRulesResetsAndBaselinesFirings(t *testing.T) {
 }
 
 func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
-	s, path, clock := open(t)
+	s, _, clock := open(t)
 	ctx := context.Background()
 	if err := s.PutRules(ctx, []store.SyncRule{rule("a", "merged")}, nil, nil, clock.Now()); err != nil {
 		t.Fatal(err)
