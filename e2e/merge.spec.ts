@@ -72,10 +72,11 @@ const moveTo = async (page: Page, key: string, status: string) => {
   await page.getByRole("menuitem", { name: status, exact: true }).click();
 };
 
-const stepsOf = (page: Page) =>
-  page
-    .getByRole("region", { name: "Recent merges" })
-    .getByRole("list", { name: "Merge steps" });
+// The History view replaces the list: the merges made from this page, with what became of each ticket.
+const openHistory = async (page: Page) => {
+  await page.getByRole("button", { name: "History" }).click();
+  return page.getByRole("region", { name: "Merged pull requests" });
+};
 
 test("merges and moves the ticket, with the required field", async ({
   page,
@@ -105,10 +106,10 @@ test("merges and moves the ticket, with the required field", async ({
   await expect(merge).toBeEnabled();
   await merge.click();
 
-  const recent = page.getByRole("region", { name: "Recent merges" });
-  await expect(recent.getByText("Move INP-104 to Done")).toBeVisible();
-  await expect(recent.getByText("Failed", { exact: true })).toHaveCount(0);
   await expect(rowOf(page, "INP-104 Invoice export")).toHaveCount(0);
+  const history = await openHistory(page);
+  await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
+  await expect(history.getByText("did not move")).toHaveCount(0);
 
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(1);
@@ -138,20 +139,21 @@ test("a failed move is kept and retried", async ({ page, request }) => {
     .check();
   await panel.getByRole("button", { name: "Merge & move to Done" }).click();
 
-  const steps = stepsOf(page);
+  await expect(rowOf(page, "INP-104 Invoice export")).toHaveCount(0);
+  const history = await openHistory(page);
   await expect(
-    steps.getByText("Jira rejected the move: Workflow validator failed"),
+    history.getByText("Jira rejected the move: Workflow validator failed"),
   ).toBeVisible();
-  await expect(steps.getByText("Failed", { exact: true })).toBeVisible();
+  await expect(history.getByText("INP-104 did not move")).toBeVisible();
   expect((await fakeState<GitHubState>(request, "github")).merges).toBe(1);
   expect((await fakeState<JiraState>(request, "atlassian")).statuses).toEqual(
     {},
   );
 
   await configure(request, "atlassian", { transitionMode: "" });
-  await steps.getByRole("button", { name: /^Retry/ }).click();
-  await expect(steps.getByText("Failed", { exact: true })).toHaveCount(0);
-  await expect(steps.getByText("Done", { exact: true })).toHaveCount(2);
+  await history.getByRole("button", { name: "Retry the move of INP-104" }).click();
+  await expect(history.getByText("did not move")).toHaveCount(0);
+  await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
 
   const jira = await fakeState<JiraState>(request, "atlassian");
   expect(jira.moves).toHaveLength(2);
@@ -197,9 +199,8 @@ test("a head that moved is refused and the row is refreshed", async ({
     .getByRole("checkbox", { name: "Merge without moving any ticket" })
     .check();
   await panel.getByRole("button", { name: "Merge without ticket" }).click();
-  await expect(
-    page.getByRole("region", { name: "Recent merges" }),
-  ).toContainText("Bump dependencies");
+  await expect(rowOf(page, "Bump dependencies")).toHaveCount(0);
+  await expect(await openHistory(page)).toContainText("Bump dependencies");
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(1);
   expect(github.lastMerge.sha).toBe(headOf(9, true));
@@ -254,9 +255,10 @@ test("a stacked pull request merges through GitHub's asynchronous API", async ({
     .check();
   await panel.getByRole("button", { name: "Merge without ticket" }).click();
 
-  const recent = page.getByRole("region", { name: "Recent merges" });
-  await expect(recent).toContainText("Stack bottom", { timeout: 15_000 });
-  await expect(recent.getByText("Failed", { exact: true })).toHaveCount(0);
+  const history = await openHistory(page);
+  await expect(history).toContainText("Stack bottom", { timeout: 15_000 });
+  await expect(history.getByText("did not move")).toHaveCount(0);
+  await expect(history.getByText("Branch not deleted")).toHaveCount(0);
   const github = await fakeState<GitHubState>(request, "github");
   expect(github.merges).toBe(0);
   expect(github.asyncSubmits).toBe(1);

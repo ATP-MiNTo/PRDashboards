@@ -10,7 +10,10 @@ import styles from './CommandTable.module.css';
 import { CommitIcon, LayersIcon, PrIcon } from './Icons';
 import { MergeCell } from './MergeCell';
 import { MergeDialog } from './MergeDialog';
+import { NoteButton } from './NoteButton';
+import { NoteDialog } from './NoteDialog';
 import { Pill } from './Pill';
+import notes from './Notes.module.css';
 import { RelativeTime } from './RelativeTime';
 import { ReviewCell } from './ReviewCell';
 import { TicketCell } from './TicketCell';
@@ -31,7 +34,7 @@ function Diff({ pr }: { pr: SnapshotPr }) {
 }
 
 /** "repo #num · author · updated age · latest commit age", then the badges that belong to it. */
-function Meta({ pr }: { pr: SnapshotPr }) {
+function Meta({ pr, noted }: { pr: SnapshotPr; noted: boolean }) {
   const now = useNow(60_000);
   const lastGood = useSnapshot(lastGoodGithub).data ?? null;
   const updated = ageShort(pr.updatedAt, now);
@@ -64,6 +67,7 @@ function Meta({ pr }: { pr: SnapshotPr }) {
           Last data <RelativeTime iso={lastGood.syncedAt} />
         </Pill>
       )}
+      {noted && <span className={notes.badge}>Note</span>}
       {pr.isDraft && <span className={styles.draftTag}>Draft</span>}
       {pr.stack && (
         <span className={styles.stackTag}>
@@ -92,6 +96,9 @@ interface CardProps {
   dim: boolean;
   motion: Motion;
   onHide: (id: string) => void;
+  /** The note on this pull request, kept in this browser. */
+  note?: string;
+  onNote: (id: string, text: string) => void;
   /** Set while the launch of this card's merge plays. */
   launch?: Launch;
   /** Called when the server accepted a merge made from this card. */
@@ -100,9 +107,10 @@ interface CardProps {
 
 const MOTION_CLASS = { out: styles.ghostOut, in: styles.ghostIn, dim: styles.ghostDim } as const;
 
-function CardView({ id, hidden, dim, motion, onHide, launch, onMerged }: CardProps) {
+function CardView({ id, hidden, dim, motion, onHide, note, onNote, launch, onMerged }: CardProps) {
   const live = useSnapshotPr(id);
   const [dialog, setDialog] = useState(false);
+  const [editing, setEditing] = useState(false);
   const pr = live ?? launch?.pr;
   if (!pr) return null;
   const url = githubPrUrl(pr.repo.nameWithOwner, pr.number);
@@ -127,7 +135,7 @@ function CardView({ id, hidden, dim, motion, onHide, launch, onMerged }: CardPro
               )}
             </Marquee>
           </h2>
-          <Meta pr={pr} />
+          <Meta pr={pr} noted={note !== undefined} />
           <div className={styles.jira}>
             <TicketCell pr={pr} />
             <Diff pr={pr} />
@@ -135,16 +143,19 @@ function CardView({ id, hidden, dim, motion, onHide, launch, onMerged }: CardPro
         </div>
       </div>
       <div className={styles.controls}>
-        <label className={styles.hide}>
-          <input
-            type="checkbox"
-            className={styles.hideBox}
-            checked={hidden}
-            aria-label={`Hide #${pr.number}`}
-            onChange={() => onHide(pr.id)}
-          />
-          <span className={styles.hideText}>Hide</span>
-        </label>
+        <div className={styles.hideCell}>
+          <NoteButton number={pr.number} note={note} onOpen={() => setEditing(true)} />
+          <label className={styles.hide}>
+            <input
+              type="checkbox"
+              className={styles.hideBox}
+              checked={hidden}
+              aria-label={`Hide #${pr.number}`}
+              onChange={() => onHide(pr.id)}
+            />
+            <span className={styles.hideText}>Hide</span>
+          </label>
+        </div>
         <span className={styles.vline} aria-hidden="true" />
         <div className={styles.cell}>
           <ReviewCell pr={pr} />
@@ -158,6 +169,14 @@ function CardView({ id, hidden, dim, motion, onHide, launch, onMerged }: CardPro
           <MergeCell pr={pr} launched={launch !== undefined} onMerge={() => setDialog(true)} />
         </div>
       </div>
+      {editing && (
+        <NoteDialog
+          pr={pr}
+          note={note}
+          onSave={(text) => onNote(pr.id, text)}
+          onClose={() => setEditing(false)}
+        />
+      )}
       {dialog && (
         <MergeDialog
           pr={pr}

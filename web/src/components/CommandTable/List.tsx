@@ -50,16 +50,17 @@ export function Notice({
 
 export function List({ prefs }: { prefs: ListPrefs }) {
   const { filter, terms, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
+  const { off, notes, setNote } = prefs;
   // Merged cards stay in the list while their launch plays, even after the snapshot dropped them.
   const [playing, setPlaying] = useState<ReadonlyMap<string, Playing>>(new Map());
   const wheres = useMemo(() => [...playing.values()].map((p) => p.where), [playing]);
   const select = useCallback(
     (s: Snapshot) => {
       const byId = new Map(s.prs.map((p) => [p.id, p]));
-      const groups = sortGroups(groupsOf(s, filter, show, terms), byId, sort, reversed);
+      const groups = sortGroups(groupsOf(s, filter, show, terms, off), byId, sort, reversed);
       return pinLaunched(applyHidden(groups, hidden, mode), wheres, new Set(byId.keys()));
     },
-    [filter, terms, sort, reversed, show, hidden, mode, wheres],
+    [filter, terms, sort, reversed, show, off, hidden, mode, wheres],
   );
   const groups = useSnapshot<Group[]>(select).data ?? NO_GROUPS;
   const toast = useToast();
@@ -158,6 +159,8 @@ export function List({ prefs }: { prefs: ListPrefs }) {
         dim={mode === 'all' && hidden.has(id) && m !== 'out'}
         motion={m}
         onHide={hide}
+        note={notes[id]}
+        onNote={setNote}
         launch={playing.get(id)}
         onMerged={merged}
       />

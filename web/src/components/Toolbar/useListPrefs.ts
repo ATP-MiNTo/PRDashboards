@@ -4,12 +4,14 @@ import { readStored, readStringList, writeStored } from '@/lib/storage';
 import { DEFAULT_SORT, type SortKey } from '@/lib/sort';
 import type { Filter } from '@/lib/snapshot';
 import { isShowMode, type ShowMode } from '@/lib/show';
+import { NOTES_KEY, parseNotes, pruneNotes, withNote, type Notes } from '@/lib/notes';
 import { DEFAULT_PAGE_SIZE, isHideMode, isPageSize, pruneHidden, type HideMode } from '@/lib/view';
 
 export const HIDDEN_KEY = 'prd-hidden';
 export const HIDE_MODE_KEY = 'prd-hidef';
 export const PAGE_SIZE_KEY = 'prd-pagesize';
 export const SHOW_KEY = 'prd-show';
+export const OFF_KEY = 'prd-repos-off';
 
 function storedMode(): HideMode {
   const v = readStored(HIDE_MODE_KEY);
@@ -41,12 +43,28 @@ export function useListPrefs(existing: readonly string[]) {
   const [pageSize, setPageSizeState] = useState(storedPageSize);
   const [page, setPage] = useState(0);
   const [stored, setStored] = useState(() => new Set(readStringList(HIDDEN_KEY)));
+  const [off, setOffState] = useState<ReadonlySet<string>>(() => new Set(readStringList(OFF_KEY)));
+  const [storedNotes, setStoredNotes] = useState<Notes>(() => parseNotes(readStored(NOTES_KEY)));
 
   // Pruned when read, never written back on render. An empty snapshot (still loading) prunes nothing.
   const hidden = useMemo(
     () => (existing.length === 0 ? stored : pruneHidden(stored, existing)),
     [stored, existing],
   );
+
+  // A note whose pull request is gone is dropped when read, and from storage with the next change.
+  const notes = useMemo(() => pruneNotes(storedNotes, existing), [storedNotes, existing]);
+  const latestNotes = useRef(notes);
+  useEffect(() => {
+    latestNotes.current = notes;
+  }, [notes]);
+
+  const setNote = useCallback((id: string, text: string) => {
+    const next = withNote(latestNotes.current, id, text);
+    latestNotes.current = next;
+    setStoredNotes(next);
+    writeStored(NOTES_KEY, JSON.stringify(next));
+  }, []);
 
   // Delayed toggles (the fade-out) must build on the latest set, not the one they were made with.
   const latest = useRef(hidden);
@@ -75,6 +93,14 @@ export function useListPrefs(existing: readonly string[]) {
     pageSize,
     page,
     hidden,
+    notes,
+    setNote,
+    off,
+    setOff: (next: ReadonlySet<string>) => {
+      setOffState(next);
+      writeStored(OFF_KEY, JSON.stringify([...next]));
+      setPage(0);
+    },
     toggleHidden,
     setPage,
     setFilter: (f: Filter) => {

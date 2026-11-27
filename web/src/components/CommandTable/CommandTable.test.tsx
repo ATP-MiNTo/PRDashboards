@@ -101,6 +101,7 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
   document.documentElement.removeAttribute('data-mode');
   document.documentElement.removeAttribute('data-theme');
+  localStorage.clear();
 });
 
 describe('CommandTable', () => {
@@ -382,7 +383,7 @@ describe('CommandTable', () => {
     expect(button).toHaveFocus();
   });
 
-  it('opens the account panel from Manage accounts in the sidebar', async () => {
+  it('opens the Accounts dialog from Manage accounts in the sidebar', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
     expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
@@ -390,19 +391,17 @@ describe('CommandTable', () => {
     const manage = await screen.findByRole('button', { name: 'Manage accounts' });
     manage.focus();
     fireEvent.click(manage);
-    const dialog = screen.getByRole('dialog', { name: 'Account' });
-    expect(
-      await within(dialog).findByRole('heading', { name: 'Connected accounts' }),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Close account' }));
-    expect(screen.queryByRole('dialog', { name: 'Account' })).toBeNull();
+    const dialog = await screen.findByRole('dialog', { name: 'Accounts' });
+    expect(await within(dialog).findByRole('region', { name: 'GitHub' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('region', { name: 'Jira' })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Accounts' })).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     expect(manage).toHaveFocus();
 
     fireEvent.click(manage);
-    fireEvent.click(screen.getByTestId('side-panel-scrim'));
-    expect(screen.queryByRole('dialog', { name: 'Account' })).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
+    fireEvent.click(await screen.findByTestId('modal-scrim'));
+    expect(screen.queryByRole('dialog', { name: 'Accounts' })).toBeNull();
   });
 
   it('shows the connected accounts at the bottom of the sidebar', async () => {
@@ -432,7 +431,35 @@ describe('CommandTable', () => {
     expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Theme:/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'History' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+
+  it('swaps the list for the History view and back, and the header search filters it', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const button = screen.getByRole('button', { name: 'History' });
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    const view = screen.getByRole('region', { name: 'Merged pull requests' });
+    expect(within(view).getByText(/Nothing merged here yet/)).toBeInTheDocument();
+    expect(screen.queryByText('Add login')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Summary' })).toBeNull();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('PRDashboards · History');
+    fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('Add login')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Merged pull requests' })).toBeNull();
+  });
+
+  it('leaves out the pull requests of a repository switched off in the sidebar', async () => {
+    localStorage.setItem('prd-repos-off', JSON.stringify(['R1']));
+    renderWithClient(<CommandTable />);
+    expect(await screen.findByText('Nothing here')).toBeInTheDocument();
+    expect(document.querySelectorAll('article[data-pr]')).toHaveLength(0);
+    localStorage.removeItem('prd-repos-off');
   });
 
   it('switches the theme from the header button', async () => {
