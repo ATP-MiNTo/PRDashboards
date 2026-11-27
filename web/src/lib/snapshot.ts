@@ -2,8 +2,6 @@ import type { Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
 import { matchesSearch } from './search';
 import { inShow, type ShowMode } from './show';
 
-export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
-
 const ORG = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO = /^[A-Za-z0-9._-]{1,100}$/;
 const PATH = /^\/[A-Za-z0-9._\-/]*$/;
@@ -85,38 +83,21 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   return { readiness: 'ready', reason: null };
 }
 
-export function isStale(pr: SnapshotPr, now: number): boolean {
-  if (!pr.committedAt) return false;
-  return now - Date.parse(pr.committedAt) > STALE_AFTER_MS;
-}
+/** What the stat tiles filter the list by: everything, ready to merge, running CI, or stacks only. */
+export type Filter = 'all' | 'ready' | 'running' | 'stacks';
 
-export interface Stats {
-  open: number;
-  ready: number;
-  blocked: number;
-  draft: number;
-  stale: number;
-}
+export const FILTERS: Filter[] = ['all', 'ready', 'running', 'stacks'];
 
-export function statsOf(s: Snapshot, now: number): Stats {
-  const out: Stats = { open: s.prs.length, ready: 0, blocked: 0, draft: 0, stale: 0 };
-  for (const pr of s.prs) {
-    out[blockOf(pr).readiness] += 1;
-    if (isStale(pr, now)) out.stale += 1;
-  }
-  return out;
-}
-
-export type Filter = 'all' | 'ready' | 'blocked' | 'draft' | 'stale';
-
-export function matches(pr: SnapshotPr, filter: Filter, now: number): boolean {
+export function matches(pr: SnapshotPr, filter: Filter): boolean {
   switch (filter) {
     case 'all':
       return true;
-    case 'stale':
-      return isStale(pr, now);
-    default:
-      return blockOf(pr).readiness === filter;
+    case 'ready':
+      return blockOf(pr).readiness === 'ready';
+    case 'running':
+      return pr.ci.state === 'running';
+    case 'stacks':
+      return pr.stack !== null;
   }
 }
 
@@ -134,7 +115,6 @@ export interface Group {
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
-  now: number,
   show: ShowMode = 'everything',
   terms: readonly string[] = [],
 ): Group[] {
@@ -143,7 +123,7 @@ export function groupsOf(
   const rows = [...s.prs].sort((a, b) => (a.stack?.position ?? 0) - (b.stack?.position ?? 0));
   const kept = new Set(
     rows
-      .filter((p) => matches(p, filter, now) && inShow(p, show) && matchesSearch(p, terms))
+      .filter((p) => matches(p, filter) && inShow(p, show) && matchesSearch(p, terms))
       .map((p) => p.id),
   );
   for (const pr of s.prs) {

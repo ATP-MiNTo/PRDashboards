@@ -1,36 +1,30 @@
 import type { SnapshotPr } from '@/api/client';
 import { blockOf, type Group } from './snapshot';
 
-export type SortKey = 'updated' | 'title' | 'repo' | 'number' | 'ready';
+export type SortKey = 'updated' | 'title' | 'repo' | 'size' | 'ready';
 
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'updated', label: 'Recently updated' },
   { value: 'title', label: 'Title' },
   { value: 'repo', label: 'Repository' },
-  { value: 'number', label: 'PR number' },
+  { value: 'size', label: 'Size of change' },
   { value: 'ready', label: 'Ready to merge first' },
 ];
 
 export const DEFAULT_SORT: SortKey = 'updated';
 
-export type SortDir = 'asc' | 'desc';
-
-/** The direction each option starts in: newest and best first, text and numbers ascending. */
-export function naturalDir(key: SortKey): SortDir {
-  return key === 'updated' || key === 'ready' ? 'desc' : 'asc';
-}
-
-export function effectiveDir(key: SortKey, reversed: boolean): SortDir {
-  const dir = naturalDir(key);
-  if (!reversed) return dir;
-  return dir === 'asc' ? 'desc' : 'asc';
-}
-
 const READINESS = { ready: 0, blocked: 1, draft: 2 } as const;
 
+/** When the pull request last changed; a snapshot without the update time falls back to the last commit. */
 function time(pr: SnapshotPr): number {
-  const t = pr.committedAt ? Date.parse(pr.committedAt) : NaN;
+  const iso = pr.updatedAt ?? pr.committedAt;
+  const t = iso ? Date.parse(iso) : NaN;
   return Number.isNaN(t) ? -Infinity : t;
+}
+
+/** Lines added plus removed; 0 when the snapshot does not say. */
+export function sizeOf(pr: Pick<SnapshotPr, 'additions' | 'deletions'>): number {
+  return (pr.additions ?? 0) + (pr.deletions ?? 0);
 }
 
 function text(a: string, b: string): number {
@@ -47,8 +41,9 @@ function compare(key: SortKey, a: SnapshotPr, b: SnapshotPr): number {
       return text(a.title, b.title);
     case 'repo':
       return text(a.repo.nameWithOwner, b.repo.nameWithOwner) || a.number - b.number;
-    case 'number':
-      return a.number - b.number;
+    case 'size':
+      // Biggest change first.
+      return sizeOf(b) - sizeOf(a);
     case 'ready':
       return READINESS[blockOf(a).readiness] - READINESS[blockOf(b).readiness];
   }

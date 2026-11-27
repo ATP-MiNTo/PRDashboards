@@ -63,18 +63,21 @@ describe('groupsOf with a search', () => {
   ]);
 
   it('keeps the matching pull requests in their order', () => {
-    const groups = groupsOf(s, 'all', 0, 'everything', searchTerms('billing'));
+    const groups = groupsOf(s, 'all', 'everything', searchTerms('billing'));
     expect(groups.map((g) => g.ids)).toEqual([['b'], ['c']]);
   });
 
   it('combines with the filter and finds by ticket key', () => {
-    expect(groupsOf(s, 'all', 0, 'everything', searchTerms('pay-9')).map((g) => g.ids)).toEqual([
+    expect(groupsOf(s, 'all', 'everything', searchTerms('pay-9')).map((g) => g.ids)).toEqual([
       ['b'],
     ]);
-    expect(groupsOf(s, 'draft', 0, 'everything', searchTerms('billing'))).toEqual([]);
+    expect(groupsOf(s, 'ready', 'everything', searchTerms('pay-9')).map((g) => g.ids)).toEqual([
+      ['b'],
+    ]);
+    expect(groupsOf(s, 'running', 'everything', searchTerms('pay-9'))).toEqual([]);
   });
 
   it('lists everything for an empty search', () => {
-    expect(groupsOf(s, 'all', 0, 'everything', []).length).toBe(3);
+    expect(groupsOf(s, 'all', 'everything', []).length).toBe(3);
   });
 });

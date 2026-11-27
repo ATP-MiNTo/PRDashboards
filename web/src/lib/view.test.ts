@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import type { SnapshotPr } from '@/api/client';
+import { pr, snapshot } from '@/test-fixtures';
+import { searchTerms } from './search';
 import type { Group } from './snapshot';
 import {
   applyHidden,
   isHideMode,
   isPageSize,
+  listStats,
+  type ListView,
   pageItems,
   pageRange,
   paginate,
@@ -103,5 +108,66 @@ describe('hidden', () => {
     expect(isPageSize(15)).toBe(true);
     expect(isPageSize(12)).toBe(false);
     expect(isPageSize('10')).toBe(false);
+  });
+});
+
+describe('listStats', () => {
+  const stackOf = (id: string, position: number): Partial<SnapshotPr> => ({
+    stack: {
+      id: 'S',
+      position,
+      size: 2,
+      parentId: position === 1 ? null : 'a',
+      parentNumber: position === 1 ? null : 1,
+    },
+  });
+  const s = snapshot([
+    pr('a', 1, { roles: ['assigned'], ...stackOf('a', 1) }),
+    pr('b', 2, {
+      roles: ['assigned'],
+      ...stackOf('b', 2),
+      ci: { state: 'running', total: 0, checks: [] },
+    }),
+    pr('c', 3, { roles: ['authored'], isDraft: true }),
+    pr('d', 4, { roles: ['authored'], ci: { state: 'running', total: 0, checks: [] } }),
+  ]);
+  const view = (over: Partial<ListView> = {}): ListView => ({
+    filter: 'all',
+    show: 'everything',
+    terms: [],
+    hidden: new Set(),
+    mode: 'visible',
+    ...over,
+  });
+
+  it('counts what the list holds: showing, ready, running and stacks', () => {
+    expect(listStats(s, view())).toEqual({ showing: 4, ready: 1, running: 2, stacks: 1 });
+  });
+
+  it('follows the Show state', () => {
+    expect(listStats(s, view({ show: 'authored' }))).toEqual({
+      showing: 2,
+      ready: 0,
+      running: 1,
+      stacks: 0,
+    });
+  });
+
+  it('follows the search', () => {
+    expect(listStats(s, view({ terms: searchTerms('change 3') })).showing).toBe(1);
+  });
+
+  it('leaves out the hidden pull requests, and keeps only them in the Hidden mode', () => {
+    expect(listStats(s, view({ hidden: new Set(['d']) })).showing).toBe(3);
+    expect(listStats(s, view({ hidden: new Set(['d']), mode: 'all' })).showing).toBe(4);
+    expect(listStats(s, view({ hidden: new Set(['d']), mode: 'hidden' })).showing).toBe(1);
+  });
+
+  it('keeps the other tiles whole when a tile filters the list, and narrows Showing', () => {
+    const f = listStats(s, view({ filter: 'running' }));
+    expect(f.showing).toBe(2);
+    expect(f.ready).toBe(1);
+    expect(listStats(s, view({ filter: 'stacks' })).showing).toBe(2);
+    expect(listStats(s, view({ filter: 'ready' })).showing).toBe(1);
   });
 });

@@ -76,14 +76,13 @@ describe('isShowMode', () => {
 });
 
 describe('groupsOf with a Show mode', () => {
-  const now = Date.parse('2026-11-24T12:00:00Z');
   const s = snapshot([
     withRoles('a', ['assigned']),
     withRoles('o', ['authored']),
     withRoles('b', ['assigned', 'authored']),
   ]);
-  const ids = (mode: Parameters<typeof groupsOf>[3]) =>
-    groupsOf(s, 'all', now, mode).flatMap((g) => g.ids);
+  const ids = (mode: Parameters<typeof groupsOf>[2]) =>
+    groupsOf(s, 'all', mode).flatMap((g) => g.ids);
 
   it('keeps the pull requests of the mode, in snapshot order', () => {
     expect(ids('everything')).toEqual(['a', 'o', 'b']);
@@ -92,7 +91,7 @@ describe('groupsOf with a Show mode', () => {
   });
 
   it('defaults to everything', () => {
-    expect(groupsOf(s, 'all', now).flatMap((g) => g.ids)).toEqual(['a', 'o', 'b']);
+    expect(groupsOf(s, 'all').flatMap((g) => g.ids)).toEqual(['a', 'o', 'b']);
   });
 
   it('keeps only the members of a stack that the mode lists', () => {
@@ -104,7 +103,6 @@ describe('groupsOf with a Show mode', () => {
     const g = groupsOf(
       snapshot([stack(1, ['assigned']), stack(2, ['authored'])]),
       'all',
-      now,
       'authored',
     );
     expect(g).toEqual([{ key: 's1', ids: ['s2'], stacked: true }]);
