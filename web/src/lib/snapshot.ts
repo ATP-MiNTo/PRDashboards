@@ -1,4 +1,4 @@
-import type { Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
+import type { Approvals, Check, Snapshot, SnapshotPr, SourceStatus } from '@/api/client';
 import { matchesSearch } from './search';
 import { inShow, type ShowMode } from './show';
 
@@ -64,6 +64,15 @@ export interface Block {
   reason: string | null;
 }
 
+/**
+ * Why the approvals alone keep a pull request from merging, or null. The words are the server's
+ * (`merge.Approvals.Block` in Go), which refuses the merge with the same text.
+ */
+export function approvalsBlock(a: Approvals): string | null {
+  const need = a.need >= 1 && a.need <= 10 ? a.need : 1;
+  return a.have >= need ? null : `Needs ${need} approvals, has ${a.have}`;
+}
+
 export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.isDraft) return { readiness: 'draft', reason: 'Draft' };
   const parent = parentNumber ?? pr.stack?.parentNumber ?? null;
@@ -76,6 +85,8 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.reviewDecision === 'CHANGES_REQUESTED') {
     return { readiness: 'blocked', reason: 'Changes requested' };
   }
+  const approvals = approvalsBlock(pr.approvals);
+  if (approvals) return { readiness: 'blocked', reason: approvals };
   if (pr.reviewDecision === 'REVIEW_REQUIRED') {
     return { readiness: 'blocked', reason: 'Review required' };
   }

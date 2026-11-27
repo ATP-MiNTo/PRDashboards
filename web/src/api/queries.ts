@@ -7,7 +7,10 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import {
+  approvePr,
   checkAccount,
+  markPrReady,
+  requestChangesPr,
   dismissRetry,
   getActivity,
   getJiraOptions,
@@ -34,11 +37,15 @@ import {
   putSettings,
   putSetupClient,
   revokeAllSessions,
+  type ApproveRequest,
   type ClientCredentials,
+  type ReadyRequest,
+  type RequestChangesRequest,
   type MergeRequest,
   type MergeResult,
   type RulesUpdate,
   type SyncRule,
+  type RepoSettings,
   type RepoUpdate,
   type ReposUpdate,
   type Provider,
@@ -140,6 +147,24 @@ function useSaveReposWith<TVars>(fn: (vars: TVars) => Promise<unknown>) {
 export const useSaveRepo = () =>
   useSaveReposWith(({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update));
 
+/**
+ * The update that changes only the approvals a repository needs (1 to 10): everything else is sent
+ * as the repository has it now, and the repository stays marked new or seen as it was.
+ */
+export const approvalsUpdate = (repo: RepoSettings, approvalsRequired: number): RepoUpdate => ({
+  defaultMethod: repo.defaultMethod,
+  branchRules: repo.branchRules,
+  clearNew: false,
+  approvalsRequired,
+});
+
+/** Saves the approvals a repository needs. The snapshot follows: its `approvals.need` changes. */
+export const useSaveApprovals = () =>
+  useSaveReposWith(
+    ({ repo, approvalsRequired }: { repo: RepoSettings; approvalsRequired: number }) =>
+      putRepo(repo.id, approvalsUpdate(repo, approvalsRequired)),
+  );
+
 /** Saves several repositories in one request. */
 export const useSaveRepos = () => useSaveReposWith((update: ReposUpdate) => putRepos(update));
 
@@ -210,6 +235,23 @@ export function useMerge() {
       ]),
   });
 }
+
+/**
+ * One review action on one pull request. After it (success or refusal) the snapshot is fetched
+ * again, so the card shows the new review state, or the newer head that made the server refuse.
+ * The server starts one refresh of its own after a success; the browser makes no outside call.
+ */
+function useReviewAction<TBody>(fn: (id: string, body: TBody) => Promise<unknown>) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: TBody }) => fn(id, body),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.snapshot }),
+  });
+}
+
+export const useApprove = () => useReviewAction<ApproveRequest>(approvePr);
+export const useRequestChanges = () => useReviewAction<RequestChangesRequest>(requestChangesPr);
+export const useMarkReady = () => useReviewAction<ReadyRequest>(markPrReady);
 
 export function useRetryTransition() {
   const client = useQueryClient();

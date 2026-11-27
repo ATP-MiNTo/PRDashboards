@@ -59,6 +59,7 @@ export function pr(id: string, number: number, over: Partial<SnapshotPr> = {}): 
       allowed: ['squash', 'merge', 'rebase'],
       warning: null,
     },
+    approvals: { have: 1, need: 1, changesRequested: 0 },
     ...over,
   };
 }

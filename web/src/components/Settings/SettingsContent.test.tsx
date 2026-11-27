@@ -26,7 +26,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
   ...api,
 }));
 
-import { POLL_SAVE_MS, SettingsContent } from './SettingsContent';
+import { SettingsContent } from './SettingsContent';
 
 const settings = {
   polling: { githubSec: 60, jiraSec: 300 },
@@ -136,7 +136,7 @@ describe('SettingsContent', () => {
       const gh = await github();
       expect(gh).toHaveValue('60');
       expect(gh).toHaveAttribute('readonly');
-      expect(gh).toHaveAttribute('aria-valuemin', '60');
+      expect(gh).toHaveAttribute('aria-valuemin', '30');
       expect(gh).toHaveAttribute('aria-valuemax', '3600');
       expect(gh).toHaveAttribute('aria-valuenow', '60');
       expect(gh).toHaveAttribute('aria-valuetext', '1 minute');
@@ -152,15 +152,15 @@ describe('SettingsContent', () => {
       const gh = await github();
       fireEvent.keyDown(gh, { key: 'ArrowUp' });
       fireEvent.keyDown(gh, { key: 'ArrowUp' });
-      expect(gh).toHaveValue('300');
+      expect(gh).toHaveValue('90');
       expect(api.putSettings).not.toHaveBeenCalled();
       await waitFor(() =>
-        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 300, jiraSec: 300 } }),
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 90, jiraSec: 300 } }),
       );
       expect(api.putSettings).toHaveBeenCalledTimes(1);
       fireEvent.keyDown(gh, { key: 'ArrowDown' });
       await waitFor(() =>
-        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 120, jiraSec: 300 } }),
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 75, jiraSec: 300 } }),
       );
     });
 
@@ -180,7 +180,7 @@ describe('SettingsContent', () => {
       fireEvent.keyDown(await github(), { key: 'ArrowUp' });
       fireEvent.keyDown(await jira(), { key: 'ArrowDown' });
       await waitFor(() =>
-        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 120, jiraSec: 120 } }),
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 75, jiraSec: 285 } }),
       );
       expect(api.putSettings).toHaveBeenCalledTimes(1);
     });
@@ -189,10 +189,14 @@ describe('SettingsContent', () => {
       renderWithClient(<SettingsContent />);
       const gh = await github();
       fireEvent.keyDown(gh, { key: 'ArrowDown' });
+      fireEvent.keyDown(gh, { key: 'ArrowDown' });
+      fireEvent.keyDown(gh, { key: 'ArrowDown' });
       fireEvent.keyDown(gh, { key: 'a' });
-      expect(gh).toHaveValue('60');
-      await new Promise((r) => setTimeout(r, POLL_SAVE_MS + 150));
-      expect(api.putSettings).not.toHaveBeenCalled();
+      expect(gh).toHaveValue('30');
+      await waitFor(() =>
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 30, jiraSec: 300 } }),
+      );
+      expect(api.putSettings).toHaveBeenCalledTimes(1);
     });
 
     it('says so when the save fails', async () => {

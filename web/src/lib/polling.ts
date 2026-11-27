@@ -1,27 +1,35 @@
 /**
- * The polling intervals the API accepts, in seconds (`PollingSeconds` in api/openapi.yaml). The
- * design steps a number field by 15 seconds between 30 and 300, but the contract allows only
- * these five values, so the field steps through them.
+ * The polling intervals the field steps through, in seconds. The API (`PollingSeconds` in
+ * api/openapi.yaml) accepts any multiple of 15 from 30 to 3600. The design steps by 15 seconds
+ * from 30 to 300, and the field keeps two long steps after that, 15 minutes and 1 hour.
  */
-export const POLLING_STEPS = [60, 120, 300, 900, 3600] as const;
+export const POLLING_MIN = 30;
+export const POLLING_MAX = 3600;
 
-export type PollingStep = (typeof POLLING_STEPS)[number];
+export const POLLING_STEPS: readonly number[] = [
+  ...Array.from({ length: 19 }, (_, i) => POLLING_MIN + i * 15),
+  900,
+  POLLING_MAX,
+];
 
-const LABELS: Record<PollingStep, string> = {
-  60: '1 minute',
-  120: '2 minutes',
-  300: '5 minutes',
-  900: '15 minutes',
-  3600: '1 hour',
-};
+export type PollingStep = number;
 
 /** The interval in words, for a screen reader. */
 export function pollingLabel(sec: number): string {
-  return LABELS[sec as PollingStep] ?? `${sec} seconds`;
+  if (sec === 3600) return '1 hour';
+  if (sec >= 60 && sec % 60 === 0) return `${sec / 60} minutes`.replace(/^1 minutes$/, '1 minute');
+  return `${sec} seconds`;
 }
 
-/** The next allowed interval up (`dir` 1) or down (`dir` -1), or the same one at an end of the range. */
-export function stepPolling(sec: PollingStep, dir: 1 | -1): PollingStep {
-  const i = POLLING_STEPS.indexOf(sec) + dir;
-  return POLLING_STEPS[Math.min(POLLING_STEPS.length - 1, Math.max(0, i))] ?? sec;
+/**
+ * The next step up (`dir` 1) or down (`dir` -1) from `sec`, or the same value at an end of the
+ * range. A value between two steps, such as 600 stored by another client, moves to the next one in
+ * that direction.
+ */
+export function stepPolling(sec: number, dir: 1 | -1): number {
+  const next =
+    dir === 1
+      ? POLLING_STEPS.find((s) => s > sec)
+      : [...POLLING_STEPS].reverse().find((s) => s < sec);
+  return next ?? sec;
 }

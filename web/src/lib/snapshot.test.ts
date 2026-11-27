@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { NOW, pr, snapshot } from '@/test-fixtures';
 import {
+  approvalsBlock,
   blockOf,
   checkDuration,
   countdown,
@@ -45,6 +46,22 @@ describe('links', () => {
   });
 });
 
+describe('approvalsBlock', () => {
+  it('says what is missing, as the server does', () => {
+    expect(approvalsBlock({ have: 1, need: 2, changesRequested: 0 })).toBe(
+      'Needs 2 approvals, has 1',
+    );
+    expect(approvalsBlock({ have: 2, need: 2, changesRequested: 0 })).toBeNull();
+  });
+
+  it('treats a need outside 1 to 10 as the default of one', () => {
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBe(
+      'Needs 1 approvals, has 0',
+    );
+    expect(approvalsBlock({ have: 1, need: 11, changesRequested: 0 })).toBeNull();
+  });
+});
+
 describe('blockOf', () => {
   it.each([
     ['draft', { isDraft: true }, 'draft', 'Draft'],
@@ -62,6 +79,19 @@ describe('blockOf', () => {
       'CI running',
     ],
     ['changes', { reviewDecision: 'CHANGES_REQUESTED' as const }, 'blocked', 'Changes requested'],
+    [
+      'too few approvals',
+      { approvals: { have: 1, need: 2, changesRequested: 0 } },
+      'blocked',
+      'Needs 2 approvals, has 1',
+    ],
+    [
+      'no approval at all',
+      { approvals: { have: 0, need: 1, changesRequested: 0 } },
+      'blocked',
+      'Needs 1 approvals, has 0',
+    ],
+    ['enough approvals', { approvals: { have: 3, need: 2, changesRequested: 0 } }, 'ready', null],
     ['review', { reviewDecision: 'REVIEW_REQUIRED' as const }, 'blocked', 'Review required'],
     ['unknown', { mergeable: 'UNKNOWN' as const }, 'blocked', 'Checking mergeability'],
     ['ready', {}, 'ready', null],

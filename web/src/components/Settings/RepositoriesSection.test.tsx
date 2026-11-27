@@ -25,6 +25,7 @@ const repo = (id: string, name: string, over: Partial<RepoSettings> = {}): RepoS
   nameWithOwner: name,
   isNew: false,
   openPrs: 2,
+  approvalsRequired: 1,
   defaultMethod: 'squash',
   branchRules: [
     { pattern: 'main', method: 'merge' },
