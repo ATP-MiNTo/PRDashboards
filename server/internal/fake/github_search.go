@@ -50,14 +50,21 @@ type fixturePR struct {
 // viewerOpened reports whether the viewer (octocat) opened the pull request.
 func (p fixturePR) viewerOpened() bool { return p.authored }
 
+// openedBy reports whether the account with the given login opened the pull request.
+func (p fixturePR) openedBy(login string) bool { return p.authored && login == defaultLogin }
+
 // matchesViewer reports whether the search query selects the pull request for the viewer.
 // A query with none of assignee:@me, author:@me and review-requested:@me matches everything.
-func (p fixturePR) matchesViewer(query string) bool {
+func (p fixturePR) matchesViewer(query string) bool { return p.matchesViewerAs(query, defaultLogin) }
+
+// matchesViewerAs is matchesViewer for the account with the given login. The pull requests the
+// viewer opened were opened by defaultLogin, so author:@me finds them only for that account.
+func (p fixturePR) matchesViewerAs(query, login string) bool {
 	assignee, author, review := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me"), strings.Contains(query, "review-requested:@me")
 	if !assignee && !author && !review {
 		return true
 	}
-	return (assignee && !p.unassigned) || (author && p.authored) || (review && p.reviewer)
+	return (assignee && !p.unassigned) || (author && p.authored && login == defaultLogin) || (review && p.reviewer)
 }
 
 func checkRun(name, app, status, conclusion, url string, started, completed time.Time) map[string]any {
@@ -265,6 +272,11 @@ func findFixture(repo string, number int, cfg githubConfig) (fixturePR, bool) {
 }
 
 func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any {
+	return p.nodeAs(now, moved, state, cmp.Or(p.viewerPermission, "WRITE"))
+}
+
+// nodeAs is node with the viewer's role on the repository, which depends on the token.
+func (p fixturePR) nodeAs(now time.Time, moved bool, state, permission string) map[string]any {
 	total := p.totalChecks
 	if total == 0 {
 		total = len(p.checks)
@@ -321,7 +333,7 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",
-			"viewerPermission": cmp.Or(p.viewerPermission, "WRITE"),
+			"viewerPermission": permission,
 		},
 		"commits": map[string]any{"nodes": []any{map[string]any{"commit": map[string]any{
 			"committedDate":     now.Add(-p.committedAgo).UTC().Format(time.RFC3339),
@@ -337,20 +349,28 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
 func searchBody(query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
+	return searchBodyFor("", query, cfg, merged, now)
+}
+
+// searchBodyFor is searchBody for one token: only the repositories the token sees are searched,
+// with the viewer's role the token has there (see githubTokenAccess).
+func searchBodyFor(token, query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
 	sso, moved := cfg.SSO, cfg.HeadMoved
+	login := loginOf(token)
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4900, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 	}
 	nodes := []any{}
 	for _, p := range fixturePRs(now, cfg) {
-		if (sso && p.org == "acme-corp") || !p.matchesViewer(query) {
+		perm, sees := permissionOf(token, p)
+		if (sso && p.org == "acme-corp") || !sees || !p.matchesViewerAs(query, login) {
 			continue
 		}
 		switch isMerged := slices.Contains(merged, p.id()); {
 		case strings.Contains(query, "is:merged") && isMerged:
 			nodes = append(nodes, map[string]any{"__typename": "PullRequest", "id": p.id(), "mergedAt": now.UTC().Format(time.RFC3339)})
 		case !strings.Contains(query, "is:merged") && !isMerged:
-			nodes = append(nodes, p.node(now, moved, "OPEN"))
+			nodes = append(nodes, p.nodeAs(now, moved, "OPEN", perm))
 		}
 	}
 	data["search"] = map[string]any{
@@ -371,17 +391,23 @@ func searchBody(query string, cfg githubConfig, merged []string, now time.Time) 
 
 // nodeBody answers the single pull request lookup by node id.
 func nodeBody(id string, cfg githubConfig, merged []string, now time.Time) map[string]any {
+	return nodeBodyFor("", id, cfg, merged, now)
+}
+
+// nodeBodyFor is nodeBody for one token: a pull request of a repository the token does not see is
+// null, as GitHub answers a node the token cannot read.
+func nodeBodyFor(token, id string, cfg githubConfig, merged []string, now time.Time) map[string]any {
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4899, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 		"node":      nil,
 	}
 	for _, p := range fixturePRs(now, cfg) {
-		if p.id() == id {
+		if perm, sees := permissionOf(token, p); sees && p.id() == id {
 			state := "OPEN"
 			if slices.Contains(merged, id) {
 				state = "MERGED"
 			}
-			data["node"] = p.node(now, cfg.HeadMoved, state)
+			data["node"] = p.nodeAs(now, cfg.HeadMoved, state, perm)
 		}
 	}
 	return map[string]any{"data": data}

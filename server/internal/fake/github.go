@@ -3,6 +3,7 @@
 package fake
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -97,6 +98,10 @@ type githubState struct {
 	LastMerge map[string]string `json:"lastMerge"`
 	// Deleted lists the branches deleted, as "owner/repo:branch".
 	Deleted []string `json:"deleted"`
+	// Calls lists every search, node lookup, merge, review, ready mark and branch delete with the
+	// token that made it, so a test can tell which token was used for what. A search is "search",
+	// with an empty repo.
+	Calls []fakeCall `json:"calls"`
 	// Reviews lists the reviews submitted, in order; the latest of the viewer on a pull request is
 	// what its latestReviews shows. Ready lists the node ids marked ready for review.
 	Reviews []fakeReview `json:"reviews"`
@@ -131,6 +136,101 @@ var githubPATs = map[string]string{
 	"github_pat_contents_read": "",
 	// pulls_read is a fine-grained token with Pull requests read-only: reviews and ready marks are refused.
 	"github_pat_pulls_read": "",
+	// github_pat_acme and github_pat_oss are fine-grained tokens of two owners, see githubTokenAccess.
+	"github_pat_acme": "",
+	"github_pat_oss":  "",
+}
+
+// defaultLogin is the account of every fake token but those of githubTokenAccess that name another.
+const defaultLogin = "octocat"
+
+// tokenAccess is what one fake token sees. A fine-grained token belongs to one owner, so it sees
+// the repositories of its owner and the ones it was granted by name, each with the role of its
+// account there. A token that is not in githubTokenAccess sees every repository.
+type tokenAccess struct {
+	login string
+	// roles maps "owner/name", or "owner/*" for every repository of the owner, to the role.
+	roles map[string]string
+}
+
+// githubTokenAccess gives the fake two tokens of different owners next to the unrestricted ones.
+// github_pat_acme (octocat) writes in acme/* and can only read oss/lib. github_pat_oss (hubot) writes
+// in oss/lib and sees nothing of acme.
+var githubTokenAccess = map[string]tokenAccess{
+	"github_pat_acme": {login: "octocat", roles: map[string]string{"acme/*": "WRITE", "oss/lib": "READ"}},
+	"github_pat_oss":  {login: "hubot", roles: map[string]string{"oss/lib": "WRITE"}},
+}
+
+// permissionOf is the viewer's role of the token on the repository of the pull request, and
+// whether the token sees the repository at all. "" is the unrestricted default.
+func permissionOf(token string, p fixturePR) (string, bool) {
+	acc, restricted := githubTokenAccess[token]
+	if !restricted {
+		return cmp.Or(p.viewerPermission, "WRITE"), true
+	}
+	if role, ok := acc.roles[p.repo]; ok {
+		return role, true
+	}
+	owner, _, _ := strings.Cut(p.repo, "/")
+	role, ok := acc.roles[owner+"/*"]
+	return role, ok
+}
+
+// loginOf is the login of the account behind the token.
+func loginOf(token string) string {
+	if acc, ok := githubTokenAccess[token]; ok {
+		return acc.login
+	}
+	return defaultLogin
+}
+
+// bearer is the token of a request.
+func bearer(r *http.Request) string {
+	return strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+}
+
+// allowed checks that the token of the request can do a REST write to the repository of the
+// fixture and records the call. A repository the token does not see is a 404, like on GitHub. A
+// restricted token whose role there is below WRITE is refused with the permission the call needs
+// (accepted, such as "contents=write"). The unrestricted tokens are never refused here.
+func (g *github) allowed(w http.ResponseWriter, r *http.Request, op string, p fixturePR, accepted string) bool {
+	token := bearer(r)
+	g.mu.Lock()
+	g.st.Calls = append(g.st.Calls, fakeCall{Op: op, Token: token, Repo: p.repo})
+	g.mu.Unlock()
+	role, sees := permissionOf(token, p)
+	if !sees {
+		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return false
+	}
+	if _, restricted := githubTokenAccess[token]; restricted && (role == "READ" || role == "TRIAGE") {
+		w.Header().Set("X-Accepted-GitHub-Permissions", accepted)
+		writeJSON(w, http.StatusForbidden, map[string]string{"message": "Resource not accessible by personal access token"})
+		return false
+	}
+	return true
+}
+
+// allowedRepo is allowed for a call that names a repository and not a pull request (the branch
+// delete): the first fixture of the repository stands for it.
+func (g *github) allowedRepo(w http.ResponseWriter, r *http.Request, op, repo, accepted string) bool {
+	for _, p := range fixturePRs(time.Now(), g.config()) {
+		if p.repo == repo {
+			return g.allowed(w, r, op, p, accepted)
+		}
+	}
+	// A repository without a fixture is not restricted by role; the call is still recorded.
+	g.mu.Lock()
+	g.st.Calls = append(g.st.Calls, fakeCall{Op: op, Token: bearer(r), Repo: repo})
+	g.mu.Unlock()
+	return true
+}
+
+// fakeCall is a call of a token to a repository, in the state of the fake.
+type fakeCall struct {
+	Op    string `json:"op"`
+	Token string `json:"token"`
+	Repo  string `json:"repo"`
 }
 
 func (g *github) routes() http.Handler {
@@ -280,14 +380,16 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 		Variables map[string]any `json:"variables"`
 	}
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req)
+	token := bearer(r)
 	if q, ok := req.Variables["q"].(string); ok {
 		g.mu.Lock()
 		g.st.Searches++
+		g.st.Calls = append(g.st.Calls, fakeCall{Op: "search", Token: token})
 		g.mu.Unlock()
 		if limited(w, cfg.RateLimit, time.Now()) {
 			return
 		}
-		header, body := searchBody(q, cfg, merged, time.Now())
+		header, body := searchBodyFor(token, q, cfg, merged, time.Now())
 		for k, v := range header {
 			w.Header().Set(k, v)
 		}
@@ -301,8 +403,9 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 	if id, ok := req.Variables["id"].(string); ok {
 		g.mu.Lock()
 		g.st.NodeQueries++
+		g.st.Calls = append(g.st.Calls, fakeCall{Op: "node", Token: token})
 		g.mu.Unlock()
-		writeJSON(w, http.StatusOK, nodeBody(id, cfg, merged, time.Now()))
+		writeJSON(w, http.StatusOK, nodeBodyFor(token, id, cfg, merged, time.Now()))
 		return
 	}
 	if sso {
@@ -319,7 +422,7 @@ func (g *github) graphql(w http.ResponseWriter, r *http.Request) {
 	if scopes != "" {
 		w.Header().Set("X-OAuth-Scopes", scopes)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]string{"login": "octocat"}}})
+	writeJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"viewer": map[string]string{"login": loginOf(token)}}})
 }
 
 func (g *github) config() githubConfig {
@@ -366,6 +469,9 @@ func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 		return
 	}
+	if !g.allowed(w, r, "merge", p, "contents=write") {
+		return
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	cfg := g.cfgLocked()
@@ -388,6 +494,10 @@ func (g *github) merge(w http.ResponseWriter, r *http.Request) {
 
 func (g *github) deleteBranch(w http.ResponseWriter, r *http.Request) {
 	if _, ok := g.authed(w, r); !ok {
+		return
+	}
+	repo := r.PathValue("owner") + "/" + r.PathValue("repo")
+	if !g.allowedRepo(w, r, "delete", repo, "contents=write") {
 		return
 	}
 	g.mu.Lock()
@@ -420,6 +530,9 @@ func (g *github) mergeAsync(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 		return
 	}
+	if !g.allowed(w, r, "merge-async", p, "contents=write") {
+		return
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.st.AsyncSubmits++
@@ -445,6 +558,9 @@ func (g *github) mergeAsyncPoll(w http.ResponseWriter, r *http.Request) {
 	p, ok := findFixture(repo, number, g.config())
 	if !ok || r.PathValue("uuid") != asyncUUID {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
+		return
+	}
+	if !g.allowed(w, r, "merge-async-poll", p, "contents=write") {
 		return
 	}
 	g.mu.Lock()
@@ -493,6 +609,9 @@ func (g *github) review(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"message": "Not Found"})
 		return
 	}
+	if !g.allowed(w, r, "review", p, "pull_requests=write") {
+		return
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	invalid := func(msg string) {
@@ -502,7 +621,7 @@ func (g *github) review(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case event != "APPROVE" && event != "REQUEST_CHANGES":
 		invalid("Review event is invalid")
-	case p.viewerOpened():
+	case p.openedBy(loginOf(bearer(r))):
 		if event == "APPROVE" {
 			invalid("Can not approve your own pull request")
 		} else {
@@ -530,13 +649,23 @@ func (g *github) markReady(w http.ResponseWriter, r *http.Request, id string, cf
 			"errors": []map[string]any{{"type": kind, "message": msg, "path": []string{"markPullRequestReadyForReview"}}},
 		})
 	}
-	if strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ") == "github_pat_pulls_read" {
+	token := bearer(r)
+	if token == "github_pat_pulls_read" {
 		fail("FORBIDDEN", "Resource not accessible by personal access token")
 		return
 	}
 	for _, p := range fixturePRs(time.Now(), cfg) {
 		if p.id() != id {
 			continue
+		}
+		role, sees := permissionOf(token, p)
+		g.st.Calls = append(g.st.Calls, fakeCall{Op: "ready", Token: token, Repo: p.repo})
+		if !sees {
+			break // not found, like any node the token cannot read
+		}
+		if _, restricted := githubTokenAccess[token]; restricted && (role == "READ" || role == "TRIAGE") {
+			fail("FORBIDDEN", "Resource not accessible by personal access token")
+			return
 		}
 		if !p.draft {
 			fail("UNPROCESSABLE", "Pull request is not a draft")
