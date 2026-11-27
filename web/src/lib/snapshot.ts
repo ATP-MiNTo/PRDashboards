@@ -35,11 +35,17 @@ export interface SafeLink {
   host: string | null;
 }
 
+/** Where a link may point: GitHub pull request pages, or a Jira Cloud site. */
+export type LinkKind = 'github' | 'jira';
+
+const JIRA_HOST = /^[a-z0-9][a-z0-9-]*(\.[a-z0-9][a-z0-9-]*)*\.atlassian\.net$/;
+
 /**
- * Validates a link from a provider. Only https without credentials is accepted. A github.com link
- * is rebuilt from its path alone, so no query or fragment is carried over.
+ * Validates a link from a provider. Only https without credentials or a custom port is accepted,
+ * and only on the host of its kind: github.com for `github` (rebuilt from its path alone, so no
+ * query or fragment is carried over) and a subdomain of atlassian.net for `jira`.
  */
-export function safeLink(raw: string | null): SafeLink | null {
+export function safeLink(raw: string | null, kind: LinkKind): SafeLink | null {
   if (!raw) return null;
   let u: URL;
   try {
@@ -47,13 +53,13 @@ export function safeLink(raw: string | null): SafeLink | null {
   } catch {
     return null;
   }
-  if (u.protocol !== 'https:' || u.username || u.password || !u.hostname) return null;
-  if (u.hostname === 'github.com') {
-    return PATH.test(u.pathname) && !u.pathname.includes('..')
+  if (u.protocol !== 'https:' || u.username || u.password || u.port || !u.hostname) return null;
+  if (kind === 'github') {
+    return u.hostname === 'github.com' && PATH.test(u.pathname) && !u.pathname.includes('..')
       ? { href: `https://github.com${u.pathname}`, host: null }
       : null;
   }
-  return { href: u.href, host: u.host };
+  return JIRA_HOST.test(u.hostname) ? { href: u.href, host: u.host } : null;
 }
 
 export type Readiness = 'ready' | 'blocked' | 'draft';
