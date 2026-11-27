@@ -169,6 +169,12 @@
   flex-wrap: nowrap;
 }
 
+/* The roll of a dialog (btn-sm outline, justify-start, px-3). */
+.rollField {
+  justify-content: flex-start;
+  padding: 0 0.75rem;
+}
+
 .rollWin {
   display: block;
   min-width: 0;

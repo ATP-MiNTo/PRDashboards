@@ -139,11 +139,30 @@ describe('listStats', () => {
     terms: [],
     hidden: new Set(),
     mode: 'visible',
+    off: new Set(),
     ...over,
   });
 
   it('counts what the list holds: showing, ready, running and stacks', () => {
     expect(listStats(s, view())).toEqual({ showing: 4, ready: 1, running: 2, stacks: 1 });
+  });
+
+  it('leaves out the repositories that are switched off', () => {
+    const other = (id: string, n: number) =>
+      pr(id, n, {
+        repo: {
+          id: 'R2',
+          nameWithOwner: 'acme/api',
+          isNew: false,
+          squashAllowed: true,
+          mergeAllowed: true,
+          rebaseAllowed: true,
+        },
+      });
+    const two = snapshot([pr('a', 1), other('b', 2), other('c', 3)]);
+    expect(listStats(two, view({ off: new Set(['R2']) })).showing).toBe(1);
+    expect(listStats(two, view({ off: new Set(['R1']) })).showing).toBe(2);
+    expect(listStats(two, view({ off: new Set(['R1', 'R2']) })).showing).toBe(0);
   });
 
   it('follows the Show state', () => {

@@ -1,0 +1,169 @@
+/* The settings dialog of one repository, as the approved design draws it (daisyUI sizes): two
+   rolls and the approvals stepper in a grid, then the branch rules. */
+
+.grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+}
+
+.label {
+  margin-bottom: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.note {
+  margin: 0 0 0.75rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-ctl);
+  background: var(--info-bg);
+  color: var(--info);
+  font-size: 0.875rem;
+}
+
+/* The approvals stepper: a field, then two grey buttons, joined. */
+.join {
+  display: inline-flex;
+  width: fit-content;
+}
+
+.count {
+  composes: ui-input from global;
+  box-sizing: border-box;
+  width: 4rem;
+  height: var(--ctl-h);
+  padding: 0 0.5rem;
+  border-radius: var(--radius-ctl) 0 0 var(--radius-ctl);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: center;
+  cursor: ns-resize;
+}
+
+.count:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* daisyUI btn-sm: the grey default button. */
+.step {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--ctl-h);
+  min-width: 3rem;
+  padding: 0 0.75rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 0;
+  background: oklch(var(--b2));
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.step:last-child {
+  border-radius: 0 var(--radius-ctl) var(--radius-ctl) 0;
+}
+
+.step:hover:not(:disabled) {
+  border-color: color-mix(in oklab, oklch(var(--b2)) 90%, black);
+  background: color-mix(in oklab, oklch(var(--b2)) 90%, black);
+}
+
+.step:disabled {
+  border-color: transparent;
+  background: var(--btn-off-bg);
+  color: var(--btn-off-fg);
+}
+
+/* ----- method per target branch ----- */
+
+.branches {
+  margin-top: 1rem;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  color: var(--eyebrow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.05rem;
+  text-transform: uppercase;
+}
+
+.rules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 12.6rem;
+  margin: 0 -0.25rem 0 0;
+  padding: 2px 0.25rem 2px 0.125rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.rule {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pattern {
+  composes: ui-input from global;
+  flex: 1;
+  min-width: 0;
+  height: var(--ctl-h);
+  cursor: text;
+}
+
+.pattern[aria-invalid='true'] {
+  border-color: var(--bad);
+}
+
+.method {
+  composes: ui-select from global;
+}
+
+.remove {
+  composes: ui-ghost from global;
+  box-sizing: border-box;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  color: oklch(var(--er));
+}
+
+.empty {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.add {
+  composes: ui-btn from global;
+  margin-top: 0.5rem;
+}
+
+.error {
+  margin: 0.5rem 0 0;
+  color: var(--bad);
+  font-size: 0.875rem;
+}

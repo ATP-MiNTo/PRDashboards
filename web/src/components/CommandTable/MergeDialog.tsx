@@ -7,7 +7,7 @@ import {
   type SnapshotTicket,
   type Transition,
 } from '@/api/client';
-import { useMerge, useSettings, useTicketTransitions } from '@/api/queries';
+import { useMerge, useRepos, useSettings, useTicketTransitions } from '@/api/queries';
 import {
   effectiveMethod,
   mergeBlock,
@@ -206,6 +206,7 @@ export function MergeDialog({
   const [moved, setMoved] = useState(false);
   const [deleteChoice, setDeleteChoice] = useState<boolean | null>(null);
   const settings = useSettings();
+  const repos = useRepos();
   const merge = useMerge();
 
   const method = effectiveMethod(pr.mergeMethod, chosen);
@@ -226,7 +227,11 @@ export function MergeDialog({
     return { key: t.key, transition, fields: d.fields, confirmed: d.confirmed };
   });
 
-  const deleteBranch = deleteChoice ?? settings.data?.deleteBranchAfterMerge ?? false;
+  // The repository's own choice, else the default of the settings.
+  const own = repos.data?.repos.find((r) => r.id === pr.repo.id)?.deleteBranch;
+  const startDelete =
+    own === 'yes' ? true : own === 'no' ? false : (settings.data?.deleteBranchAfterMerge ?? false);
+  const deleteBranch = deleteChoice ?? startDelete;
   const rowBlock = blockOf(pr).reason;
   const reason =
     rowBlock ??
@@ -243,7 +248,7 @@ export function MergeDialog({
       {
         id: pr.id,
         key: idempotencyKey,
-        label: `${pr.repo.nameWithOwner}#${pr.number} ${pr.title}`,
+        pr,
         body: {
           method,
           expectedHeadSha: headSha,

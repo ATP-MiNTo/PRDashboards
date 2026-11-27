@@ -62,6 +62,18 @@ describe('showCounts', () => {
     expect(showCounts(s)).toEqual({ everything: 4, assigned: 3, authored: 2 });
   });
 
+  it('leaves out the repositories that are switched off', () => {
+    const away = withRoles('r', ['assigned']);
+    away.repo = { ...away.repo, id: 'R2' };
+    const s = snapshot([withRoles('a', ['assigned']), away]);
+    expect(showCounts(s, new Set(['R2']))).toEqual({ everything: 1, assigned: 1, authored: 0 });
+    expect(showCounts(s, new Set(['R1', 'R2']))).toEqual({
+      everything: 0,
+      assigned: 0,
+      authored: 0,
+    });
+  });
+
   it('is zero for an empty snapshot', () => {
     expect(showCounts(snapshot([]))).toEqual({ everything: 0, assigned: 0, authored: 0 });
   });

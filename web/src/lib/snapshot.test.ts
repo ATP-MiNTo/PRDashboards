@@ -135,6 +135,12 @@ describe('filters and groups', () => {
     expect(groupsOf(snap, 'stacks')).toEqual([{ key: 'a', ids: ['a', 'b'], stacked: true }]);
     expect(groupsOf(snap, 'ready')).toEqual([{ key: 'a', ids: ['a'], stacked: true }]);
   });
+
+  it('drops the pull requests of a repository that is switched off', () => {
+    const repo = snap.prs[0]?.repo.id ?? '';
+    expect(groupsOf(snap, 'all', 'everything', [], new Set([repo]))).toEqual([]);
+    expect(groupsOf(snap, 'all', 'everything', [], new Set(['other']))).toHaveLength(3);
+  });
 });
 
 describe('times', () => {

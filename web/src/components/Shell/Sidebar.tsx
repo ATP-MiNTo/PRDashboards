@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { FOCUSABLE } from '../SidePanel/SidePanel';
+import { FOCUSABLE } from '@/lib/focus';
 import styles from './Shell.module.css';
 
 export interface SidebarProps {

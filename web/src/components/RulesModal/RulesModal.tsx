@@ -21,9 +21,8 @@ import {
   ruleFromTemplate,
   sameRule,
 } from '@/lib/rulesEditor';
-import { InfoTip } from '../InfoTip/InfoTip';
 import { Modal } from '../Modal/Modal';
-import modal from '../Modal/Modal.module.css';
+import { ModalHead } from '../Modal/ModalHead';
 import { MenuItem, PopMenu } from '../PopMenu/PopMenu';
 import { ActivityList } from './ActivityList';
 import { ExcludeStatuses } from './ExcludeStatuses';
@@ -240,17 +239,7 @@ export function RulesModal({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal labelledBy={titleId} onClose={onClose} wide>
-      <div className={styles.closeRow}>
-        <button type="button" className={styles.close} onClick={onClose}>
-          Close
-        </button>
-      </div>
-      <div className={styles.titleRow}>
-        <h3 id={titleId} className={modal.title}>
-          Status sync rules
-        </h3>
-        <InfoTip tip={TIP} />
-      </div>
+      <ModalHead titleId={titleId} title="Status sync rules" tip={TIP} onClose={onClose} />
       <div ref={area}>
         {rules.isPending && <p className={styles.muted}>Loading rules</p>}
         {rules.isError && (

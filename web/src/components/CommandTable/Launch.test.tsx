@@ -146,7 +146,7 @@ describe('merge launch', () => {
     await mergeFirst();
     await tick(LAUNCH_MS + 100);
     expect(
-      screen.getByText(/#1 merged, INP-1 did not move. Retry it under Recent merges/),
+      screen.getByText(/#1 merged, INP-1 did not move. Retry it from History/),
     ).toBeInTheDocument();
   });
 

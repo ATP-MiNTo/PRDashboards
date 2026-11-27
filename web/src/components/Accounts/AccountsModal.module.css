@@ -1,0 +1,238 @@
+/* The Accounts dialog, as the approved design draws it (daisyUI sizes): bordered cards in a column,
+   two small cards for how GitHub is connected, the repository table, Jira and the browsers. */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.card {
+  padding: 1rem;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: var(--radius-box);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.sub {
+  color: var(--sub);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.sub a {
+  color: var(--link);
+}
+
+.pair {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.inner {
+  padding: 0.75rem;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: var(--radius-box);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.innerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.inner .sub {
+  margin-top: 0.25rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* daisyUI "btn btn-xs btn-outline" and "btn btn-sm btn-outline", on a button or a link. */
+.xs,
+.sm {
+  composes: ui-btn from global;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.xs {
+  min-height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.sm {
+  min-height: 2rem;
+}
+
+a.xs:hover,
+a.sm:hover {
+  border-color: var(--btn-hover-border);
+  background: var(--btn-hover-bg);
+  color: var(--btn-hover-fg);
+}
+
+/* btn-error btn-outline. */
+.error {
+  border-color: oklch(var(--er));
+  color: oklch(var(--er));
+}
+
+.error:hover:not(:disabled) {
+  border-color: oklch(var(--er));
+  background: oklch(var(--er));
+  color: oklch(var(--erc));
+}
+
+/* daisyUI "badge badge-sm badge-outline", in the success and warning colours. */
+.badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid;
+  border-radius: 1.9rem;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.good {
+  border-color: var(--good-fill);
+  color: var(--good);
+}
+
+.warn {
+  border-color: var(--warn-fill);
+  color: var(--warn);
+}
+
+.ghost {
+  border-color: oklch(var(--bc) / 0.2);
+  color: var(--sub);
+}
+
+.tableWrap {
+  margin-top: 0.75rem;
+  overflow-x: auto;
+}
+
+/* daisyUI "table table-sm". */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: 0.5rem 0.75rem;
+}
+
+.table th {
+  color: var(--sub);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+.table tbody tr:not(:last-child),
+.table thead tr {
+  border-bottom: 1px solid oklch(var(--bc) / 0.05);
+}
+
+.why {
+  color: var(--sub);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.problem {
+  margin: 0.5rem 0 0;
+  color: var(--bad);
+  font-size: 0.75rem;
+}
+
+.attention {
+  margin: 0.25rem 0 0;
+  color: var(--warn);
+  font-size: 0.75rem;
+}
+
+.muted {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.875rem;
+}
+
+/* The inline form that replaces the token. */
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.token {
+  composes: ui-input from global;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 10rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+.site {
+  composes: ui-select from global;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.5rem;
+}
+
+.foot {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.75rem;
+  text-align: right;
+}
+
+.foot a {
+  color: var(--link);
+}

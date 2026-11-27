@@ -97,7 +97,7 @@ export function mergeSummary(number: number, steps: readonly MergeStep[]): Merge
     }
   }
   const head = queued ? `#${number} added to the merge queue` : `#${number} merged`;
-  const retry = failed ? '. Retry it under Recent merges' : '';
+  const retry = failed ? '. Retry it from History' : '';
   return {
     text: `${head}${parts.length > 0 ? `, ${parts.join(', ')}` : ''}${retry}`,
     failed,

@@ -119,22 +119,29 @@ export interface Group {
   stacked: boolean;
 }
 
+const NO_REPOS: ReadonlySet<string> = new Set();
+
 /**
  * Groups the filtered pull requests into rows: stacks stay together, in stack order, and everything
- * else is its own group. Only pull requests the Show mode lists and the search terms match are kept. The result holds ids only, so a row's data changing leaves it equal.
+ * else is its own group. Only pull requests the Show mode lists, the search terms match and a repository
+ * that is not switched off (`off`, repository ids) has are kept. The result holds ids only, so a row's data changing leaves it equal.
  */
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
   show: ShowMode = 'everything',
   terms: readonly string[] = [],
+  off: ReadonlySet<string> = NO_REPOS,
 ): Group[] {
   const groups: Group[] = [];
   const byStack = new Map<string, Group>();
   const rows = [...s.prs].sort((a, b) => (a.stack?.position ?? 0) - (b.stack?.position ?? 0));
   const kept = new Set(
     rows
-      .filter((p) => matches(p, filter) && inShow(p, show) && matchesSearch(p, terms))
+      .filter(
+        (p) =>
+          !off.has(p.repo.id) && matches(p, filter) && inShow(p, show) && matchesSearch(p, terms),
+      )
       .map((p) => p.id),
   );
   for (const pr of s.prs) {

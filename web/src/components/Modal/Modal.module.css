@@ -108,3 +108,41 @@
     transform: scale(0.9);
   }
 }
+
+/* The top of a dialog. Pinned to the corner of the box while the content scrolls (the design's Close button). */
+.closeRow {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  height: 0;
+  margin-right: -0.75rem;
+  pointer-events: none;
+}
+
+.close {
+  composes: ui-btn from global;
+  margin-top: -0.75rem;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: oklch(var(--pc));
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  pointer-events: auto;
+}
+
+button.close:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: oklch(var(--pc));
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  padding-right: 5rem;
+}

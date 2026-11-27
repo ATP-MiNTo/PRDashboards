@@ -13,8 +13,10 @@ export interface RollSwitchProps<T extends string> {
   options: readonly RollOption<T>[];
   value: T;
   onChange: (next: T) => void;
-  /** The number of items the current state shows, as a badge. */
-  count: number;
+  /** The number of items the current state shows, as a badge. Without it there is no badge. */
+  count?: number;
+  /** "field": the roll of a dialog, as wide as its column with the label 12px in. */
+  variant?: 'toolbar' | 'field';
 }
 
 export const ROLL_MS = 300;
@@ -26,6 +28,7 @@ export function RollSwitch<T extends string>({
   value,
   onChange,
   count,
+  variant = 'toolbar',
 }: RollSwitchProps<T>) {
   const current = options.find((o) => o.id === value) ?? options[0];
   const [from, setFrom] = useState<string | null>(null);
@@ -51,8 +54,8 @@ export function RollSwitch<T extends string>({
     <>
       <button
         type="button"
-        className={styles.roll}
-        aria-label={`${name}, now ${current.label}, ${count}. Activate to switch.`}
+        className={variant === 'field' ? `${styles.roll} ${styles.rollField}` : styles.roll}
+        aria-label={`${name}, now ${current.label}${count === undefined ? '' : `, ${count}`}. Activate to switch.`}
         onClick={click}
       >
         <span className={styles.rollWin} aria-hidden="true">
@@ -62,9 +65,11 @@ export function RollSwitch<T extends string>({
             <span className={styles.rollLine}>{current.label}</span>
           </span>
         </span>
-        <span className={styles.badge} aria-hidden="true">
-          {count}
-        </span>
+        {count !== undefined && (
+          <span className={styles.badge} aria-hidden="true">
+            {count}
+          </span>
+        )}
       </button>
       <span role="status" className={styles.sr}>
         {announce}

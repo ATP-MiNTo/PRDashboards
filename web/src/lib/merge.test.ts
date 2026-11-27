@@ -70,7 +70,7 @@ describe('mergeSummary', () => {
     ]);
     expect(s.failed).toBe(true);
     expect(s.text).toBe(
-      '#7 merged, INP-1 did not move, the branch was not deleted. Retry it under Recent merges',
+      '#7 merged, INP-1 did not move, the branch was not deleted. Retry it from History',
     );
   });
 

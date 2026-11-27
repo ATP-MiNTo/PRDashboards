@@ -97,6 +97,8 @@ describe('approvals setting', () => {
     isNew: true,
     openPrs: 3,
     defaultMethod: 'rebase',
+    inheritMethod: true,
+    deleteBranch: 'no',
     branchRules: [{ pattern: 'main', method: 'merge' }],
     approvalsRequired: 1,
   };
@@ -104,6 +106,8 @@ describe('approvals setting', () => {
   it('changes only the approvals and keeps the rest of the repository', () => {
     expect(approvalsUpdate(repo, 2)).toEqual({
       defaultMethod: 'rebase',
+      inheritMethod: true,
+      deleteBranch: 'no',
       branchRules: [{ pattern: 'main', method: 'merge' }],
       clearNew: false,
       approvalsRequired: 2,

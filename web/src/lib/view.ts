@@ -111,13 +111,15 @@ export interface ListView {
   terms: readonly string[];
   hidden: ReadonlySet<string>;
   mode: HideMode;
+  /** Ids of the repositories switched off in the sidebar. */
+  off: ReadonlySet<string>;
 }
 
 const count = (groups: Group[]) => groups.reduce((n, g) => n + g.ids.length, 0);
 
 /** What the stat tiles say about the list as the Show, hide and search switches leave it. */
 export function listStats(s: Snapshot, v: ListView): ListStats {
-  const base = applyHidden(groupsOf(s, 'all', v.show, v.terms), v.hidden, v.mode);
+  const base = applyHidden(groupsOf(s, 'all', v.show, v.terms, v.off), v.hidden, v.mode);
   const byId = new Map(s.prs.map((p) => [p.id, p]));
   const out: ListStats = { showing: 0, ready: 0, running: 0, stacks: 0 };
   for (const g of base) {
@@ -132,7 +134,7 @@ export function listStats(s: Snapshot, v: ListView): ListStats {
   out.showing =
     v.filter === 'all'
       ? count(base)
-      : count(applyHidden(groupsOf(s, v.filter, v.show, v.terms), v.hidden, v.mode));
+      : count(applyHidden(groupsOf(s, v.filter, v.show, v.terms, v.off), v.hidden, v.mode));
   return out;
 }
 

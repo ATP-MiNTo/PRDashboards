@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRevokeAll, useSaveSettings, useSettings } from '@/api/queries';
+import { useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { POLLING_STEPS, pollingLabel, stepPolling } from '@/lib/polling';
 import { useTheme } from '@/theme/useTheme';
@@ -139,31 +139,6 @@ function PollingSection({ onOpenRules }: { onOpenRules: () => void }) {
   );
 }
 
-function DeleteBranchSection() {
-  const settings = useSettings();
-  const save = useSaveSettings();
-  const current = settings.data;
-  if (!current) return null;
-  return (
-    <section className={styles.section} aria-labelledby="set-delete">
-      <h3 id="set-delete">Delete branch after merge</h3>
-      <label className={styles.check}>
-        <input
-          type="checkbox"
-          checked={current.deleteBranchAfterMerge}
-          onChange={(e) => save.mutate({ ...current, deleteBranchAfterMerge: e.target.checked })}
-        />
-        Delete the head branch after a merge by default
-      </label>
-      {save.isError && (
-        <p className={styles.error} role="alert">
-          Could not save the settings.
-        </p>
-      )}
-    </section>
-  );
-}
-
 const hh = (h: number) => String(h).padStart(2, '0');
 
 /** Auto theme. The light and dark choice is the sun and moon button in the header. */
@@ -185,39 +160,25 @@ function ThemeSection() {
   );
 }
 
-function SessionsSection() {
-  const revoke = useRevokeAll();
-  return (
-    <section className={styles.section} aria-labelledby="set-sessions">
-      <h3 id="set-sessions">Sessions</h3>
-      <p className={styles.sessionNote}>Signs out every browser, including this one.</p>
-      <div className={styles.actions}>
-        <button type="button" disabled={revoke.isPending} onClick={() => revoke.mutate(undefined)}>
-          Sign out all browsers
-        </button>
-      </div>
-      {revoke.isSuccess && (
-        <p className={styles.sessionNote} role="status">
-          Signed out everywhere. Open the launch link from scripts/start.sh to sign in again.
-        </p>
-      )}
-      {revoke.isError && (
-        <p className={styles.error} role="alert">
-          Could not sign out the other browsers.
-        </p>
-      )}
-    </section>
-  );
-}
-
-/** The Settings sections, shown in the left sidebar. The rules open in their own dialog. */
-export function SettingsContent({ onOpenRules }: { onOpenRules: () => void }) {
+/**
+ * The Settings sections, shown in the left sidebar: the repositories, the polling with the button
+ * for the status sync rules, and the Auto theme switch, which is the way to it without a pointer.
+ * The rules, the repository settings and the accounts open in their own dialogs.
+ */
+export function SettingsContent({
+  onOpenRules,
+  off,
+  onOff,
+}: {
+  onOpenRules: () => void;
+  /** Ids of the repositories whose pull requests the list leaves out. */
+  off: ReadonlySet<string>;
+  onOff: (next: Set<string>) => void;
+}) {
   return (
     <div className={styles.body}>
-      <RepositoriesSection />
+      <RepositoriesSection off={off} onOff={onOff} />
       <PollingSection onOpenRules={onOpenRules} />
-      <DeleteBranchSection />
-      <SessionsSection />
       <ThemeSection />
     </div>
   );

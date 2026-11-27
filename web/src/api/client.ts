@@ -155,6 +155,7 @@ export type BranchRule = Schemas['BranchRule'];
 export type RepoSettings = Schemas['RepoSettings'];
 export type Approvals = Schemas['Approvals'];
 export type RepoUpdate = Schemas['RepoUpdate'];
+export type DeleteBranchChoice = Schemas['DeleteBranchChoice'];
 export type ReposUpdate = Schemas['ReposUpdate'];
 export type JiraOptions = Schemas['JiraOptions'];
 export type Transition = Schemas['Transition'];

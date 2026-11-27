@@ -56,66 +56,45 @@ beforeEach(() => {
   api.getJiraOptions.mockResolvedValue({ statuses: [], projects: [] });
 });
 
+const show = (onOpenRules: () => void = () => {}) =>
+  renderWithClient(<SettingsContent onOpenRules={onOpenRules} off={new Set()} onOff={() => {}} />);
+
 const lastSaved = () => api.putSettings.mock.calls.at(-1)?.[0];
 
 describe('SettingsContent', () => {
-  it('has every section', async () => {
-    renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+  it('has the repositories, the polling and the theme, and nothing the dialogs took over', async () => {
+    show();
     const page = document.body;
-    expect(within(page).queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
-    for (const name of [
-      /^Repositories setting/,
-      'Delete branch after merge',
-      'Theme',
-      'Sessions',
-    ]) {
+    for (const name of [/^Repositories setting/, 'Theme']) {
       expect(await within(page).findByRole('heading', { name })).toBeInTheDocument();
     }
     expect(within(page).getByRole('region', { name: 'Polling' })).toBeInTheDocument();
-    // The rules, Exclude statuses, Multi-PR tickets and Activity live in the rules dialog now.
-    for (const gone of ['Status sync rules', 'Multi-PR tickets', 'Activity']) {
+    // They moved to the repository dialog, the accounts dialog, the rules dialog and the History view.
+    for (const gone of [
+      'Delete branch after merge',
+      'Sessions',
+      'Status sync rules',
+      'Multi-PR tickets',
+      'Activity',
+    ]) {
       expect(within(page).queryByRole('heading', { name: gone })).toBeNull();
     }
+    expect(within(page).queryByRole('button', { name: 'Sign out all browsers' })).toBeNull();
     expect(within(page).queryByRole('group', { name: 'Exclude statuses' })).toBeNull();
   });
 
-  it('orders the sections: repositories, polling, delete branch, sessions, theme', async () => {
-    renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+  it('orders the sections: repositories, polling, theme', async () => {
+    show();
     const page = document.body;
-    await within(page).findByRole('heading', { name: 'Sessions' });
-    await within(page).findByRole('region', { name: 'Polling' });
+    const polling = await within(page).findByRole('region', { name: 'Polling' });
     const names = within(page)
       .getAllByRole('heading', { level: 3 })
       .map((h) => h.textContent?.replace(/\d+\/\d+$/, ''));
-    expect(names).toEqual([
-      'Repositories setting',
-      'Delete branch after merge',
-      'Sessions',
-      'Theme',
-    ]);
-    const polling = within(page).getByRole('region', { name: 'Polling' });
-    const repos = names.indexOf('Repositories setting');
-    expect(repos).toBe(0);
-    const heading = (n: string) => within(page).getByRole('heading', { name: new RegExp('^' + n) });
-    expect(
-      heading('Repositories setting').compareDocumentPosition(polling) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      polling.compareDocumentPosition(heading('Delete branch after merge')) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
-  it('saves the delete-branch default', async () => {
-    renderWithClient(<SettingsContent onOpenRules={() => {}} />);
-    fireEvent.click(await screen.findByRole('checkbox', { name: /Delete the head branch/ }));
-    await waitFor(() =>
-      expect(api.putSettings).toHaveBeenLastCalledWith({
-        ...settings,
-        deleteBranchAfterMerge: true,
-      }),
-    );
+    expect(names).toEqual(['Repositories setting', 'Theme']);
+    const repos = within(page).getByRole('heading', { name: /^Repositories setting/ });
+    const theme = within(page).getByRole('heading', { name: 'Theme' });
+    expect(repos.compareDocumentPosition(polling) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(polling.compareDocumentPosition(theme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   describe('polling', () => {
@@ -131,7 +110,7 @@ describe('SettingsContent', () => {
     });
 
     it('shows the two intervals in seconds as fields that are stepped, not typed into', async () => {
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       const gh = await github();
       expect(gh).toHaveValue('60');
       expect(gh).toHaveAttribute('readonly');
@@ -147,7 +126,7 @@ describe('SettingsContent', () => {
     });
 
     it('steps with the arrow keys and saves once the stepping has paused', async () => {
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       const gh = await github();
       fireEvent.keyDown(gh, { key: 'ArrowUp' });
       fireEvent.keyDown(gh, { key: 'ArrowUp' });
@@ -164,7 +143,7 @@ describe('SettingsContent', () => {
     });
 
     it('steps with the mouse wheel: up is longer, down is shorter', async () => {
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       const j = await jira();
       const notPrevented = fireEvent.wheel(j, { deltaY: -100 });
       expect(notPrevented).toBe(false);
@@ -175,7 +154,7 @@ describe('SettingsContent', () => {
     });
 
     it('saves both fields in one request when both were stepped', async () => {
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       fireEvent.keyDown(await github(), { key: 'ArrowUp' });
       fireEvent.keyDown(await jira(), { key: 'ArrowDown' });
       await waitFor(() =>
@@ -185,7 +164,7 @@ describe('SettingsContent', () => {
     });
 
     it('stops at the ends of the range and ignores other keys', async () => {
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       const gh = await github();
       fireEvent.keyDown(gh, { key: 'ArrowDown' });
       fireEvent.keyDown(gh, { key: 'ArrowDown' });
@@ -200,7 +179,7 @@ describe('SettingsContent', () => {
 
     it('says so when the save fails', async () => {
       api.putSettings.mockRejectedValue(new Error('no'));
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       fireEvent.keyDown(await github(), { key: 'ArrowUp' });
       await waitFor(() => expect(api.putSettings).toHaveBeenCalled());
       expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the settings.');
@@ -221,21 +200,21 @@ describe('SettingsContent', () => {
 
     it('has only the Auto checkbox: the sun and moon button is in the header', async () => {
       withTheme('dark');
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       expect(await auto()).not.toBeChecked();
       expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
     });
 
     it('turns Auto on and saves it', async () => {
       withTheme('dark');
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       fireEvent.click(await auto());
       await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'auto' }));
     });
 
     it('is checked in Auto, and turns Auto off by saving the mode in effect', async () => {
       withTheme('auto');
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       const box = await auto();
       await waitFor(() => expect(box).toBeChecked());
       await waitFor(() => expect(document.documentElement.dataset.mode).toBeTruthy());
@@ -246,24 +225,16 @@ describe('SettingsContent', () => {
 
     it('is disabled until the settings load', async () => {
       api.getSettings.mockReturnValue(new Promise(() => {}));
-      renderWithClient(<SettingsContent onOpenRules={() => {}} />);
+      show();
       expect(await screen.findByRole('checkbox', { name: /^Auto/ })).toBeDisabled();
     });
-  });
-
-  it('signs out every browser', async () => {
-    api.revokeAllSessions.mockResolvedValue(undefined);
-    renderWithClient(<SettingsContent onOpenRules={() => {}} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Sign out all browsers' }));
-    await waitFor(() => expect(api.revokeAllSessions).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText(/Signed out everywhere/)).toBeInTheDocument();
   });
 });
 
 describe('Settings content on mount', () => {
   it('opens the rules dialog from its button and asks nothing from Jira or the rules on mount', async () => {
     const open = vi.fn();
-    renderWithClient(<SettingsContent onOpenRules={open} />);
+    show(open);
     const button = await screen.findByRole('button', { name: 'Status sync rules' });
     expect(button).toHaveAttribute('aria-haspopup', 'dialog');
     expect(api.getJiraOptions).not.toHaveBeenCalled();

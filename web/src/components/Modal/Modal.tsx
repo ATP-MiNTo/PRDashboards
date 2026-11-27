@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { FOCUSABLE } from '../SidePanel/SidePanel';
+import { FOCUSABLE } from '@/lib/focus';
 import styles from './Modal.module.css';
 
 export interface ModalProps {

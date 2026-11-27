@@ -153,6 +153,8 @@ export const useSaveRepo = () =>
  */
 export const approvalsUpdate = (repo: RepoSettings, approvalsRequired: number): RepoUpdate => ({
   defaultMethod: repo.defaultMethod,
+  inheritMethod: repo.inheritMethod,
+  deleteBranch: repo.deleteBranch,
   branchRules: repo.branchRules,
   clearNew: false,
   approvalsRequired,
@@ -190,11 +192,14 @@ export const useActivity = (enabled: boolean) =>
     enabled,
   });
 
-/** The outcome of a merge made in this tab, kept for the steps list and the recent merges strip. */
+/** A merge made in this tab: the pull request as it was and the server's steps, for the History view. */
 export interface RecentMerge {
   prId: string;
-  label: string;
+  /** The pull request when it was merged: the snapshot drops it soon after. */
+  pr: SnapshotPr;
   result: MergeResult;
+  /** When the server answered, in milliseconds. */
+  at: number;
 }
 
 export const useRecentMerges = <T = RecentMerge[]>(select?: (m: RecentMerge[]) => T) =>
@@ -206,7 +211,8 @@ export const useRecentMerges = <T = RecentMerge[]>(select?: (m: RecentMerge[]) =
     select,
   });
 
-const MAX_RECENT = 10;
+/** The History view keeps this many merges of the tab. */
+const MAX_RECENT = 50;
 
 /** Merges a pull request. The key identifies one panel opening, so a repeated click replays. */
 export function useMerge() {
@@ -220,11 +226,14 @@ export function useMerge() {
       id: string;
       key: string;
       body: MergeRequest;
-      label: string;
+      pr: SnapshotPr;
     }) => mergePr(id, key, body),
-    onSuccess: (result, { id, label }) =>
+    onSuccess: (result, { id, pr }) =>
       client.setQueryData<RecentMerge[]>(keys.merges, (old = []) =>
-        [{ prId: id, label, result }, ...old.filter((m) => m.prId !== id)].slice(0, MAX_RECENT),
+        [{ prId: id, pr, result, at: Date.now() }, ...old.filter((m) => m.prId !== id)].slice(
+          0,
+          MAX_RECENT,
+        ),
       ),
     onSettled: () =>
       Promise.all([
