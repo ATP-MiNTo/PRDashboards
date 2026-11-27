@@ -113,6 +113,9 @@ type Repo struct {
 	SquashAllowed bool
 	MergeAllowed  bool
 	RebaseAllowed bool
+	// ViewerPermission is the account's role on the repository: ADMIN, MAINTAIN, WRITE, TRIAGE or
+	// READ. It is the role, not what the token may do. Empty when GitHub did not say.
+	ViewerPermission string
 }
 
 // Roles say why a pull request is listed.
@@ -237,6 +240,7 @@ type rawPR struct {
 		SquashMergeAllowed bool   `json:"squashMergeAllowed"`
 		MergeCommitAllowed bool   `json:"mergeCommitAllowed"`
 		RebaseMergeAllowed bool   `json:"rebaseMergeAllowed"`
+		ViewerPermission   string `json:"viewerPermission"`
 	} `json:"repository"`
 	Commits struct {
 		Nodes []struct {
@@ -667,7 +671,7 @@ func (n rawPR) pr() PR {
 		Repo: Repo{
 			ID: n.Repository.ID, NameWithOwner: n.Repository.NameWithOwner,
 			SquashAllowed: n.Repository.SquashMergeAllowed, MergeAllowed: n.Repository.MergeCommitAllowed,
-			RebaseAllowed: n.Repository.RebaseMergeAllowed,
+			RebaseAllowed: n.Repository.RebaseMergeAllowed, ViewerPermission: n.Repository.ViewerPermission,
 		},
 		UpdatedAt: n.UpdatedAt, Additions: n.Additions, Deletions: n.Deletions,
 		CI: CI{State: CINone},

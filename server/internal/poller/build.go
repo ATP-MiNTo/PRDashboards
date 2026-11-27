@@ -95,6 +95,16 @@ func rateLimitOf(u *gen.RateLimitUsage) github.RateLimit {
 	return rl
 }
 
+// viewerPermission is the account's role on the repository as the snapshot carries it. A role the
+// contract does not know (GitHub may add one) is left out, so the web gates nothing on it.
+func viewerPermission(role string) *gen.SnapshotRepoViewerPermission {
+	p := gen.SnapshotRepoViewerPermission(role)
+	if !p.Valid() {
+		return nil
+	}
+	return &p
+}
+
 func ptr[T comparable](v T) *T {
 	var zero T
 	if v == zero {
@@ -194,6 +204,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		Repo: gen.SnapshotRepo{
 			Id: pr.Repo.ID, NameWithOwner: pr.Repo.NameWithOwner, IsNew: repo.IsNew,
 			SquashAllowed: pr.Repo.SquashAllowed, MergeAllowed: pr.Repo.MergeAllowed, RebaseAllowed: pr.Repo.RebaseAllowed,
+			ViewerPermission: viewerPermission(pr.Repo.ViewerPermission),
 		},
 		IsDraft:          pr.Draft,
 		Roles:            rolesOf(pr.Roles),

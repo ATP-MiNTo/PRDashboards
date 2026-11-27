@@ -73,3 +73,27 @@ func TestNodesCarryAuthorUpdateTimeAndSize(t *testing.T) {
 		}
 	}
 }
+
+func TestNodesCarryTheViewerRoleOfTheirRepository(t *testing.T) {
+	roles := func(cfg githubConfig) map[string]string {
+		_, body := searchBody("is:pr is:open assignee:@me archived:false", cfg, nil, time.Now())
+		out := map[string]string{}
+		for _, n := range body["data"].(map[string]any)["search"].(map[string]any)["nodes"].([]any) {
+			repo := n.(map[string]any)["repository"].(map[string]any)
+			out[repo["nameWithOwner"].(string)] = repo["viewerPermission"].(string)
+		}
+		return out
+	}
+	base := roles(githubConfig{})
+	if _, ok := base["oss/lib"]; ok {
+		t.Errorf("the read-only repository is only there when asked for: %v", base)
+	}
+	for repo, role := range base {
+		if role != "WRITE" {
+			t.Errorf("%s: %s, want WRITE by default", repo, role)
+		}
+	}
+	if got := roles(githubConfig{ReadOnly: true})["oss/lib"]; got != "READ" {
+		t.Errorf("oss/lib: %q, want READ", got)
+	}
+}

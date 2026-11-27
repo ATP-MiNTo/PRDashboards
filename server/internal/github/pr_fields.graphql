@@ -24,6 +24,7 @@ fragment PullRequestFields on PullRequest {
     squashMergeAllowed
     mergeCommitAllowed
     rebaseMergeAllowed
+    viewerPermission
   }
   commits(last: 1) {
     nodes {

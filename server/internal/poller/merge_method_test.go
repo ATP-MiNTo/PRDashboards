@@ -94,3 +94,28 @@ func TestARepoThatFollowsTheDefaultTakesTheGlobalMethod(t *testing.T) {
 		t.Fatalf("back to the default: %s", method())
 	}
 }
+
+func TestSnapshotCarriesTheViewerRoleOnTheRepository(t *testing.T) {
+	r := newRig(t)
+	w := pr("PR_w", 1, "acme/web", "feat/a", "main", "Writable")
+	ro := pr("PR_r", 2, "oss/lib", "feat/b", "main", "Read only")
+	ro.Repo.ViewerPermission = "READ"
+	w.Repo.ViewerPermission = "MAINTAIN"
+	odd := pr("PR_o", 3, "acme/odd", "feat/c", "main", "A role the contract lacks")
+	odd.Repo.ViewerPermission = "SUPERUSER"
+	none := pr("PR_n", 4, "acme/none", "feat/d", "main", "No role stored")
+	r.gh.set(func(f *fakeGitHub) { f.result.PRs = append(f.result.PRs, w, ro, odd, none) })
+	r.sync()
+
+	by := map[int]string{}
+	for _, p := range r.snapshot().Prs {
+		role := "absent"
+		if p.Repo.ViewerPermission != nil {
+			role = string(*p.Repo.ViewerPermission)
+		}
+		by[p.Number] = role
+	}
+	if by[1] != "MAINTAIN" || by[2] != "READ" || by[3] != "absent" || by[4] != "absent" {
+		t.Fatalf("%v", by)
+	}
+}

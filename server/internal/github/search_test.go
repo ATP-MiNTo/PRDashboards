@@ -149,7 +149,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	if cursors != 3 {
 		t.Fatalf("each search follows its cursor once, got %d", cursors)
 	}
-	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {", "updatedAt", "additions", "deletions", "author {"} {
+	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {", "updatedAt", "additions", "deletions", "author {", "viewerPermission"} {
 		if !strings.Contains(reqs[0].Query, want) {
 			t.Errorf("query lacks %q", want)
 		}
@@ -167,7 +167,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 		p.Mergeable != "MERGEABLE" || p.MergeStateStatus != "CLEAN" || p.ReviewDecision != "APPROVED" || p.Draft {
 		t.Fatalf("pr %+v", p)
 	}
-	if p.Repo.NameWithOwner != "acme/web" || !p.Repo.SquashAllowed || !p.Repo.MergeAllowed || !p.Repo.RebaseAllowed {
+	if p.Repo.NameWithOwner != "acme/web" || !p.Repo.SquashAllowed || !p.Repo.MergeAllowed || !p.Repo.RebaseAllowed || p.Repo.ViewerPermission != "MAINTAIN" {
 		t.Fatalf("repo %+v", p.Repo)
 	}
 	if p.CommittedAt == nil || !p.CommittedAt.Equal(time.Date(2026, 11, 24, 8, 0, 0, 0, time.UTC)) {

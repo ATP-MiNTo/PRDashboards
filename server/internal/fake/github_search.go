@@ -3,6 +3,7 @@
 package fake
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -31,6 +32,9 @@ type fixturePR struct {
 	// drops the assignment (only author:@me matches) and reviewer marks one the viewer is asked to
 	// review (review-requested:@me matches; with unassigned it is the only search that does).
 	authored, unassigned, reviewer bool
+	// viewerPermission is the viewer's role on the repository (ADMIN, MAINTAIN, WRITE, TRIAGE or
+	// READ); empty means WRITE.
+	viewerPermission string
 	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
 	stacked bool
 	// author, updatedAgo, additions and deletions fill the author, updatedAt and diff size. Left
@@ -120,6 +124,16 @@ func reviewPRs() []fixturePR {
 	}
 }
 
+// readOnlyPRs is one pull request in a repository where the viewer can only read (a public
+// repository of another owner). It is approved and green, so only the role keeps it from merging.
+func readOnlyPRs() []fixturePR {
+	return []fixturePR{{
+		repo: "oss/lib", org: "oss", number: 41, title: "RO-41 Someone else's repository", head: "feat/ro-41", base: "main",
+		mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", reviewApproved: true, committedAgo: time.Hour, rollup: "SUCCESS",
+		viewerPermission: "READ",
+	}}
+}
+
 // fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
 // requests the config asks for.
 func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
@@ -132,6 +146,9 @@ func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
 	}
 	if cfg.Review {
 		prs = append(prs, reviewPRs()...)
+	}
+	if cfg.ReadOnly {
+		prs = append(prs, readOnlyPRs()...)
 	}
 	for i, p := range prs {
 		if slices.Contains(cfg.Approved, p.number) {
@@ -304,6 +321,7 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",
+			"viewerPermission": cmp.Or(p.viewerPermission, "WRITE"),
 		},
 		"commits": map[string]any{"nodes": []any{map[string]any{"commit": map[string]any{
 			"committedDate":     now.Add(-p.committedAgo).UTC().Format(time.RFC3339),

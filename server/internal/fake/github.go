@@ -43,6 +43,10 @@ type githubConfig struct {
 	// (set the repository to need two), #32 is a draft and #33 was opened by the viewer, so GitHub
 	// refuses the viewer's review of it.
 	Review bool `json:"review"`
+	// ReadOnly adds one pull request (#41) in oss/lib, a repository where the viewer's role is
+	// READ: the dashboard blocks Merge and Ready for it up front. Every other repository answers
+	// WRITE.
+	ReadOnly bool `json:"readOnly"`
 	// Approved lists the numbers of pull requests that GitHub reports as approved.
 	Approved []int `json:"approved"`
 	// reviews and ready are what the review actions changed (see githubState); fixturePRs applies

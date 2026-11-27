@@ -686,6 +686,11 @@ export interface components {
             squashAllowed: boolean;
             mergeAllowed: boolean;
             rebaseAllowed: boolean;
+            /**
+             * @description The role of the connected GitHub account on the repository. It is the account's role, not what the token may do (a fine-grained token can still lack Pull requests: write there). Absent for a snapshot stored before the field existed, and when GitHub did not say; the web then blocks nothing.
+             * @enum {string}
+             */
+            viewerPermission?: "ADMIN" | "MAINTAIN" | "WRITE" | "TRIAGE" | "READ";
         };
         /** @enum {string} */
         CheckState: "passing" | "failing" | "running" | "pending" | "skipped" | "neutral" | "cancelled";
