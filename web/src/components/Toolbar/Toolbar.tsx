@@ -1,4 +1,5 @@
-import { effectiveDir, SORT_OPTIONS, type SortKey } from '@/lib/sort';
+import { useState } from 'react';
+import { SORT_OPTIONS, type SortKey } from '@/lib/sort';
 import type { ShowMode } from '@/lib/show';
 import type { HideMode } from '@/lib/view';
 import { Hint } from './Hint';
@@ -22,6 +23,9 @@ const LEGEND = [
   { id: 'authored', label: 'Opened by me' },
   { id: 'stack', label: 'Stack' },
 ] as const;
+
+/** Said at the end of both hints, as in the design. */
+const SWITCH_NOTE = 'Click the button to switch to the next state.';
 
 export interface ToolbarProps {
   sort: SortKey;
@@ -50,10 +54,13 @@ export function Toolbar({
   onMode,
   counts,
 }: ToolbarProps) {
-  const dir = effectiveDir(sort, reversed);
+  // The arrow plays its swing only after a click, not when the page first draws it.
+  const [swung, setSwung] = useState(false);
+  const arrow = [styles.arrow, reversed ? styles.arrowDown : styles.arrowUp];
+  if (swung) arrow.push(styles.arrowSwing);
   return (
-    <div className={styles.toolbar}>
-      <div className={styles.group}>
+    <div className={styles.toolrow}>
+      <div className={styles.sortbar}>
         <label htmlFor="sort-select" className={styles.eyebrow}>
           Sort
         </label>
@@ -74,70 +81,78 @@ export function Toolbar({
           className={styles.square}
           aria-label="Reverse sort order"
           aria-pressed={reversed}
-          data-dir={dir}
-          onClick={onReverse}
+          onClick={() => {
+            setSwung(true);
+            onReverse();
+          }}
         >
           <svg
-            className={dir === 'desc' ? styles.arrow : `${styles.arrow} ${styles.arrowUp}`}
+            className={styles.sortIcon}
             width="16"
             height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2.2"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
             focusable="false"
           >
-            <path d="M12 5v14M6 13l6 6 6-6" />
+            <g className={arrow.join(' ')}>
+              <path d="M12 19V5M6 11l6-6 6 6" />
+            </g>
           </svg>
         </button>
-      </div>
-      <span className={styles.divider} aria-hidden="true" />
-      <div className={styles.group}>
-        <Hint label="Show">
-          <b>Show</b>
-          <span>
-            <b>Everything</b> lists every pull request.
-          </span>
-          <span>
-            <b>Assigned to me</b> lists the ones you are an assignee of.
-          </span>
-          <span>
-            <b>Opened by me</b> lists the ones you opened.
-          </span>
-          <span className={styles.hintNote}>Activate the button to switch to the next state.</span>
-        </Hint>
-        <RollSwitch
-          name="Show"
-          options={SHOW_OPTIONS}
-          value={show}
-          onChange={onShow}
-          count={showCounts[show]}
-        />
-      </div>
-      <div className={styles.group}>
-        <Hint label="Hidden PRs">
-          <b>Hidden PRs</b>
-          <span>
-            <b>Visible</b> hides the pull requests you hid.
-          </span>
-          <span>
-            <b>All</b> shows every pull request, the hidden ones dimmed.
-          </span>
-          <span>
-            <b>Hidden</b> shows only the ones you hid.
-          </span>
-          <span className={styles.hintNote}>Activate the button to switch to the next state.</span>
-        </Hint>
-        <RollSwitch
-          name="Hidden PRs"
-          options={HIDE_OPTIONS}
-          value={mode}
-          onChange={onMode}
-          count={counts[mode]}
-        />
+        <span className={styles.divider} aria-hidden="true" />
+        <div className={styles.switchGroup}>
+          <Hint label="Show">
+            <span className={styles.hintTitle}>Show</span>
+            <span>
+              <b>Everything</b> Assigned to you and opened by you.
+            </span>
+            <span>
+              <b>Assigned to me</b> Assigned to you.
+            </span>
+            <span>
+              <b>Opened by me</b> Opened by you.
+            </span>
+            <span className={styles.hintNote}>{SWITCH_NOTE}</span>
+          </Hint>
+          <div className={styles.switchBox}>
+            <RollSwitch
+              name="Show"
+              options={SHOW_OPTIONS}
+              value={show}
+              onChange={onShow}
+              count={showCounts[show]}
+            />
+          </div>
+        </div>
+        <div className={styles.switchGroup}>
+          <Hint label="Hidden PRs">
+            <span className={styles.hintTitle}>Hidden PRs</span>
+            <span>
+              <b>Visible</b> Hidden PRs left out.
+            </span>
+            <span>
+              <b>All</b> Hidden PRs dimmed.
+            </span>
+            <span>
+              <b>Hidden</b> Only PRs you hid.
+            </span>
+            <span className={styles.hintNote}>{SWITCH_NOTE}</span>
+          </Hint>
+          <div className={styles.switchBox}>
+            <RollSwitch
+              name="Hidden PRs"
+              options={HIDE_OPTIONS}
+              value={mode}
+              onChange={onMode}
+              count={counts[mode]}
+            />
+          </div>
+        </div>
       </div>
       <ul className={styles.legend} aria-label="Legend">
         {LEGEND.map((l) => (

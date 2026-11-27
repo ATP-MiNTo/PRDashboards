@@ -1,14 +1,14 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot, useSyncStatus } from '@/api/queries';
 import { showCounts } from '@/lib/show';
 import { useTheme } from '@/theme/useTheme';
 import styles from './CommandTable.module.css';
 import { OrgBanner } from './OrgBanner';
-import { Filters, StatStrip } from './StatStrip';
-import { Table } from './Table';
+import { StatStrip } from './StatStrip';
+import { List, Notice } from './List';
 import { RecentMerges } from './RecentMerges';
 import { AccountsPanel } from '../AccountsPanel';
 import { Footer } from '../Toolbar/Footer';
@@ -40,6 +40,11 @@ export function CommandTable() {
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
+  const { filter, show, terms, hidden, mode } = prefs;
+  const view = useMemo(
+    () => ({ filter, show, terms, hidden, mode }),
+    [filter, show, terms, hidden, mode],
+  );
 
   const data = snapshot.data;
   return (
@@ -73,35 +78,32 @@ export function CommandTable() {
           />
           <main className={styles.wrap}>
             <SearchBox value={prefs.query} onChange={prefs.setQuery} variant="page" />
-            {snapshot.isPending && <p className={styles.muted}>Loading</p>}
-            {snapshot.isError && <p className={styles.errorText}>Could not load the dashboard.</p>}
+            {snapshot.isPending && <Notice>Loading</Notice>}
+            {snapshot.isError && <Notice error>Could not load the dashboard.</Notice>}
             {data && (
               <>
                 <OrgBanner snapshot={data} />
-                <StatStrip snapshot={data} />
-                <div className={styles.controls}>
-                  <Filters value={prefs.filter} onChange={prefs.setFilter} />
-                  <Toolbar
-                    sort={prefs.sort}
-                    reversed={prefs.reversed}
-                    onSort={prefs.setSort}
-                    onReverse={prefs.reverse}
-                    show={prefs.show}
-                    onShow={prefs.setShow}
-                    showCounts={shown}
-                    mode={prefs.mode}
-                    onMode={prefs.setMode}
-                    counts={{
-                      visible: Math.max(0, ids.length - prefs.hidden.size),
-                      all: ids.length,
-                      hidden: prefs.hidden.size,
-                    }}
-                  />
-                </div>
+                <StatStrip view={view} onFilter={prefs.setFilter} />
+                <Toolbar
+                  sort={prefs.sort}
+                  reversed={prefs.reversed}
+                  onSort={prefs.setSort}
+                  onReverse={prefs.reverse}
+                  show={prefs.show}
+                  onShow={prefs.setShow}
+                  showCounts={shown}
+                  mode={prefs.mode}
+                  onMode={prefs.setMode}
+                  counts={{
+                    visible: Math.max(0, ids.length - prefs.hidden.size),
+                    all: ids.length,
+                    hidden: prefs.hidden.size,
+                  }}
+                />
                 {data.prs.length === 0 && data.sources.github.state === 'pending' ? (
-                  <p className={styles.muted}>Loading pull requests</p>
+                  <Notice>Loading pull requests</Notice>
                 ) : (
-                  <Table prefs={prefs} />
+                  <List prefs={prefs} />
                 )}
                 <RecentMerges />
               </>

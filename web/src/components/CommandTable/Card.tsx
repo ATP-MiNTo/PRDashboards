@@ -1,11 +1,14 @@
 import { memo, useState } from 'react';
 import type { MergeMethodName, SnapshotPr } from '@/api/client';
 import { useSnapshot, useSnapshotPr } from '@/api/queries';
+import { ageShort, initials } from '@/lib/card';
 import { effectiveMethod } from '@/lib/merge';
 import { roleKind } from '@/lib/show';
-import { blockOf, githubPrUrl, isStale, lastGoodGithub } from '@/lib/snapshot';
+import { blockOf, githubPrUrl, lastGoodGithub } from '@/lib/snapshot';
+import { Marquee } from '../Marquee/Marquee';
 import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
+import { CommitIcon, LayersIcon, PrIcon } from './Icons';
 import { MergeIcon } from './MergeIcon';
 import { MergePanel } from './MergePanel';
 import { MethodCell } from './MethodCell';
@@ -36,128 +39,165 @@ function ReviewCell({ pr }: { pr: SnapshotPr }) {
   );
 }
 
-function Commit({ pr }: { pr: SnapshotPr }) {
-  const now = useNow(60_000);
+/** Lines added and removed, in the card's tabular style; nothing when the snapshot has none. */
+function Diff({ pr }: { pr: SnapshotPr }) {
+  if (pr.additions === null || pr.deletions === null) return null;
   return (
-    <div>
-      <RelativeTime iso={pr.committedAt} />
-      {isStale(pr, now) && (
-        <>
-          {' '}
-          <Pill tone="warn">Stale</Pill>
-        </>
+    <span className={styles.diff} title={`${pr.additions} lines added, ${pr.deletions} removed`}>
+      <span className={styles.add}>+{pr.additions}</span>{' '}
+      <span className={styles.del}>
+        {'−'}
+        {pr.deletions}
+      </span>
+    </span>
+  );
+}
+
+/** "repo #num · author · updated age · latest commit age", then the badges that belong to it. */
+function Meta({ pr }: { pr: SnapshotPr }) {
+  const now = useNow(60_000);
+  const lastGood = useSnapshot(lastGoodGithub).data ?? null;
+  const updated = ageShort(pr.updatedAt, now);
+  const commit = ageShort(pr.committedAt, now);
+  return (
+    <div className={styles.meta}>
+      <span className={styles.metaText}>
+        {pr.repo.nameWithOwner} #{pr.number}
+      </span>
+      {pr.author !== null && (
+        <span className={styles.metaText}>
+          {'·'} {pr.author}
+        </span>
+      )}
+      {updated !== '' && (
+        <span className={styles.metaIcon} title={`PR updated ${updated} ago`}>
+          {'·'} <PrIcon />
+          {updated}
+        </span>
+      )}
+      {commit !== '' && (
+        <span className={styles.metaIcon} title={`Latest commit ${commit} ago`}>
+          {'·'} <CommitIcon />
+          {commit}
+        </span>
+      )}
+      {pr.repo.isNew && <Pill tone="info">New repo</Pill>}
+      {lastGood !== null && (
+        <Pill tone="warn">
+          Last data <RelativeTime iso={lastGood.syncedAt} />
+        </Pill>
+      )}
+      {pr.isDraft && <span className={styles.draftTag}>Draft</span>}
+      {pr.stack && (
+        <span className={styles.stackTag}>
+          <LayersIcon />
+          Stack {pr.stack.position}/{pr.stack.size}
+        </span>
       )}
     </div>
   );
 }
 
-interface RowProps {
+/** How a card leaves or arrives: fading out before it goes, or once when it is hidden or shown again. */
+export type Motion = 'out' | 'in' | 'dim' | null;
+
+interface CardProps {
   id: string;
   /** Whether the "Hide" box is checked. */
   hidden: boolean;
-  /** Hidden rows shown among the others in the "All" mode. */
+  /** Hidden cards shown among the others in the "All" mode. */
   dim: boolean;
-  /** Fading out before it leaves the list. */
-  leaving: boolean;
+  motion: Motion;
   onHide: (id: string) => void;
 }
 
-function RowView({ id, hidden, dim, leaving, onHide }: RowProps) {
+const MOTION_CLASS = { out: styles.ghostOut, in: styles.ghostIn, dim: styles.ghostDim } as const;
+
+function CardView({ id, hidden, dim, motion, onHide }: CardProps) {
   const pr = useSnapshotPr(id);
-  const lastGood = useSnapshot(lastGoodGithub).data ?? null;
   const [chosen, setChosen] = useState<MergeMethodName | null>(null);
   const [panel, setPanel] = useState(false);
   if (!pr) return null;
   const method = effectiveMethod(pr.mergeMethod, chosen);
   const url = githubPrUrl(pr.repo.nameWithOwner, pr.number);
   const block = blockOf(pr);
-  const child = pr.stack !== null && pr.stack.parentId !== null;
-  const rowClass = [styles.row, styles[`role_${roleKind(pr)}`]];
-  if (child) rowClass.push(styles.child);
-  if (dim) rowClass.push(styles.dim);
-  if (leaving) rowClass.push(styles.ghost);
+  const cls = [styles.card, styles[`role_${roleKind(pr)}`]];
+  if (dim) cls.push(styles.dim);
+  if (motion) cls.push(MOTION_CLASS[motion]);
   return (
-    <>
-      <tr className={rowClass.join(' ')} data-pr={pr.id}>
-        <td className={styles.prCell}>
-          <div className={styles.repo}>
-            {pr.repo.nameWithOwner}
-            {pr.repo.isNew && <Pill tone="info">New repo</Pill>}
-            {lastGood !== null && (
-              <Pill tone="warn">
-                Last data <RelativeTime iso={lastGood.syncedAt} />
-              </Pill>
-            )}
-            <label className={styles.hide}>
-              <input
-                type="checkbox"
-                checked={hidden}
-                aria-label={`Hide #${pr.number}`}
-                onChange={() => onHide(pr.id)}
-              />
-              Hide
-            </label>
+    <article className={cls.join(' ')} data-pr={pr.id}>
+      <div className={styles.cardMain}>
+        <span className={styles.avatar} aria-hidden="true">
+          {initials(pr.author)}
+        </span>
+        <div className={styles.cardBody}>
+          <h2 className={styles.title}>
+            <Marquee className={styles.titleMq}>
+              {url ? (
+                <a href={url} target="_blank" rel="noopener noreferrer">
+                  {pr.title}
+                </a>
+              ) : (
+                pr.title
+              )}
+            </Marquee>
+          </h2>
+          <Meta pr={pr} />
+          <div className={styles.jira}>
+            <TicketCell pr={pr} />
+            <Diff pr={pr} />
           </div>
-          <div className={styles.prTitle}>
-            {url ? (
-              <a href={url} target="_blank" rel="noopener noreferrer">
-                {pr.title}
-              </a>
-            ) : (
-              pr.title
-            )}{' '}
-            <span className={styles.muted}>#{pr.number}</span>
-            {pr.isDraft && (
-              <>
-                {' '}
-                <Pill tone="mute">Draft</Pill>
-              </>
-            )}
-          </div>
-          <div className={styles.branches}>
-            {pr.headRef} → {pr.baseRef}
-          </div>
-        </td>
-        <td>
-          <TicketCell pr={pr} />
-        </td>
-        <td>
-          <Commit pr={pr} />
-        </td>
-        <td>
+        </div>
+      </div>
+      <div className={styles.controls}>
+        <label className={styles.hide}>
+          <input
+            type="checkbox"
+            className={styles.hideBox}
+            checked={hidden}
+            aria-label={`Hide #${pr.number}`}
+            onChange={() => onHide(pr.id)}
+          />
+          <span className={styles.hideText}>Hide</span>
+        </label>
+        <span className={styles.vline} aria-hidden="true" />
+        <div className={styles.cell}>
           <ReviewCell pr={pr} />
-        </td>
-        <td>
+        </div>
+        <span className={styles.vline} aria-hidden="true" />
+        <div className={styles.cell}>
           <CiCell pr={pr} />
-        </td>
-        <td>
+        </div>
+        <span className={styles.vline} aria-hidden="true" />
+        <div className={styles.cell}>
           <MethodCell resolution={pr.mergeMethod} value={method} onChange={setChosen} />
-        </td>
-        <td>
-          <button
-            type="button"
-            className={styles.mergeButton}
-            disabled={block.reason !== null}
-            aria-expanded={panel}
-            onClick={() => setPanel((open) => !open)}
-          >
-            Merge
-            <MergeIcon />
-          </button>
-          <div className={block.reason ? styles.reason : styles.ready}>
-            {block.reason ?? 'Ready to merge'}
+        </div>
+        <span className={styles.vline} aria-hidden="true" />
+        <div className={styles.cell}>
+          <div className={styles.mergeCell}>
+            <button
+              type="button"
+              className={styles.mergeButton}
+              disabled={block.reason !== null}
+              aria-expanded={panel}
+              onClick={() => setPanel((open) => !open)}
+            >
+              Merge
+              <MergeIcon />
+            </button>
+            <div className={block.reason ? styles.reason : styles.ready}>
+              {block.reason ?? 'Ready to merge'}
+            </div>
           </div>
-        </td>
-      </tr>
+        </div>
+      </div>
       {panel && (
-        <tr className={styles.panelRow} data-panel={pr.id}>
-          <td colSpan={7}>
-            <MergePanel pr={pr} method={method} onClose={() => setPanel(false)} />
-          </td>
-        </tr>
+        <div className={styles.panel} data-panel={pr.id}>
+          <MergePanel pr={pr} method={method} onClose={() => setPanel(false)} />
+        </div>
       )}
-    </>
+    </article>
   );
 }
 
-export const Row = memo(RowView);
+export const Card = memo(CardView);

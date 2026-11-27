@@ -7,21 +7,41 @@ import { reducedMotion } from '@/lib/storage';
 import { applyHidden, paginate, shownIn } from '@/lib/view';
 import { Pager } from '../Toolbar/Pager';
 import type { ListPrefs } from '../Toolbar/useListPrefs';
+import { Card, type Motion } from './Card';
 import styles from './CommandTable.module.css';
-import { Pill } from './Pill';
-import { Row } from './Row';
+import { StackBanner } from './StackBanner';
 
-const COLUMNS = ['Repo / PR', 'Ticket', 'Last commit', 'Review', 'CI', 'Method', 'Merge'] as const;
+/** How long a card fades out before it leaves the list; matches the ghost-out animation. */
+export const GHOST_MS = 480;
+/** How long the one-shot dim and appear animations of a card last. */
+export const PULSE_MS = 500;
 
-/** How long a row fades out before it leaves the list; matches the ghost-out animation. */
-export const GHOST_MS = 500;
+/** The list's own message, in the glass surface of the design. */
+export function Notice({
+  title,
+  children,
+  error,
+}: {
+  title?: string;
+  children: string;
+  error?: boolean;
+}) {
+  return (
+    <div className={styles.empty} role={error ? 'alert' : undefined}>
+      {title && <p className={styles.emptyTitle}>{title}</p>}
+      <p className={error ? `${styles.emptyBody} ${styles.emptyError}` : styles.emptyBody}>
+        {children}
+      </p>
+    </div>
+  );
+}
 
-export function Table({ prefs }: { prefs: ListPrefs }) {
+export function List({ prefs }: { prefs: ListPrefs }) {
   const { filter, terms, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
   const select = useCallback(
     (s: Snapshot) => {
       const byId = new Map(s.prs.map((p) => [p.id, p]));
-      const groups = sortGroups(groupsOf(s, filter, Date.now(), show, terms), byId, sort, reversed);
+      const groups = sortGroups(groupsOf(s, filter, show, terms), byId, sort, reversed);
       return applyHidden(groups, hidden, mode);
     },
     [filter, terms, sort, reversed, show, hidden, mode],
@@ -30,83 +50,88 @@ export function Table({ prefs }: { prefs: ListPrefs }) {
   const pages = paginate(groups, pageSize);
   const current = Math.min(page, Math.max(0, pages.length - 1));
 
-  // Rows that are about to leave the list fade out first; the toggle is applied when it ends.
-  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+  // A card about to leave the list fades out first and the toggle is applied when it ends. One that
+  // stays plays a short dim or appear animation instead.
+  const [motion, setMotion] = useState<ReadonlyMap<string, Exclude<Motion, null>>>(new Map());
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => {
     const all = timers.current;
     return () => all.forEach(clearTimeout);
   }, []);
 
+  const play = useCallback((id: string, m: Exclude<Motion, null> | null) => {
+    setMotion((cur) => {
+      const next = new Map(cur);
+      if (m) next.set(id, m);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
   const hide = useCallback(
     (id: string) => {
       const isHidden = hidden.has(id);
-      if (reducedMotion() || leaving.has(id) || shownIn(mode, !isHidden)) {
+      if (reducedMotion() || motion.has(id)) {
         toggleHidden(id);
         return;
       }
-      setLeaving((s) => new Set(s).add(id));
+      const after = shownIn(mode, !isHidden);
+      if (after) {
+        // Stays in the list (All mode, or shown again): dim or appear once.
+        toggleHidden(id);
+        play(id, isHidden ? 'in' : 'dim');
+        const t = setTimeout(() => {
+          timers.current.delete(t);
+          play(id, null);
+        }, PULSE_MS);
+        timers.current.add(t);
+        return;
+      }
+      play(id, 'out');
       const t = setTimeout(() => {
         timers.current.delete(t);
         toggleHidden(id);
-        setLeaving((s) => {
-          const next = new Set(s);
-          next.delete(id);
-          return next;
-        });
+        play(id, null);
       }, GHOST_MS);
       timers.current.add(t);
     },
-    [hidden, leaving, mode, toggleHidden],
+    [hidden, motion, mode, play, toggleHidden],
   );
 
-  const empty =
-    terms.length > 0
-      ? 'No pull requests match the search.'
-      : mode === 'hidden'
-        ? 'No hidden pull requests match.'
-        : hidden.size > 0 && mode === 'visible'
-          ? 'No pull requests match. Some are hidden.'
-          : 'No pull requests match.';
+  const card = (id: string) => {
+    const m = motion.get(id) ?? null;
+    return (
+      <Card
+        key={id}
+        id={id}
+        hidden={hidden.has(id) !== (m === 'out')}
+        dim={mode === 'all' && hidden.has(id) && m !== 'out'}
+        motion={m}
+        onHide={hide}
+      />
+    );
+  };
 
   return (
     <>
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              {COLUMNS.map((c) => (
-                <th key={c} scope="col">
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          {(pages[current] ?? []).map((g) => (
-            <tbody key={g.key} className={g.stacked ? styles.stackGroup : undefined}>
-              {g.stacked && (
-                <tr className={styles.stackHeader}>
-                  <td colSpan={COLUMNS.length}>
-                    <Pill tone="stack">Stack of {g.ids.length}</Pill>{' '}
-                    <span className={styles.muted}>merge from the bottom up</span>
-                  </td>
-                </tr>
-              )}
-              {g.ids.map((id) => (
-                <Row
-                  key={id}
-                  id={id}
-                  hidden={hidden.has(id) !== leaving.has(id)}
-                  dim={mode === 'all' && hidden.has(id) && !leaving.has(id)}
-                  leaving={leaving.has(id)}
-                  onHide={hide}
-                />
-              ))}
-            </tbody>
-          ))}
-        </table>
-        {groups.length === 0 && <p className={styles.empty}>{empty}</p>}
-      </div>
+      {groups.length === 0 ? (
+        <Notice title="Nothing here">
+          No open pull requests match these switches and filters.
+        </Notice>
+      ) : (
+        <div className={styles.list}>
+          {(pages[current] ?? []).map((g) =>
+            g.stacked ? (
+              <section key={g.key} className={styles.stackGroup} aria-label="Stack">
+                <StackBanner ids={g.ids} />
+                <div className={styles.stackList}>{g.ids.map(card)}</div>
+              </section>
+            ) : (
+              g.ids.map(card)
+            ),
+          )}
+        </div>
+      )}
       <Pager
         pages={pages}
         page={current}

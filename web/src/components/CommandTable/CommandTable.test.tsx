@@ -100,47 +100,62 @@ beforeEach(() => {
 });
 
 describe('CommandTable', () => {
-  it('shows the columns in order, one row per pull request, and the merge reason', async () => {
+  it('shows one card per pull request, with its controls and the merge reason', async () => {
     renderWithClient(<CommandTable />);
     expect(await screen.findByText('Add login')).toBeInTheDocument();
-    const heads = screen.getAllByRole('columnheader').map((h) => h.textContent);
-    expect(heads).toEqual([
-      'Repo / PR',
-      'Ticket',
-      'Last commit',
-      'Review',
-      'CI',
-      'Method',
-      'Merge',
-    ]);
+    expect(document.querySelectorAll('article[data-pr]')).toHaveLength(4);
+    expect(document.querySelector('table')).toBeNull();
+    expect(screen.getByRole('heading', { level: 2, name: 'Add login' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Add login' })).toHaveAttribute(
       'href',
       'https://github.com/acme/web/pull/1',
     );
     expect(screen.getByRole('link', { name: 'INP-1' })).toBeInTheDocument();
-    const child = screen.getByText('SSO on top').closest('tr')!;
+    const child = screen.getByText('SSO on top').closest('article')!;
     expect(within(child).getByText('Merge after #1')).toBeInTheDocument();
     expect(within(child).getByRole('button', { name: 'Merge' })).toBeDisabled();
-    expect(
-      within(screen.getByText('Plain fix').closest('tr')!).getByText('Draft', { selector: 'div' }),
-    ).toBeInTheDocument();
+    expect(within(child).getByRole('checkbox', { name: 'Hide #2' })).toBeInTheDocument();
+    const draft = screen.getByText('Plain fix').closest('article')!;
+    expect(within(draft).getByText('Draft', { selector: 'div' })).toBeInTheDocument();
     expect(screen.getByText('Merge conflicts')).toBeInTheDocument();
-    expect(screen.getByText('Stack of 2')).toBeInTheDocument();
   });
 
-  it('counts the stat strip and filters with the chips', async () => {
+  it('draws a stack as one group with a banner above its cards', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    const stats = document.querySelector('dl')!;
-    expect(stats.textContent).toBe('Open4Ready1Blocked2Draft1Stale1');
-    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
-    expect(screen.queryByText('Add login')).toBeNull();
-    expect(screen.getByText('Plain fix')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stale' }));
-    expect(screen.getByText('Conflicted')).toBeInTheDocument();
-    expect(screen.queryByText('Plain fix')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    const group = screen.getByRole('region', { name: 'Stack' });
+    expect(within(group).getByText('STACK')).toBeInTheDocument();
+    expect(within(group).getByText('2 PRs, merge in order')).toBeInTheDocument();
+    expect(within(group).getByText('INP-1')).toBeInTheDocument();
+    expect(group.querySelectorAll('article[data-pr]')).toHaveLength(2);
+    expect(within(group).getByText('Stack 1/2')).toBeInTheDocument();
+    expect(within(group).getByText('Stack 2/2')).toBeInTheDocument();
+  });
+
+  it('counts the stat tiles and filters with them', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const tiles = screen.getByRole('group', { name: 'Summary' });
+    expect(
+      within(tiles)
+        .getAllByRole('button')
+        .map((b) => b.textContent),
+    ).toEqual(['Showing4', 'Ready to merge1', 'Running CI0', 'Stacks1']);
+    const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+    expect(tile(/^Showing/)).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(tile(/^Stacks/));
+    expect(tile(/^Stacks/)).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Add login')).toBeInTheDocument();
+    expect(screen.queryByText('Plain fix')).toBeNull();
+    fireEvent.click(tile(/^Ready to merge/));
+    expect(screen.queryByText('Conflicted')).toBeNull();
+    expect(screen.queryByText('Plain fix')).toBeNull();
+    expect(screen.queryByText('SSO on top')).toBeNull();
+    expect(screen.getByText('Add login')).toBeInTheDocument();
+    fireEvent.click(tile(/^Running CI/));
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
+    fireEvent.click(tile(/^Showing/));
+    expect(screen.getByText('Plain fix')).toBeInTheDocument();
   });
 
   it('shows an Authorize link for a blocked organization while other rows load', async () => {
@@ -182,7 +197,7 @@ describe('CommandTable', () => {
     expect(await screen.findByText(/rate limit reached/)).toBeInTheDocument();
     expect(screen.getByText('Jira unreachable, retry the lookup')).toBeInTheDocument();
     expect(screen.getByText('GitHub returns at most 1,000 results.')).toBeInTheDocument();
-    expect(screen.getByText('No pull requests match.')).toBeInTheDocument();
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
   });
 
   it('offers to connect GitHub when it is disconnected', async () => {
@@ -303,7 +318,7 @@ describe('CommandTable', () => {
       ]),
     );
     renderWithClient(<CommandTable />);
-    const row = (await screen.findByText('Add login')).closest('tr')!;
+    const row = (await screen.findByText('Add login')).closest('article')!;
     expect(within(row).getByRole('combobox', { name: 'Merge method' })).toHaveTextContent(
       'Merge commit (default)',
     );
@@ -315,7 +330,7 @@ describe('CommandTable', () => {
 
   it('opens the merge panel under a ready row and closes it again', async () => {
     renderWithClient(<CommandTable />);
-    const row = (await screen.findByText('Add login')).closest('tr')!;
+    const row = (await screen.findByText('Add login')).closest('article')!;
     const button = within(row).getByRole('button', { name: 'Merge' });
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');

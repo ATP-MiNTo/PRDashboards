@@ -42,7 +42,7 @@ for (const [mode, title] of [
       await expect(sources).toContainText(/resets in \d+m/);
     }
     const row = page
-      .locator("tr[data-pr]")
+      .locator("article[data-pr]")
       .filter({ hasText: "Bump dependencies" });
     await expect(row).toBeVisible();
     await expect(row.getByText(/Last data/)).toBeVisible();

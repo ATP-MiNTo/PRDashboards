@@ -17,7 +17,7 @@ export interface RollSwitchProps<T extends string> {
   count: number;
 }
 
-const ROLL_MS = 300;
+export const ROLL_MS = 300;
 
 /** A button that cycles through its options; the label rolls upward as it changes. */
 export function RollSwitch<T extends string>({
@@ -56,10 +56,11 @@ export function RollSwitch<T extends string>({
         onClick={click}
       >
         <span className={styles.rollWin} aria-hidden="true">
-          <span key={value} className={from === null ? styles.rollStill : styles.rollIn}>
-            {current.label}
+          {/* While it rolls, the old label sits above the new one and both slide up together. */}
+          <span key={`${value}${from ?? ''}`} className={from === null ? undefined : styles.rollGo}>
+            {from !== null && <span className={styles.rollLine}>{from}</span>}
+            <span className={styles.rollLine}>{current.label}</span>
           </span>
-          {from !== null && <span className={styles.rollOut}>{from}</span>}
         </span>
         <span className={styles.badge} aria-hidden="true">
           {count}

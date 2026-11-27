@@ -60,6 +60,10 @@
   --btn-hover-fg: oklch(var(--b1));
   --btn-hover-border: oklch(var(--bc));
   --btn-off-bg: oklch(var(--n) / 0.2);
+  --btn-off-line: transparent;
+  /* The current page of the pager (btn-active): the third surface, a tenth darker. */
+  --btn-on-bg: color-mix(in oklab, oklch(var(--b3)) 90%, black);
+  --btn-on-border: var(--btn-on-bg);
   --btn-off-fg: oklch(var(--bc) / 0.2);
   --ghost-hover: oklch(var(--bc) / 0.2);
   --ctl-bg: oklch(var(--b1));
@@ -74,18 +78,31 @@
   --merge: #007fff;
   --merge-hover: #1a8cff;
 
-  /* Roles and stacks. */
+  /* Roles and stacks. A card is tinted whole: cyan for assigned, red for opened by the user, split
+     46/54 for both. */
   --rc-a: #bfeaf1;
   --rc-r: #f9c9c9;
   --stack: #8b6cf0;
-  --role-assigned: color-mix(in oklab, var(--rc-a), oklch(var(--bc)) 25%);
-  --role-assigned-bg: color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1)));
-  --role-assigned-hover: color-mix(in oklab, var(--rc-a) 40%, oklch(var(--b1)));
-  --role-authored: color-mix(in oklab, var(--rc-r), oklch(var(--bc)) 25%);
-  --role-authored-bg: color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1)));
-  --role-authored-hover: color-mix(in oklab, var(--rc-r) 40%, oklch(var(--b1)));
+  --card-a-bg: color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1)));
+  --card-r-bg: color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1)));
+  --card-b-bg: linear-gradient(
+    105deg,
+    color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1))) 0 46%,
+    color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1))) 54% 100%
+  );
+  --card-a-line: var(--glass-line);
+  --card-r-line: var(--glass-line);
+  --card-b-line: var(--glass-line);
   --stack-bg: color-mix(in oklab, var(--stack) 18%, oklch(var(--b1)));
   --stack-fg: oklch(var(--bc));
+  --stack-group-bg: color-mix(in oklab, var(--stack) 10%, transparent);
+  --stack-group-shadow: none;
+  --stack-chip-fg: #fff;
+  --stack-step-bg: color-mix(in oklab, var(--stack) 28%, transparent);
+
+  /* Size of a change in a card: additions and deletions, tinted from the success and error colours. */
+  --diff-add: color-mix(in oklch, oklch(var(--su)) 40%, oklch(var(--bc)));
+  --diff-del: color-mix(in oklch, oklch(var(--er)) 72%, oklch(var(--bc)));
 
   /* Toolbar names, kept for the existing modules. */
   --tb-bg: oklch(var(--b1));
@@ -154,6 +171,9 @@
   --btn-bg: rgba(255, 255, 255, 0.06);
   --btn-border: rgba(255, 255, 255, 0.18);
   --btn-off-bg: rgba(255, 255, 255, 0.04);
+  --btn-off-line: rgba(255, 255, 255, 0.08);
+  --btn-on-bg: rgba(255, 255, 255, 0.06);
+  --btn-on-border: rgba(255, 255, 255, 0.18);
   --btn-off-fg: rgba(255, 255, 255, 0.3);
   --ctl-bg: rgba(255, 255, 255, 0.06);
   --ctl-border: rgba(255, 255, 255, 0.16);
@@ -166,13 +186,21 @@
   --rc-a: #1d5560;
   --rc-r: #6a363c;
   --stack: #a994ff;
-  --role-assigned: #56c4d6;
-  --role-assigned-bg: rgba(86, 196, 214, 0.14);
-  --role-assigned-hover: rgba(86, 196, 214, 0.22);
-  --role-authored: #f08096;
-  --role-authored-bg: rgba(240, 128, 150, 0.14);
-  --role-authored-hover: rgba(240, 128, 150, 0.22);
+  --card-a-bg: linear-gradient(120deg, rgba(86, 196, 214, 0.17), rgba(86, 196, 214, 0.05) 70%);
+  --card-r-bg: linear-gradient(120deg, rgba(240, 128, 150, 0.17), rgba(240, 128, 150, 0.05) 70%);
+  --card-b-bg: linear-gradient(
+    105deg,
+    rgba(86, 196, 214, 0.17) 0 46%,
+    rgba(240, 128, 150, 0.17) 54% 100%
+  );
+  --card-a-line: rgba(120, 215, 230, 0.22);
+  --card-r-line: rgba(250, 150, 170, 0.22);
+  --card-b-line: rgba(255, 255, 255, 0.18);
   --stack-bg: rgba(150, 130, 255, 0.18);
+  --stack-group-bg: linear-gradient(180deg, rgba(150, 130, 255, 0.14), rgba(150, 130, 255, 0.05));
+  --stack-group-line: rgba(170, 150, 255, 0.25);
+  --stack-group-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --stack-chip-fg: #1a1530;
 
   --on-fill: #1a1400;
   --good: #a6e8c4;
@@ -335,7 +363,7 @@ button:not(:disabled):active {
 
 .ui-btn:disabled,
 .ui-controls button:disabled {
-  border-color: transparent;
+  border-color: var(--btn-off-line);
   background: var(--btn-off-bg);
   color: var(--btn-off-fg);
   opacity: 1;
@@ -360,14 +388,15 @@ button:not(:disabled):active {
 /* Select (daisyUI "select select-sm") and bordered input. */
 .ui-select,
 .ui-controls select {
+  height: var(--ctl-h);
   min-height: var(--ctl-h);
   padding: 0 2rem 0 0.75rem;
   border: 1px solid var(--ctl-border);
   border-radius: var(--radius-ctl);
   background-color: var(--ctl-bg);
   background-image:
-    linear-gradient(45deg, transparent 50%, currentcolor 50%),
-    linear-gradient(135deg, currentcolor 50%, transparent 50%);
+    linear-gradient(45deg, transparent 50%, currentcolor 0),
+    linear-gradient(135deg, currentcolor 50%, transparent 0);
   background-position:
     calc(100% - 20px) calc(1px + 50%),
     calc(100% - 16px) calc(1px + 50%);
@@ -375,8 +404,15 @@ button:not(:disabled):active {
   background-size: 4px 4px;
   color: var(--text);
   font-size: 0.875rem;
-  line-height: 2;
+  line-height: 2rem;
   appearance: none;
+}
+
+/* daisyUI: a soft ring while the select has focus, from a click as well as from the keyboard. */
+.ui-select:focus,
+.ui-controls select:focus {
+  outline: 2px solid oklch(var(--bc) / 0.2);
+  outline-offset: 2px;
 }
 
 .ui-select:disabled,
@@ -402,6 +438,65 @@ input[type='checkbox'] {
   width: 1rem;
   height: 1rem;
   accent-color: oklch(var(--bc));
+}
+
+/* The daisyUI checkbox, as the design draws it (checkbox-xs: 1rem, round, ink check mark). A module
+   takes it with `composes: ui-check from global;`. */
+.ui-check {
+  --chkbg: oklch(var(--bc));
+  --chkfg: oklch(var(--b1));
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  border: 1px solid oklch(var(--bc) / 0.2);
+  border-radius: var(--radius-ctl);
+  appearance: none;
+}
+
+.ui-check:checked {
+  background-color: var(--chkbg);
+  background-image:
+    linear-gradient(-45deg, transparent 65%, var(--chkbg) 65.99%),
+    linear-gradient(45deg, transparent 75%, var(--chkbg) 75.99%),
+    linear-gradient(-45deg, var(--chkbg) 40%, transparent 40.99%),
+    linear-gradient(
+      45deg,
+      var(--chkbg) 30%,
+      var(--chkfg) 30.99%,
+      var(--chkfg) 40%,
+      transparent 40.99%
+    ),
+    linear-gradient(-45deg, var(--chkfg) 50%, var(--chkbg) 50.99%);
+  background-repeat: no-repeat;
+  animation: checkmark 0.2s ease-out;
+}
+
+.ui-check:focus-visible {
+  outline: 2px solid oklch(var(--bc));
+  outline-offset: 2px;
+}
+
+@keyframes checkmark {
+  0% {
+    background-position-y: 5px;
+  }
+
+  50% {
+    background-position-y: -2px;
+  }
+
+  100% {
+    background-position-y: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-check:checked {
+    animation: none;
+  }
 }
 
 /* The theme switch crossfades the whole page. */

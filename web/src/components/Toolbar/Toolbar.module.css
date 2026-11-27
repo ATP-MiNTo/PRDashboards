@@ -9,18 +9,31 @@
   white-space: nowrap;
 }
 
-.toolbar {
+/* Sort, switches and legend in one row that wraps: sort bar on the left, legend at the right. */
+.toolrow {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.group {
+.sortbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.switchGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.switchBox {
+  position: relative;
+  width: 9rem;
 }
 
 .eyebrow,
@@ -29,29 +42,29 @@
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.08em;
+  line-height: 1.05rem;
   text-transform: uppercase;
 }
 
 .legend {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
-  margin: 0 0 0 auto;
+  gap: 12px;
+  margin: 0;
   padding: 0;
-  color: var(--sub);
-  font-size: 12px;
+  font-size: 0.75rem;
+  line-height: 1rem;
   list-style: none;
 }
 
 .legendItem {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
+  gap: 4px;
 }
 
 .legendDot {
+  display: inline-block;
   width: 0.8rem;
   height: 0.8rem;
   border-radius: 50%;
@@ -70,10 +83,17 @@
 }
 
 .divider {
-  align-self: stretch;
+  display: none;
   width: 1px;
-  margin-block: 4px;
-  background: var(--tb-line);
+  height: 1.25rem;
+  margin-inline: 4px;
+  background: oklch(var(--bc) / 0.15);
+}
+
+@media (min-width: 768px) {
+  .divider {
+    display: block;
+  }
 }
 
 .select {
@@ -86,88 +106,123 @@
   composes: ui-btn from global;
 }
 
+.square,
+.pageButton,
+.roll {
+  line-height: 1;
+}
+
 .square {
   width: var(--ctl-h);
   height: var(--ctl-h);
   padding: 0;
 }
 
+/* The arrow swings round its foot: up is the natural order, down is reversed. */
+.sortIcon {
+  overflow: visible;
+}
+
 .arrow {
-  transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1);
+  transform-origin: 12px 19px;
+  transform-box: view-box;
 }
 
-.arrowUp {
-  transform: rotate(180deg);
+.arrowDown {
+  transform: translateY(-14px) rotate(180deg);
 }
 
+.arrowSwing.arrowUp {
+  animation: sortUp 0.7s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.arrowSwing.arrowDown {
+  animation: sortDown 0.7s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+@keyframes sortDown {
+  from {
+    transform: translateY(0) rotate(0);
+  }
+
+  to {
+    transform: translateY(-14px) rotate(180deg);
+  }
+}
+
+@keyframes sortUp {
+  from {
+    transform: translateY(-14px) rotate(180deg);
+  }
+
+  to {
+    transform: translateY(0) rotate(0);
+  }
+}
+
+/* A roll switch: daisyUI btn-sm outline, 144px wide, label on the left, count badge on the right. */
 .roll {
-  display: flex;
   justify-content: space-between;
-  gap: 8px;
-  width: 9rem;
+  width: 100%;
+  gap: 4px;
+  padding: 0 0.5rem;
+  flex-wrap: nowrap;
 }
 
 .rollWin {
-  position: relative;
   display: block;
-  height: 20px;
+  min-width: 0;
+  height: 1.25rem;
   overflow: hidden;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 1.25rem;
+  text-align: left;
   white-space: nowrap;
 }
 
-.rollIn,
-.rollStill {
+.rollLine {
   display: block;
+  height: 1.25rem;
 }
 
-.rollIn {
-  animation: rollIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.rollGo {
+  display: block;
+  animation: rollGo 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.rollOut {
-  position: absolute;
-  inset: 0 auto auto 0;
-  animation: rollOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-}
-
-@keyframes rollIn {
-  from {
-    transform: translateY(100%);
-  }
-}
-
-@keyframes rollOut {
+@keyframes rollGo {
   to {
-    transform: translateY(-100%);
+    transform: translateY(-1.25rem);
   }
 }
 
+/* daisyUI badge-sm */
 .badge {
-  min-width: 31px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 1rem;
   padding: 0 0.438rem;
   border: 1px solid oklch(var(--b2));
-  border-radius: var(--radius-pill);
-  background: var(--tb-bg);
-  color: var(--text);
+  border-radius: 1.9rem;
+  background: oklch(var(--b1));
+  color: oklch(var(--bc));
   font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 400;
-  line-height: 0.875rem;
-  text-align: center;
+  line-height: 1rem;
+  white-space: nowrap;
 }
 
+/* The hint: a daisyUI dropdown-hover card under the label, w-56, p-3, text-xs, shadow-xl. */
 .hintWrap {
   position: relative;
-  display: inline-flex;
+  display: inline-block;
 }
 
 .hintLabel {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  min-height: var(--ctl-h);
+  gap: 4px;
   cursor: help;
 }
 
@@ -175,22 +230,38 @@
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 15rem;
+  z-index: 50;
+  display: block;
+  width: 14rem;
   max-width: calc(100vw - 32px);
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 0.75rem;
+  border: 1px solid oklch(var(--bc) / 0.15);
   border-radius: var(--radius-box);
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 12px 28px -12px var(--shadow);
-  font-size: 12px;
+  background: oklch(var(--b1));
+  color: oklch(var(--bc));
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
   font-weight: 400;
   letter-spacing: 0;
+  line-height: 1rem;
   text-transform: none;
+  animation: hintIn 0.2s;
+}
+
+@keyframes hintIn {
+  0% {
+    opacity: 0;
+  }
+}
+
+.hintPop > span {
+  display: block;
+}
+
+.hintTitle {
+  font-weight: 600;
 }
 
 .hintNote {
@@ -202,64 +273,80 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 16px;
+  gap: 12px;
+  margin-top: 16px;
 }
 
 .showing {
   color: var(--sub);
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25rem;
 }
 
 .pagerRight {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
+/* daisyUI join: buttons side by side, 1px overlap, only the ends rounded. */
 .pages {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: flex;
+  border-radius: var(--radius-ctl);
 }
 
 .pageButton {
-  min-width: var(--ctl-h);
-  height: var(--ctl-h);
-  padding: 0 0.5rem;
-  font-variant-numeric: tabular-nums;
+  gap: 0.5rem;
+  border-radius: 0;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  line-height: 0.875rem;
 }
 
-.current {
-  background: var(--tb-fg);
-  color: var(--tb-bg);
+.pageButton:first-child {
+  border-start-start-radius: var(--radius-ctl);
+  border-end-start-radius: var(--radius-ctl);
 }
 
+.pageButton:last-child {
+  border-start-end-radius: var(--radius-ctl);
+  border-end-end-radius: var(--radius-ctl);
+}
+
+.pageButton + .pageButton {
+  margin-inline-start: -1px;
+}
+
+.pageButton.current,
+.pageButton.current:hover:not(:disabled) {
+  border-color: var(--btn-on-border);
+  background: var(--btn-on-bg);
+  color: oklch(var(--bc));
+}
+
+/* "..." where page numbers are skipped, drawn as a quiet join item. */
 .gap {
-  min-width: 16px;
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h);
+  margin-inline-start: -1px;
+  padding: 0 0.75rem;
+  border: 1px solid transparent;
   color: var(--sub);
-  text-align: center;
-}
-
-@media (max-width: 640px) {
-  .divider {
-    display: none;
-  }
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .arrow {
-    transition: none;
-  }
-
-  .rollIn,
-  .rollOut {
+  .arrowSwing.arrowUp,
+  .arrowSwing.arrowDown,
+  .rollGo,
+  .hintPop {
     animation: none;
   }
 
-  .rollOut {
+  /* Without the slide, only the new label shows. */
+  .rollGo > :first-child {
     display: none;
   }
 }

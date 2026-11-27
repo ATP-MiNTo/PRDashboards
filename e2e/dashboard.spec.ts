@@ -56,7 +56,7 @@ test("the Show switch follows the roles from the two searches", async ({ page })
   await expect(page.getByText("Connected as octocat")).toBeVisible();
 
   await page.goto(APP + "/");
-  const rows = (title: string) => page.locator("tr[data-pr]").filter({ hasText: title });
+  const rows = (title: string) => page.locator("article[data-pr]").filter({ hasText: title });
   await expect(rows("INP-101 Add login")).toBeVisible();
 
   await page.getByRole("button", { name: /^Show, now Everything/ }).click();

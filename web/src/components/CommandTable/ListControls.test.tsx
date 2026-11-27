@@ -27,7 +27,7 @@ class FakeEventSource {
 }
 
 import { CommandTable } from './CommandTable';
-import { GHOST_MS } from './Table';
+import { GHOST_MS } from './List';
 
 const settings = {
   polling: { githubSec: 60, jiraSec: 300 },
@@ -44,13 +44,13 @@ function many(n: number): SnapshotPr[] {
   return Array.from({ length: n }, (_, i) =>
     pr(`p${i + 1}`, i + 1, {
       title: `Item ${String(i + 1).padStart(2, '0')}`,
-      committedAt: day(1 + (i % 28)),
+      updatedAt: day(1 + (i % 28)),
     }),
   );
 }
 
 const rowOrder = () =>
-  [...document.querySelectorAll('tr[data-pr]')].map((r) => r.getAttribute('data-pr'));
+  [...document.querySelectorAll('article[data-pr]')].map((r) => r.getAttribute('data-pr'));
 
 function load(prs: SnapshotPr[]) {
   api.getSnapshot.mockResolvedValue(snapshot(prs));
@@ -80,9 +80,9 @@ afterEach(() => {
 
 describe('sorting', () => {
   const prs = () => [
-    pr('a', 1, { title: 'Mid', committedAt: day(20) }),
-    pr('b', 2, { title: 'Zed', committedAt: day(10) }),
-    pr('c', 3, { title: 'Add', committedAt: day(22) }),
+    pr('a', 1, { title: 'Mid', updatedAt: day(20), additions: 10, deletions: 0 }),
+    pr('b', 2, { title: 'Zed', updatedAt: day(10), additions: 100, deletions: 20 }),
+    pr('c', 3, { title: 'Add', updatedAt: day(22), additions: 1, deletions: 1 }),
   ];
 
   it('starts with the most recently updated first', async () => {
@@ -106,22 +106,23 @@ describe('sorting', () => {
     expect(rowOrder()).toEqual(['b', 'a', 'c']);
     expect(reverse).toHaveAttribute('aria-pressed', 'true');
     fireEvent.change(screen.getByRole('combobox', { name: 'Sort' }), {
-      target: { value: 'number' },
+      target: { value: 'size' },
     });
-    expect(rowOrder()).toEqual(['c', 'b', 'a']);
+    // Still reversed: the smallest change first.
+    expect(rowOrder()).toEqual(['c', 'a', 'b']);
   });
 
   it('keeps a stack together and in order', async () => {
     load([
-      pr('x', 9, { title: 'Single', committedAt: day(15) }),
+      pr('x', 9, { title: 'Single', updatedAt: day(15) }),
       pr('s1', 1, {
         title: 'Base',
-        committedAt: day(5),
+        updatedAt: day(5),
         stack: { id: 's1', position: 1, size: 2, parentId: null, parentNumber: null },
       }),
       pr('s2', 2, {
         title: 'Top',
-        committedAt: day(25),
+        updatedAt: day(25),
         stack: { id: 's1', position: 2, size: 2, parentId: 's1', parentNumber: 1 },
       }),
     ]);
@@ -169,7 +170,7 @@ describe('show switch', () => {
     load([...mixed(), pr('d1', 5, { isDraft: true, roles: ['authored'] })]);
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned two');
-    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
+    fireEvent.click(screen.getByRole('button', { name: /Ready to merge/ }));
     expect(sw()).toHaveAccessibleName(/now Everything, 5/);
     fireEvent.click(sw());
     fireEvent.click(sw());
@@ -224,16 +225,16 @@ describe('show switch', () => {
 });
 
 describe('role cues', () => {
-  it('gives each row the class of its role, and none of them a style attribute', async () => {
+  it('gives each card the class of its role, and none of them a style attribute', async () => {
     load(mixed());
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned one');
-    const cls = (id: string) => document.querySelector(`tr[data-pr="${id}"]`)!.className;
+    const cls = (id: string) => document.querySelector(`article[data-pr="${id}"]`)!.className;
     expect(cls('a1')).toMatch(/role_assigned/);
     expect(cls('o1')).toMatch(/role_authored/);
     expect(cls('b1')).toMatch(/role_both/);
     expect(cls('o1')).not.toMatch(/role_assigned|role_both/);
-    expect(document.querySelector('table [style]')).toBeNull();
+    expect(document.querySelector('article [style]')).toBeNull();
   });
 
   it('shows a legend with Assigned, Opened by me and Stack at the end of the toolbar', async () => {
@@ -272,8 +273,8 @@ describe('hidden pull requests', () => {
     fireEvent.click(sw());
     expect(sw()).toHaveAccessibleName(/now All, 3/);
     expect(rowOrder()).toContain('p2');
-    expect(document.querySelector('tr[data-pr="p2"]')!.className).toMatch(/dim/);
-    expect(document.querySelector('tr[data-pr="p1"]')!.className).not.toMatch(/dim/);
+    expect(document.querySelector('article[data-pr="p2"]')!.className).toMatch(/dim/);
+    expect(document.querySelector('article[data-pr="p1"]')!.className).not.toMatch(/dim/);
     expect(localStorage.getItem('prd-hidef')).toBe('all');
 
     fireEvent.click(sw());
@@ -336,12 +337,12 @@ describe('hidden pull requests', () => {
       await screen.findByText('Item 01');
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
       fireEvent.click(screen.getByRole('checkbox', { name: 'Hide #1' }));
-      const row = document.querySelector('tr[data-pr="p1"]')!;
+      const row = document.querySelector('article[data-pr="p1"]')!;
       expect(row.className).toMatch(/ghost/);
       expect(screen.getByRole('checkbox', { name: 'Hide #1' })).toBeChecked();
       expect(localStorage.getItem('prd-hidden')).toBeNull();
       act(() => void vi.advanceTimersByTime(GHOST_MS + 10));
-      expect(document.querySelector('tr[data-pr="p1"]')).toBeNull();
+      expect(document.querySelector('article[data-pr="p1"]')).toBeNull();
       expect(JSON.parse(localStorage.getItem('prd-hidden')!)).toEqual(['p1']);
     });
 
@@ -407,7 +408,10 @@ describe('search', () => {
     expect(rowOrder()).toEqual(['a']);
     type('nothing like this');
     expect(rowOrder()).toEqual([]);
-    expect(screen.getByText('No pull requests match the search.')).toBeInTheDocument();
+    expect(screen.getByText('Nothing here')).toBeInTheDocument();
+    expect(
+      screen.getByText('No open pull requests match these switches and filters.'),
+    ).toBeInTheDocument();
     type('');
     expect(rowOrder()).toEqual(['a', 'b', 'c']);
   });
@@ -431,7 +435,7 @@ describe('search', () => {
     fireEvent.change(search(), { target: { value: 'item 1' } });
     expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('Showing 1 to 10 of 12')).toBeInTheDocument();
-    expect(document.querySelector('dl')!.textContent).toContain('Open25');
+    expect(screen.getByRole('button', { name: /^Showing/ })).toHaveTextContent('Showing12');
   });
 });
 
@@ -491,7 +495,7 @@ describe('paging', () => {
     });
     onFirst();
     second();
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    fireEvent.click(screen.getByRole('button', { name: /Ready to merge/ }));
     onFirst();
     second();
     fireEvent.click(screen.getByRole('button', { name: /^Hidden PRs, now/ }));
@@ -500,11 +504,11 @@ describe('paging', () => {
 
   it('never splits a stack across pages', async () => {
     const prs = [
-      ...many(8).map((p) => ({ ...p, committedAt: day(28) })),
+      ...many(8).map((p) => ({ ...p, updatedAt: day(28) })),
       ...[1, 2, 3, 4].map((n) =>
         pr(`s${n}`, 100 + n, {
           title: `Stacked ${n}`,
-          committedAt: day(1),
+          updatedAt: day(1),
           stack: {
             id: 's1',
             position: n,
@@ -534,7 +538,7 @@ describe('paging', () => {
 
     load([]);
     renderWithClient(<CommandTable />);
-    await waitFor(() => expect(screen.getByText('No pull requests match.')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Nothing here')).toBeInTheDocument());
     expect(screen.queryByRole('combobox', { name: 'Pull requests per page' })).toBeNull();
   });
 });

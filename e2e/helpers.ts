@@ -125,7 +125,7 @@ export async function syncUntil(page: Page, text: string) {
   await expect(async () => {
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(
-      page.locator("tr[data-pr]").filter({ hasText: text }).first(),
+      page.locator("article[data-pr]").filter({ hasText: text }).first(),
     ).toBeVisible({ timeout: 3000 });
   }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
 }

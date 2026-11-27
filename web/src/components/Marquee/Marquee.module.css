@@ -1,0 +1,12 @@
+.mq {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* While it slides, the ellipsis would sit on top of the text. */
+.mq[data-sliding] {
+  text-overflow: clip;
+}

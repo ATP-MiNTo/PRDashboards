@@ -2,15 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import styles from './Footer.module.css';
 
 export const REPO_URL = 'https://github.com/ATP-MiNTo/PRDashboards';
-export const IDLE_MS = 400;
-/** The floating button's size, and its gap to the corner of the page. */
+/** The floating button's size, how far it stands inside the slot's right edge, and its lift above the bottom. */
 const FAB = 44;
-const EDGE = 16;
+const INSET = 2;
 const LIFT = 20;
 
 /**
- * Where the button goes: the footer slot once the footer is fully on screen, otherwise the bottom
- * right corner. Pure, so it is easy to test.
+ * Where the button goes: the footer slot once the footer is fully on screen, otherwise above the
+ * bottom edge, in line with the slot's right edge as the design has it. Pure, so it is easy to test.
  */
 export function fabPlacement(
   footer: { top: number; bottom: number },
@@ -20,7 +19,7 @@ export function fabPlacement(
   const snapped = footer.bottom <= view.height + 1 && footer.top >= 0;
   return snapped
     ? { snapped, x: slot.left, y: slot.top, size: slot.width }
-    : { snapped, x: view.width - FAB - EDGE, y: view.height - FAB - LIFT, size: FAB };
+    : { snapped, x: slot.left + slot.width - FAB - INSET, y: view.height - FAB - LIFT, size: FAB };
 }
 
 function GithubMark() {
@@ -44,11 +43,9 @@ export function Footer() {
   const fab = useRef<HTMLAnchorElement>(null);
   const [snapped, setSnapped] = useState(false);
   const [ready, setReady] = useState(false);
-  const [scrolling, setScrolling] = useState(false);
 
   useEffect(() => {
     let frame = 0;
-    let idle: ReturnType<typeof setTimeout> | undefined;
     const place = () => {
       frame = 0;
       const f = footer.current;
@@ -68,33 +65,25 @@ export function Footer() {
     const schedule = () => {
       if (frame === 0) frame = requestAnimationFrame(place);
     };
-    const onScroll = () => {
-      setScrolling(true);
-      clearTimeout(idle);
-      idle = setTimeout(() => setScrolling(false), IDLE_MS);
-      schedule();
-    };
     place();
     // Let the first position settle before transitions start, so the button does not fly in.
     const first = requestAnimationFrame(() => setReady(true));
-    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     if (footer.current?.parentElement) observer?.observe(footer.current.parentElement);
     return () => {
-      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('scroll', schedule);
       window.removeEventListener('resize', schedule);
       observer?.disconnect();
       cancelAnimationFrame(frame);
       cancelAnimationFrame(first);
-      clearTimeout(idle);
     };
   }, []);
 
   const classes = [styles.fab];
   if (snapped) classes.push(styles.snapped);
   if (ready) classes.push(styles.ready);
-  if (scrolling && !snapped) classes.push(styles.away);
 
   return (
     <>
@@ -106,7 +95,9 @@ export function Footer() {
           </span>{' '}
           by ATP-MiNTo
         </span>
-        <span className={styles.sep} aria-hidden="true" />
+        <span className={styles.sep} aria-hidden="true">
+          |
+        </span>
         <span ref={slot} className={styles.slot} />
       </footer>
       <a

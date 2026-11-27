@@ -61,7 +61,7 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 const rowOf = (page: Page, title: string) =>
-  page.locator("tr[data-pr]").filter({ hasText: title });
+  page.locator("article[data-pr]").filter({ hasText: title });
 
 test("merges and moves the ticket, with the required field", async ({
   page,
