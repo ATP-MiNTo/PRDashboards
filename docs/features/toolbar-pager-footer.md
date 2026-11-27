@@ -6,6 +6,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 How the pull request list is viewed, all in the browser over the snapshot the table already has: sorting, showing by role, hiding pull requests you do not want to see, paging, and the page footer with the GitHub button. Part of the v2 UI migration; the PRD and spec do not describe these controls.
 
+- The search box is in the header ([search.md](search.md)); on narrow screens a full-width field sits above the stat strip.
 - The toolbar sits under the stat strip, in the same row as the status filter chips (the chips stay): "Sort", a select, a square button that reverses the direction, a divider, the "Show" switch, the "Hidden PRs" switch and, at the right end, a legend. The row wraps on narrow screens (the divider is hidden there).
 - Each row has a "Hide" checkbox. The "Hidden PRs" switch picks what the list shows.
 - The legend lists the cues of the rows: "Assigned", "Opened by me" and "Stack", each with a coloured dot.
