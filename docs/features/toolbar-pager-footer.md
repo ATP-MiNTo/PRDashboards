@@ -32,7 +32,7 @@ Hidden ids that are no longer in the snapshot are ignored when read (`pruneHidde
 
 - [web/src/lib/sort.ts](../../web/src/lib/sort.ts): `SORT_OPTIONS`, `sortGroups` and `sizeOf`. Pure.
 - [web/src/lib/show.ts](../../web/src/lib/show.ts): `ShowMode`, `rolesOf`, `roleKind`, `inShow`, `showCounts`. Pure. `groupsOf` in [snapshot.ts](../../web/src/lib/snapshot.ts) takes the mode and drops the other pull requests before grouping.
-- [web/src/lib/view.ts](../../web/src/lib/view.ts): `applyHidden`, `shownIn`, `pruneHidden`, `paginate`, `pageRange`, `pageItems`, page sizes and `listStats` (the numbers of the stat tiles). Pure.
+- [web/src/lib/view.ts](../../web/src/lib/view.ts): `applyHidden`, `shownIn`, `pruneHidden`, `paginate`, `pageRange`, `pageItems`, page sizes and `listStats` (the numbers of the stat tiles: showing, ready, running, blocked, draft, stale and stacks; the clock of Stale is `ListView.now`). Pure.
 - [web/src/lib/storage.ts](../../web/src/lib/storage.ts): `readStored`, `writeStored`, `readStringList` (never throw) and `reducedMotion`.
 - [web/src/components/Toolbar/useListPrefs.ts](../../web/src/components/Toolbar/useListPrefs.ts): the view state (filter, sort, direction, show, hidden set, mode, page size, page). Every setter that changes what is listed sets the page to 1.
 - [web/src/components/Toolbar/Toolbar.tsx](../../web/src/components/Toolbar/Toolbar.tsx): the sort controls, the "Show" and "Hidden PRs" switches with their hints, and the legend.
@@ -69,7 +69,7 @@ None. Nothing here calls the server, GitHub or Jira, on mount or on a timer. The
 
 - [web/src/lib/sort.test.ts](../../web/src/lib/sort.test.ts): each sort (including size and the fallback to the last commit time), reversal, ties, stacks kept together and ranked by best member, `sizeOf`.
 - [web/src/lib/show.test.ts](../../web/src/lib/show.test.ts): the filtering table (each mode against each role set), counts, the missing-roles fallback, `groupsOf` with a mode and stacks.
-- [web/src/lib/view.test.ts](../../web/src/lib/view.test.ts): paging (stacks not split, page size changes), ranges, page items, hidden modes, pruning, stored value checks, `listStats`.
+- [web/src/lib/view.test.ts](../../web/src/lib/view.test.ts): paging (stacks not split, page size changes), ranges, page items, hidden modes, pruning, stored value checks, `listStats` (Blocked, Draft and Stale included, the three-day limit of Stale).
 - [RollSwitch.test.tsx](../../web/src/components/Toolbar/RollSwitch.test.tsx): cycling, name and count, announcement, rolling label, reduced motion.
 - [Hint.test.tsx](../../web/src/components/Toolbar/Hint.test.tsx): opens on focus and hover, closes on Escape, blur and leave, `aria-describedby`.
 - [Toolbar.test.tsx](../../web/src/components/Toolbar/Toolbar.test.tsx): the sort options, the arrow, the switches with their counts, the hints and the legend.
