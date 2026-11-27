@@ -189,7 +189,8 @@ func basePR() github.PR {
 	return github.PR{
 		ID: prID, Number: 7, State: "OPEN", Mergeable: "MERGEABLE", MergeStateStatus: "CLEAN", ReviewDecision: "APPROVED",
 		HeadRef: "feat/x", HeadSHA: "sha1", BaseRef: "main",
-		Repo: github.Repo{ID: "R1", NameWithOwner: "acme/web", SquashAllowed: true, MergeAllowed: true, RebaseAllowed: true},
+		Reviews: []github.Review{{ID: "RV1", State: "APPROVED", Author: "alice"}},
+		Repo:    github.Repo{ID: "R1", NameWithOwner: "acme/web", SquashAllowed: true, MergeAllowed: true, RebaseAllowed: true},
 	}
 }
 

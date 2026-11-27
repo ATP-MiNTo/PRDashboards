@@ -14,6 +14,9 @@ type RepoConfig struct {
 	DefaultMethod string
 	Rules         []BranchRule
 	OpenPRs       int
+	// ApprovalsRequired is how many approvals a pull request of the repo needs before it may be
+	// merged from the dashboard, 1 to 10 (1 when never set).
+	ApprovalsRequired int
 }
 
 // Repos lists every repo with its ordered branch rules, in two queries.
@@ -35,7 +38,7 @@ func (s *Store) Repo(ctx context.Context, id string) (RepoConfig, error) {
 
 func (s *Store) repos(ctx context.Context, id string) ([]RepoConfig, error) {
 	rows, err := s.r.QueryContext(ctx,
-		`SELECT r.id, r.name_with_owner, r.is_new, r.default_method,
+		`SELECT r.id, r.name_with_owner, r.is_new, r.default_method, r.approvals_required,
 		        (SELECT count(*) FROM prs p WHERE p.repo_id = r.id AND p.state = 'open')
 		 FROM repos r WHERE ? = '' OR r.id = ? ORDER BY r.name_with_owner COLLATE NOCASE, r.id`, id, id)
 	if err != nil {
@@ -46,7 +49,7 @@ func (s *Store) repos(ctx context.Context, id string) ([]RepoConfig, error) {
 	at := map[string]int{}
 	for rows.Next() {
 		var c RepoConfig
-		if err := rows.Scan(&c.ID, &c.NameWithOwner, &c.IsNew, &c.DefaultMethod, &c.OpenPRs); err != nil {
+		if err := rows.Scan(&c.ID, &c.NameWithOwner, &c.IsNew, &c.DefaultMethod, &c.ApprovalsRequired, &c.OpenPRs); err != nil {
 			return nil, err
 		}
 		c.Rules = []BranchRule{}
@@ -76,11 +79,14 @@ func (s *Store) repos(ctx context.Context, id string) ([]RepoConfig, error) {
 }
 
 // PutRepo sets the default method and replaces the whole rule list in one transaction. clearNew
-// also marks the repo as seen. It returns ErrNotFound for an unknown repo.
-func (s *Store) PutRepo(ctx context.Context, id, method string, rules []BranchRule, clearNew bool) error {
+// also marks the repo as seen. approvals is the number of approvals required, 1 to 10; 0 leaves the
+// stored value as it is. It returns ErrNotFound for an unknown repo.
+func (s *Store) PutRepo(ctx context.Context, id, method string, rules []BranchRule, clearNew bool, approvals int) error {
 	return s.Write(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`UPDATE repos SET default_method = ?, is_new = CASE WHEN ? THEN 0 ELSE is_new END WHERE id = ?`, method, clearNew, id)
+			`UPDATE repos SET default_method = ?, is_new = CASE WHEN ? THEN 0 ELSE is_new END,
+			        approvals_required = CASE WHEN ? > 0 THEN ? ELSE approvals_required END WHERE id = ?`,
+			method, clearNew, approvals, approvals, id)
 		if err != nil {
 			return err
 		}
@@ -108,13 +114,16 @@ type RepoUpdate struct {
 	Method   string
 	Rules    []BranchRule
 	ClearNew bool
+	// Approvals is the number of approvals required, 1 to 10; 0 leaves the stored value as it is.
+	Approvals int
 }
 
 type repoUpdateJSON struct {
-	ID       string       `json:"id"`
-	Method   string       `json:"method"`
-	ClearNew int          `json:"clearNew"`
-	Rules    []BranchRule `json:"rules"`
+	ID        string       `json:"id"`
+	Method    string       `json:"method"`
+	ClearNew  int          `json:"clearNew"`
+	Approvals int          `json:"approvals"`
+	Rules     []BranchRule `json:"rules"`
 }
 
 // PutRepos applies every update in one transaction with set-based statements, so there is no loop
@@ -138,7 +147,7 @@ func (s *Store) PutRepos(ctx context.Context, updates []RepoUpdate) error {
 		if rules == nil {
 			rules = []BranchRule{}
 		}
-		items = append(items, repoUpdateJSON{u.ID, u.Method, cn, rules})
+		items = append(items, repoUpdateJSON{u.ID, u.Method, cn, u.Approvals, rules})
 	}
 	payload := marshal(items)
 	return s.Write(ctx, func(tx *sql.Tx) error {
@@ -152,9 +161,11 @@ func (s *Store) PutRepos(ctx context.Context, updates []RepoUpdate) error {
 			return ErrNotFound
 		}
 		steps := []string{
-			`UPDATE repos SET default_method = u.method, is_new = CASE WHEN u.clear THEN 0 ELSE repos.is_new END
+			`UPDATE repos SET default_method = u.method, is_new = CASE WHEN u.clear THEN 0 ELSE repos.is_new END,
+			        approvals_required = CASE WHEN u.approvals > 0 THEN u.approvals ELSE repos.approvals_required END
 			 FROM (SELECT json_extract(value, '$.id') AS id, json_extract(value, '$.method') AS method,
-			              json_extract(value, '$.clearNew') AS clear FROM json_each(?)) u
+			              json_extract(value, '$.clearNew') AS clear, json_extract(value, '$.approvals') AS approvals
+			       FROM json_each(?)) u
 			 WHERE repos.id = u.id`,
 			`DELETE FROM repo_branch_rules WHERE repo_id IN (SELECT json_extract(value, '$.id') FROM json_each(?))`,
 			`INSERT INTO repo_branch_rules (repo_id, position, pattern, method)

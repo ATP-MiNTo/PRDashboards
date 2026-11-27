@@ -24,6 +24,12 @@ const (
 	CodeMergeFailed  = "merge_failed"
 	CodeMergePending = "merge_pending"
 
+	// Codes of the review actions (approve, request changes, mark ready), see package review.
+	CodeNotDraft       = "not_draft"
+	CodeOwnPullRequest = "own_pull_request"
+	CodeBodyRequired   = "body_required"
+	CodeReviewRejected = "review_rejected"
+
 	CodeNotFound         = "not_found"
 	CodeNotConnected     = "not_connected"
 	CodeMethodNotAllowed = "method_not_allowed"
@@ -69,6 +75,9 @@ type Linked struct {
 	NameWithOwner string
 	Number        int
 	Tickets       []string
+	// ApprovalsRequired is the repository's approvals setting as the current snapshot has it; a
+	// value outside 1 to 10 counts as the default of 1 (NeedOf).
+	ApprovalsRequired int
 }
 
 // Ticket is one linked ticket as confirmed in the merge panel. An empty TransitionID leaves the

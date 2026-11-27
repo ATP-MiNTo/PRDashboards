@@ -25,7 +25,7 @@ func TestSnapshotCarriesTheResolvedMergeMethod(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if err := r.store.PutRepo(ctx, "R-acme/web", "rebase", []store.BranchRule{{Pattern: "feat/*", Method: "merge"}}, true); err != nil {
+	if err := r.store.PutRepo(ctx, "R-acme/web", "rebase", []store.BranchRule{{Pattern: "feat/*", Method: "merge"}}, true, 0); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.p.Relink(ctx); err != nil {

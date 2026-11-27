@@ -118,7 +118,7 @@ func mergeRepos(repos []store.RepoConfig) map[string]merge.Repo {
 		for i, rule := range r.Rules {
 			rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
 		}
-		out[r.ID] = merge.Repo{Default: merge.Method(r.DefaultMethod), IsNew: r.IsNew, Rules: rules}
+		out[r.ID] = merge.Repo{Default: merge.Method(r.DefaultMethod), IsNew: r.IsNew, Rules: rules, Approvals: r.ApprovalsRequired}
 	}
 	return out
 }
@@ -130,7 +130,11 @@ func newRepo(method string) merge.Repo {
 	for i, rule := range store.SeedRules {
 		rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
 	}
-	return merge.Repo{Default: merge.Method(method), IsNew: true, Rules: rules}
+	return merge.Repo{Default: merge.Method(method), IsNew: true, Rules: rules, Approvals: merge.DefaultApprovals}
+}
+
+func approvalsOf(a merge.Approvals) gen.Approvals {
+	return gen.Approvals{Have: a.Have, Need: a.Need, ChangesRequested: a.ChangesRequested}
 }
 
 func resolutionOf(r merge.Resolution) gen.MethodResolution {
@@ -173,6 +177,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		Tickets:        make([]gen.SnapshotTicket, 0, len(l.res.Links)),
 		MergeMethod: resolutionOf(merge.Resolve(repo, pr.BaseRef,
 			merge.Allowed{Squash: pr.Repo.SquashAllowed, Merge: pr.Repo.MergeAllowed, Rebase: pr.Repo.RebaseAllowed})),
+		Approvals: approvalsOf(merge.CountApprovals(pr.Reviews, repo.Approvals)),
 	}
 	if d := gen.SnapshotPrReviewDecision(pr.ReviewDecision); d != "" {
 		row.ReviewDecision = &d
@@ -215,6 +220,27 @@ func fillRoles(s *gen.Snapshot) bool {
 		if len(s.Prs[i].Roles) == 0 {
 			s.Prs[i].Roles, changed = rolesOf(nil), true
 		}
+	}
+	return changed
+}
+
+// fillApprovals gives every pull request of a snapshot stored before approvals existed the tally
+// of its stored reviews against need(repoID), which is the repository's setting (1 when unknown).
+// It reports whether it changed anything. The next refresh replaces them.
+func fillApprovals(s *gen.Snapshot, need func(repoID string) int) bool {
+	changed := false
+	for i := range s.Prs {
+		if s.Prs[i].Approvals.Need != 0 {
+			continue
+		}
+		reviews := make([]github.Review, len(s.Prs[i].Reviews))
+		for j, r := range s.Prs[i].Reviews {
+			reviews[j] = github.Review{ID: r.Id, State: r.State}
+			if r.Author != nil {
+				reviews[j].Author = *r.Author
+			}
+		}
+		s.Prs[i].Approvals, changed = approvalsOf(merge.CountApprovals(reviews, need(s.Prs[i].Repo.Id))), true
 	}
 	return changed
 }

@@ -76,6 +76,9 @@ type Repo struct {
 	Default Method
 	IsNew   bool
 	Rules   []Rule
+	// Approvals is how many approvals a pull request needs before it may merge; outside 1 to 10 it
+	// means the default of 1 (NeedOf).
+	Approvals int
 }
 
 // Resolution is the method to use for one pull request.

@@ -42,9 +42,9 @@ func toGenStep(s merge.Step) gen.MergeStep {
 	return out
 }
 
-// mergeProblem writes the 409 of a merge that was refused, with the state GitHub just reported.
-func mergeProblem(e *merge.Error) gen.MergePr409ApplicationProblemPlusJSONResponse {
-	out := gen.MergePr409ApplicationProblemPlusJSONResponse{
+// conflictProblem is the 409 of an action that was refused, with the state GitHub just reported.
+func conflictProblem(e *merge.Error) gen.MergeProblem {
+	out := gen.MergeProblem{
 		Type: "/problems/" + e.Code, Title: http.StatusText(http.StatusConflict), Status: http.StatusConflict,
 		Code: e.Code, Detail: strp(e.Detail),
 	}
@@ -57,10 +57,16 @@ func mergeProblem(e *merge.Error) gen.MergePr409ApplicationProblemPlusJSONRespon
 	return out
 }
 
+// mergeProblem writes the 409 of a merge that was refused.
+func mergeProblem(e *merge.Error) gen.MergePr409ApplicationProblemPlusJSONResponse {
+	return gen.MergePr409ApplicationProblemPlusJSONResponse(conflictProblem(e))
+}
+
 func conflictCode(code string) bool {
 	switch code {
 	case merge.CodeHeadMoved, merge.CodeNotMergeable, merge.CodeStackBaseOpen, merge.CodeDraft, merge.CodeNotOpen,
-		merge.CodeTransitionUnavailable, merge.CodeNotConnected, merge.CodeMergeFailed, merge.CodeMergePending:
+		merge.CodeTransitionUnavailable, merge.CodeNotConnected, merge.CodeMergeFailed, merge.CodeMergePending,
+		merge.CodeNotDraft, merge.CodeOwnPullRequest:
 		return true
 	}
 	return false
@@ -69,6 +75,11 @@ func conflictCode(code string) bool {
 // mergeFailure maps an error of the merge service to a problem. Errors that are neither a refusal
 // nor a provider failure are internal.
 func (h *handlers) mergeFailure(ctx context.Context, err error) error {
+	return h.providerFailure(ctx, "merge", err)
+}
+
+// providerFailure maps what GitHub or Jira answered to a problem, for the action named op.
+func (h *handlers) providerFailure(ctx context.Context, op string, err error) error {
 	var rl *github.RateLimitedError
 	var blocked *github.OrgBlocked
 	var perm *github.PermissionError
@@ -80,13 +91,13 @@ func (h *handlers) mergeFailure(ctx context.Context, err error) error {
 	case errors.As(err, &rl):
 		return problem(http.StatusTooManyRequests, mw.CodeRateLimited, "GitHub's rate limit is used up")
 	case errors.As(err, &perm):
-		h.cfg.Log.WarnContext(ctx, "merge refused: missing token permission", "err", err, "accepted", perm.Accepted)
+		h.cfg.Log.WarnContext(ctx, op+" refused: missing token permission", "err", err, "accepted", perm.Accepted)
 		return problem(http.StatusForbidden, codeMissingPermission, perm.Detail())
 	case errors.As(err, &blocked):
-		h.cfg.Log.WarnContext(ctx, "merge refused: organization blocked the token", "err", err, "reason", blocked.Reason)
+		h.cfg.Log.WarnContext(ctx, op+" refused: organization blocked the token", "err", err, "reason", blocked.Reason)
 		return problem(http.StatusForbidden, codeOrgBlocked, blockedDetail(blocked, "An organization has not authorized the token"))
 	case errors.As(err, &apiErr), errors.As(err, &jiraErr), errors.As(err, &netErr), errors.As(err, &urlErr):
-		h.cfg.Log.ErrorContext(ctx, "merge call failed", "err", err)
+		h.cfg.Log.ErrorContext(ctx, op+" call failed", "err", err)
 		return problem(http.StatusBadGateway, codeUpstream, "GitHub or Jira could not be reached")
 	}
 	return err

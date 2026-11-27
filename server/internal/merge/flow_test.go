@@ -154,6 +154,12 @@ func TestMergeRefusals(t *testing.T) {
 		{"behind", func(r *rig) { r.gh.pr.MergeStateStatus = "BEHIND" }, merge.CodeNotMergeable},
 		{"review required", func(r *rig) { r.gh.pr.ReviewDecision = "REVIEW_REQUIRED" }, merge.CodeNotMergeable},
 		{"changes requested", func(r *rig) { r.gh.pr.ReviewDecision = "CHANGES_REQUESTED" }, merge.CodeNotMergeable},
+		{"too few approvals", func(r *rig) { r.snapshot.linked[prID] = withApprovals(r.snapshot.linked[prID], 2) }, merge.CodeNotMergeable},
+		{"no approval at all", func(r *rig) { r.gh.pr.Reviews = nil }, merge.CodeNotMergeable},
+		{"changes requested by a reviewer", func(r *rig) {
+			r.gh.pr.Reviews = []github.Review{{ID: "RV2", State: "CHANGES_REQUESTED", Author: "bob"}, {ID: "RV1", State: "APPROVED", Author: "alice"}}
+			r.gh.pr.ReviewDecision = "CHANGES_REQUESTED"
+		}, merge.CodeNotMergeable},
 		{"stack base still open", func(r *rig) {
 			r.gh.pr.BaseRef = "feat/base"
 			r.snapshot.refs["R1"] = append(r.snapshot.refs["R1"], merge.Ref{ID: "PR_0", Number: 6, Head: "feat/base", Base: "main"})
@@ -178,6 +184,33 @@ func TestMergeRefusals(t *testing.T) {
 				t.Fatalf("a refused merge refreshes the snapshot: %d", r.refreshes.Load())
 			}
 		})
+	}
+}
+
+func withApprovals(l merge.Linked, n int) merge.Linked {
+	l.ApprovalsRequired = n
+	return l
+}
+
+func TestMergeNamesTheMissingApprovals(t *testing.T) {
+	r := newRig(t)
+	r.snapshot.linked[prID] = withApprovals(r.snapshot.linked[prID], 2)
+	_, err := r.svc.Merge(context.Background(), request())
+	e := wantError(t, err, merge.CodeNotMergeable)
+	if e.Detail != "Needs 2 approvals, has 1" {
+		t.Fatalf("%q", e.Detail)
+	}
+	if r.gh.mergeCount() != 0 {
+		t.Fatal("merged without enough approvals")
+	}
+}
+
+func TestMergeWithEnoughApprovalsGoesThrough(t *testing.T) {
+	r := newRig(t)
+	r.snapshot.linked[prID] = withApprovals(r.snapshot.linked[prID], 2)
+	r.gh.pr.Reviews = append(r.gh.pr.Reviews, github.Review{ID: "RV2", State: "APPROVED", Author: "bob"})
+	if _, err := r.svc.Merge(context.Background(), request()); err != nil {
+		t.Fatal(err)
 	}
 }
 

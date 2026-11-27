@@ -20,6 +20,16 @@ var _ poller.Accounts = accounts{}
 
 func (a accounts) GitHubToken(ctx context.Context) (string, error) { return a.oauth.GitHubAccess(ctx) }
 
+// GitHubLogin is the login of the connected GitHub account, empty when there is none. Nothing is
+// sent to GitHub.
+func (a accounts) GitHubLogin(context.Context) string {
+	tok, connected, err := a.oauth.GitHubAccount()
+	if err != nil || !connected {
+		return ""
+	}
+	return tok.Login
+}
+
 // JiraSite returns the selected site, or the only one the account can reach.
 func (a accounts) JiraSite(ctx context.Context) (jira.Site, error) {
 	tok, connected, err := a.oauth.AtlassianAccount()
