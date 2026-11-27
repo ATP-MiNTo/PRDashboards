@@ -129,13 +129,15 @@ type Poller struct {
 	// sum is the fingerprint of the current snapshot, and sumOK says it was computed.
 	sum   [sha256.Size]byte
 	sumOK bool
-	runs  int64
-	extra []string
-	gh    ghData
-	ls    []linked
-	jira  jiraData
-	ghSrc gen.SourceStatus
-	rl    github.RateLimit
+	// lastPrune is when old rows were last pruned, zero before the first prune.
+	lastPrune time.Time
+	runs      int64
+	extra     []string
+	gh        ghData
+	ls        []linked
+	jira      jiraData
+	ghSrc     gen.SourceStatus
+	rl        github.RateLimit
 
 	lastGH, lastJira       time.Time
 	nextGH, nextJira       time.Time

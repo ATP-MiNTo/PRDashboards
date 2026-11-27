@@ -17,6 +17,10 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
+// PruneEvery is the shortest time between two prunes of old rows: the first refresh after a start
+// prunes, then one a day.
+const PruneEvery = 24 * time.Hour
+
 // ErrNoSite means Jira is connected but no site is selected.
 var ErrNoSite = jira.ErrNoSite
 
@@ -130,8 +134,12 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 		}
 	}
 	var saveErr error
+	prune := false
 	if fetched {
-		saveErr = p.cfg.Store.SaveRefresh(ctx, store.Refresh{
+		p.mu.Lock()
+		prune = p.lastPrune.IsZero() || now.Sub(p.lastPrune) >= PruneEvery
+		p.mu.Unlock()
+		saveErr = p.cfg.Store.SaveRefresh(ctx, store.Refresh{Prune: prune,
 			Now: now, DefaultMethod: st.DefaultMethod, Repos: repoRows(p.gh.prs), PRs: prRows(p.gh.prs),
 			Links: linkRows(ls), Resolved: resolved, Version: version, Snapshot: data, Sync: out.write,
 		})
@@ -141,6 +149,11 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 		}
 	} else {
 		saveErr = p.cfg.Store.SaveSync(ctx, version, data, now, out.write)
+	}
+	if prune && saveErr == nil {
+		p.mu.Lock()
+		p.lastPrune = now
+		p.mu.Unlock()
 	}
 	if !unchanged {
 		p.cur.Store(&Published{Snapshot: snap, JSON: raw, Gzip: data})

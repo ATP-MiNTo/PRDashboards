@@ -53,6 +53,9 @@ type Refresh struct {
 	Version       int64
 	// Snapshot is the compressed snapshot; empty leaves the stored one as it is.
 	Snapshot []byte
+	// Prune asks for the rows older than Retention to be dropped in this transaction. The poller
+	// sets it at most once a day.
+	Prune bool
 	// Sync is the result of the rule evaluation of this refresh, written in the same transaction.
 	Sync SyncWrite
 }
@@ -86,7 +89,7 @@ func ids[T any](rows []T, id func(T) string) []string {
 }
 
 // Retention is how long merged and closed pull requests, the activity log and spent rule firings
-// are kept. SaveRefresh drops what is older.
+// are kept. SaveRefresh drops what is older when asked (Refresh.Prune).
 const Retention = 90 * 24 * time.Hour
 
 const snapshotUpsert = `INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
@@ -155,6 +158,9 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 		}
 		if err := writeSync(ctx, tx, r.Now, r.Sync); err != nil {
 			return err
+		}
+		if !r.Prune {
+			return nil
 		}
 		return prune(ctx, tx, r.Now.Add(-Retention))
 	})

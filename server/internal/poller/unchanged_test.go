@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
 )
 
 func TestUnchangedRefreshKeepsVersionBlobAndEventButAnnouncesTheSync(t *testing.T) {
@@ -141,5 +142,31 @@ func TestActionRefreshAsksJiraOnlyForTheActedKeysTheSnapshotShows(t *testing.T) 
 	}
 	if open, _ := r.gh.calls(); open != 3 {
 		t.Fatalf("GitHub is asked once per action refresh: %d", open)
+	}
+}
+
+func TestOldRowsArePrunedOnTheFirstRefreshAndThenOnceADay(t *testing.T) {
+	r := newRig(t, pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a"))
+	prunes := func() int {
+		r.store.mu.Lock()
+		defer r.store.mu.Unlock()
+		return r.store.prunes
+	}
+	r.sync()
+	r.clock.Advance(time.Hour)
+	r.sync()
+	r.clock.Advance(poller.PruneEvery - 2*time.Hour)
+	r.sync()
+	if n := prunes(); n != 1 {
+		t.Fatalf("the first refresh prunes and the next ones within 24 h do not: %d", n)
+	}
+	r.clock.Advance(2 * time.Hour)
+	r.sync()
+	if n := prunes(); n != 2 {
+		t.Fatalf("a refresh 24 h after the last prune prunes again: %d", n)
+	}
+	r.sync()
+	if n := prunes(); n != 2 {
+		t.Fatalf("%d", n)
 	}
 }

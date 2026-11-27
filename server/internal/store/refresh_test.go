@@ -215,6 +215,14 @@ func TestSaveRefreshPrunesOldMergedClosedPullRequestsActivityAndFirings(t *testi
 	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
 		t.Fatal(err)
 	}
+	if n := count(t, path, `SELECT count(*) FROM prs WHERE state <> 'open'`); n != 5 {
+		t.Fatalf("a refresh that is not asked to prune keeps everything: %d", n)
+	}
+	pr := baseRefresh(clock.Now())
+	pr.Prune = true
+	if err := s.SaveRefresh(ctx, pr); err != nil {
+		t.Fatal(err)
+	}
 	ids := func(q string) string {
 		rows, err := db.Query(q)
 		if err != nil {

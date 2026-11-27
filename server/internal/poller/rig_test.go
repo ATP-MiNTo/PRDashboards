@@ -27,6 +27,7 @@ type countingStore struct {
 	snapshotOnly int
 	syncWrites   int
 	syncReads    int
+	prunes       int
 	settingReads int
 }
 
@@ -47,6 +48,9 @@ func (s *countingStore) GetSettings(ctx context.Context) (store.Settings, error)
 func (s *countingStore) SaveRefresh(ctx context.Context, r store.Refresh) error {
 	s.mu.Lock()
 	s.refreshes++
+	if r.Prune {
+		s.prunes++
+	}
 	s.mu.Unlock()
 	return s.Store.SaveRefresh(ctx, r)
 }
