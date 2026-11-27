@@ -27,7 +27,7 @@ const repo = (id: string, name: string, over: Partial<RepoSettings> = {}): RepoS
   nameWithOwner: name,
   isNew: false,
   openPrs: 2,
-  approvalsRequired: 1,
+  approvalsRequired: 0,
   defaultMethod: 'squash',
   inheritMethod: true,
   deleteBranch: 'default',

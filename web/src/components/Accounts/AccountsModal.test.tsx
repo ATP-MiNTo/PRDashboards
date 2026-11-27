@@ -93,7 +93,7 @@ describe('AccountsModal', () => {
       within(table)
         .getAllByRole('columnheader')
         .map((h) => h.textContent),
-    ).toEqual(['Repository', 'Source', 'Why']);
+    ).toEqual(['Repository', 'Source']);
     expect(within(table).getByText('acme/web')).toBeInTheDocument();
     expect(within(table).getAllByText('GitHub App')).toHaveLength(2);
   });

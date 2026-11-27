@@ -155,7 +155,10 @@ func TestMergeRefusals(t *testing.T) {
 		{"review required", func(r *rig) { r.gh.pr.ReviewDecision = "REVIEW_REQUIRED" }, merge.CodeNotMergeable},
 		{"changes requested", func(r *rig) { r.gh.pr.ReviewDecision = "CHANGES_REQUESTED" }, merge.CodeNotMergeable},
 		{"too few approvals", func(r *rig) { r.snapshot.linked[prID] = withApprovals(r.snapshot.linked[prID], 2) }, merge.CodeNotMergeable},
-		{"no approval at all", func(r *rig) { r.gh.pr.Reviews = nil }, merge.CodeNotMergeable},
+		{"no approval at all when one is required", func(r *rig) {
+			r.snapshot.linked[prID] = withApprovals(r.snapshot.linked[prID], 1)
+			r.gh.pr.Reviews = nil
+		}, merge.CodeNotMergeable},
 		{"changes requested by a reviewer", func(r *rig) {
 			r.gh.pr.Reviews = []github.Review{{ID: "RV2", State: "CHANGES_REQUESTED", Author: "bob"}, {ID: "RV1", State: "APPROVED", Author: "alice"}}
 			r.gh.pr.ReviewDecision = "CHANGES_REQUESTED"

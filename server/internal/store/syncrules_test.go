@@ -95,7 +95,7 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	if len(st.Merged) != 0 || st.ReadySHA["P1"] != "aaa" || st.ReadySHA["P3"] != "" || len(st.ReadySHA) != 3 {
 		t.Fatalf("open PRs only, a draft has no ready sha: %+v", st)
 	}
-	if len(st.ApprovalsNeed) == 0 || st.ApprovalsNeed["R1"] != 1 {
+	if len(st.ApprovalsNeed) != 2 || st.ApprovalsNeed["R1"] != 0 {
 		t.Fatalf("each repo carries the approvals it requires: %+v", st.ApprovalsNeed)
 	}
 

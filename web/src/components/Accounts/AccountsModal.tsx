@@ -14,7 +14,7 @@ import {
   useSettings,
   useSetup,
 } from '@/api/queries';
-import { SOURCE_NAME, SOURCE_WHY, siteHost, sourceOf, type Source } from '@/lib/accounts';
+import { SOURCE_NAME, siteHost, sourceOf, type Source } from '@/lib/accounts';
 import { describeProblem } from '@/lib/problems';
 import { Modal } from '../Modal/Modal';
 import { ModalHead } from '../Modal/ModalHead';
@@ -229,7 +229,6 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
                     <tr>
                       <th scope="col">Repository</th>
                       <th scope="col">Source</th>
-                      <th scope="col">Why</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -243,7 +242,6 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
                             {SOURCE_NAME[source]}
                           </span>
                         </td>
-                        <td className={styles.why}>{SOURCE_WHY[source]}</td>
                       </tr>
                     ))}
                   </tbody>

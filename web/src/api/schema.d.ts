@@ -836,7 +836,7 @@ export interface components {
             pattern: string;
             method: components["schemas"]["MergeMethodName"];
         };
-        /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set. */
+        /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required. */
         ApprovalsRequired: number;
         /**
          * @description Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.

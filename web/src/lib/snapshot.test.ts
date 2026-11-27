@@ -56,11 +56,17 @@ describe('approvalsBlock', () => {
     expect(approvalsBlock({ have: 2, need: 2, changesRequested: 0 })).toBeNull();
   });
 
-  it('treats a need outside 1 to 10 as the default of one', () => {
-    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBe(
+  it('never blocks a repository that requires no approval', () => {
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 1 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: 1, changesRequested: 0 })).toBe(
       'Needs 1 approvals, has 0',
     );
-    expect(approvalsBlock({ have: 1, need: 11, changesRequested: 0 })).toBeNull();
+  });
+
+  it('treats a need outside 0 to 10 as the default of none', () => {
+    expect(approvalsBlock({ have: 0, need: 11, changesRequested: 0 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: -1, changesRequested: 0 })).toBeNull();
   });
 });
 

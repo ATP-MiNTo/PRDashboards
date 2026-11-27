@@ -37,6 +37,25 @@ describe('reviewBadge', () => {
     );
   });
 
+  it.each([
+    [{ have: 0, need: 0, changesRequested: 0 }, 'wait', 'Waiting', 'No review yet.'],
+    [{ have: 1, need: 0, changesRequested: 0 }, 'ok', 'Approve', '1 reviewer approved.'],
+    [{ have: 3, need: 0, changesRequested: 0 }, 'ok', 'Approve', '3 reviewers approved.'],
+    [
+      { have: 1, need: 0, changesRequested: 1 },
+      'change',
+      'Change',
+      '1 reviewer requested changes.',
+    ],
+  ] as const)(
+    '%j, with nothing required, says what the reviewers did and no rule',
+    (approvals, tone, label, tip) => {
+      const badge = reviewBadge(approvals);
+      expect(badge).toEqual({ tone, label, tip });
+      expect(`${badge.label} ${badge.tip}`).not.toMatch(/needs|\/0|0 approval/i);
+    },
+  );
+
   it('starts the tooltip with what the viewer did', () => {
     expect(reviewBadge({ have: 1, need: 1, changesRequested: 0 }, 'approved').tip).toMatch(
       /^You approved\. /,

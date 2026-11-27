@@ -541,9 +541,10 @@ func TestNoReviewYetAndWaitingApprovalsUseTheRepoApprovalsSetting(t *testing.T) 
 		t.Fatalf("only the ready pull request nobody reviewed: %v", got)
 	}
 	if got := preview(rules.WaitingApprovals); len(got) != 0 {
-		t.Fatalf("one approval is enough with the default of 1: %v", got)
+		t.Fatalf("a repo that requires nothing never waits: %v", got)
 	}
-	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, 2); err != nil {
+	two := 2
+	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, &two); err != nil {
 		t.Fatal(err)
 	}
 	if got := preview(rules.WaitingApprovals); !slices.Equal(got, []string{"INP-1"}) {

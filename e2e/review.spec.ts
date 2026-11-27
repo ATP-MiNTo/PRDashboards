@@ -146,7 +146,7 @@ test("a repository that needs two approvals blocks the merge until the second on
   page,
   request,
 }) => {
-  // The setting is stored with the app, not with the fakes: start from the default.
+  // The setting is stored with the app, not with the fakes: start from one approval.
   expect((await setApprovals(page, 1)).status).toBe(200);
   expect((await snapshotPr(page, 31))?.approvals).toEqual({
     have: 1,

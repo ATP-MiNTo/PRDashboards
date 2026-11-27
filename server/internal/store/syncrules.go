@@ -57,7 +57,8 @@ type SyncState struct {
 	Merged []MergedPR
 	// ReadySHA maps an open pull request to the head commit it had when it became ready.
 	ReadySHA map[string]string
-	// ApprovalsNeed maps a repository id to the approvals it requires (1 to 10).
+	// ApprovalsNeed maps a repository id to the approvals it requires (0 to 10, 0 when
+	// nothing is required).
 	ApprovalsNeed map[string]int
 }
 

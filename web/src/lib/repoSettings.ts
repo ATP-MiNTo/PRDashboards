@@ -15,7 +15,9 @@ export const SEED_RULES: readonly BranchRule[] = [
 ];
 
 export const MAX_RULES = 50;
-export const MIN_APPROVALS = 1;
+/** 0 means no approval is required, and it is what a repository has until someone sets it. */
+export const MIN_APPROVALS = 0;
+export const DEFAULT_APPROVALS = 0;
 export const MAX_APPROVALS = 10;
 
 const PATTERN = /^[A-Za-z0-9._/*-]{1,200}$/;
@@ -37,6 +39,23 @@ export interface RepoDraft {
 export type MethodChoice = 'default' | MergeMethodName;
 
 export const DELETE_CHOICES: readonly DeleteBranchChoice[] = ['default', 'yes', 'no'];
+
+/** A delete-branch choice that is a value, not "use the default". */
+export type ExplicitDelete = Exclude<DeleteBranchChoice, 'default'>;
+
+/** The explicit delete-branch choice the default stands for now (No while the default is unknown). */
+export const deleteDefaultOf = (globalDelete: boolean | undefined): ExplicitDelete =>
+  globalDelete ? 'yes' : 'no';
+
+/**
+ * The draft after a method roll. A method that is chosen is also the one the repository keeps
+ * (`ownMethod`) while it follows the default, so turning the default off again returns to it.
+ */
+export function withMethod(d: RepoDraft, method: MethodChoice): RepoDraft {
+  if (method === 'default')
+    return d.method === 'default' ? d : { ...d, method, ownMethod: d.method };
+  return { ...d, method, ownMethod: method };
+}
 
 /** Whether two lists of rules say the same, whatever order the keys of each rule came in. */
 export const sameRules = (a: readonly BranchRule[], b: readonly BranchRule[]): boolean =>
@@ -116,21 +135,21 @@ export function methodChoices(allowed: AllowedMethods, current: MethodChoice): M
   return ['default', ...METHOD_ORDER.filter((m) => allowed[m] || m === current)];
 }
 
-/** One step of the approvals field, held between 1 and 10. */
+/** One step of the approvals field, held between 0 and 10. */
 export function stepApprovals(n: number, dir: 1 | -1): number {
   return Math.min(MAX_APPROVALS, Math.max(MIN_APPROVALS, n + dir));
 }
 
 /**
- * Whether a repository has settings of its own: a delete-branch choice, a method of its own, more
- * than one approval, or branch rules other than the ones every repository starts with. It is the
+ * Whether a repository has settings of its own: a delete-branch choice, a method of its own, any
+ * approval required, or branch rules other than the ones every repository starts with. It is the
  * blue gear in the sidebar.
  */
 export function isCustom(r: RepoSettings): boolean {
   return (
     r.deleteBranch !== 'default' ||
     !r.inheritMethod ||
-    r.approvalsRequired !== MIN_APPROVALS ||
+    r.approvalsRequired !== DEFAULT_APPROVALS ||
     !sameRules(r.branchRules, SEED_RULES)
   );
 }

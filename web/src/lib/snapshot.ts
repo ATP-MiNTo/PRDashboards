@@ -66,10 +66,11 @@ export interface Block {
 
 /**
  * Why the approvals alone keep a pull request from merging, or null. The words are the server's
- * (`merge.Approvals.Block` in Go), which refuses the merge with the same text.
+ * (`merge.Approvals.Block` in Go), which refuses the merge with the same text. A repository that
+ * requires none (0) never blocks.
  */
 export function approvalsBlock(a: Approvals): string | null {
-  const need = a.need >= 1 && a.need <= 10 ? a.need : 1;
+  const need = a.need >= 0 && a.need <= 10 ? a.need : 0;
   return a.have >= need ? null : `Needs ${need} approvals, has ${a.have}`;
 }
 

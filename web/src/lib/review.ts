@@ -8,7 +8,10 @@ export type ReviewTone = 'ok' | 'wait' | 'change';
 
 export interface ReviewBadge {
   tone: ReviewTone;
-  /** "Approve", "Approve 1/2", "Waiting 0/2" or "Change 1/2": the fraction shows when more than one approval is needed. */
+  /**
+   * "Approve", "Approve 1/2", "Waiting 0/2" or "Change 1/2": the fraction shows when more than one
+   * approval is needed, and never when none is.
+   */
   label: string;
   /** The tooltip: who approved, then the rule of the repository. */
   tip: string;
@@ -31,12 +34,16 @@ export function myReview(pr: Pick<SnapshotPr, 'reviews'>, login: string | undefi
   return mine.state === 'APPROVED' ? 'approved' : 'changes';
 }
 
-/** The badge of the Review cell, from the counts the server computed. */
+/**
+ * The badge of the Review cell, from the counts the server computed. A repository that requires no
+ * approval (0) says what the reviewers did and never mentions a requirement: no fraction, no rule.
+ */
 export function reviewBadge(a: Approvals, mine: MyReview = null): ReviewBadge {
   const need = a.need;
-  const frac = need > 1;
   const you =
     mine === 'approved' ? 'You approved. ' : mine === 'changes' ? 'You requested changes. ' : '';
+  if (need === 0) return unrequiredBadge(a, you);
+  const frac = need > 1;
   const rule = `This repo needs ${need} ${plural(need, 'approval')} to merge.`;
   if (a.changesRequested > 0) {
     return {
@@ -64,6 +71,24 @@ export function reviewBadge(a: Approvals, mine: MyReview = null): ReviewBadge {
     label: frac ? `Waiting 0/${need}` : 'Waiting',
     tip: `${you}Waiting on ${need} ${plural(need, 'reviewer')}. ${rule}`,
   };
+}
+
+function unrequiredBadge(a: Approvals, you: string): ReviewBadge {
+  if (a.changesRequested > 0) {
+    return {
+      tone: 'change',
+      label: 'Change',
+      tip: `${you}${a.changesRequested} ${plural(a.changesRequested, 'reviewer')} requested changes.`,
+    };
+  }
+  if (a.have > 0) {
+    return {
+      tone: 'ok',
+      label: 'Approve',
+      tip: `${you}${a.have} ${plural(a.have, 'reviewer')} approved.`,
+    };
+  }
+  return { tone: 'wait', label: 'Waiting', tip: `${you}No review yet.` };
 }
 
 export interface ReviewAccess {

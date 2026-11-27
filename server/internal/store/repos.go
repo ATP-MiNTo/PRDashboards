@@ -15,7 +15,7 @@ type RepoConfig struct {
 	Rules         []BranchRule
 	OpenPRs       int
 	// ApprovalsRequired is how many approvals a pull request of the repo needs before it may be
-	// merged from the dashboard, 1 to 10 (1 when never set).
+	// merged from the dashboard, 0 to 10 (0, nothing required, when never set).
 	ApprovalsRequired int
 	// InheritMethod is true when the repo follows the global default method (Settings
 	// defaultMethodForNewRepos) instead of its own DefaultMethod, which is then kept but unused.
@@ -86,10 +86,10 @@ func (s *Store) repos(ctx context.Context, id string) ([]RepoConfig, error) {
 }
 
 // PutRepo sets the default method and replaces the whole rule list in one transaction. clearNew
-// also marks the repo as seen. approvals is the number of approvals required, 1 to 10; 0 leaves the
+// also marks the repo as seen. approvals is the number of approvals required, 0 to 10; nil leaves the
 // stored value as it is. The repo uses the method itself, and the delete-branch choice stays as it is. It
 // returns ErrNotFound for an unknown repo.
-func (s *Store) PutRepo(ctx context.Context, id, method string, rules []BranchRule, clearNew bool, approvals int) error {
+func (s *Store) PutRepo(ctx context.Context, id, method string, rules []BranchRule, clearNew bool, approvals *int) error {
 	return s.PutRepos(ctx, []RepoUpdate{{ID: id, Method: method, Rules: rules, ClearNew: clearNew, Approvals: approvals}})
 }
 
@@ -99,8 +99,9 @@ type RepoUpdate struct {
 	Method   string
 	Rules    []BranchRule
 	ClearNew bool
-	// Approvals is the number of approvals required, 1 to 10; 0 leaves the stored value as it is.
-	Approvals int
+	// Approvals is the number of approvals required, 0 to 10; nil leaves the stored value as it is
+	// (0 is a value of its own: nothing required).
+	Approvals *int
 	// Inherit sets whether the repo follows the global default method. Like Method it is replaced by
 	// every update, so false means the repo uses Method itself.
 	Inherit bool
@@ -112,7 +113,7 @@ type repoUpdateJSON struct {
 	ID           string       `json:"id"`
 	Method       string       `json:"method"`
 	ClearNew     int          `json:"clearNew"`
-	Approvals    int          `json:"approvals"`
+	Approvals    *int         `json:"approvals"`
 	Inherit      int          `json:"inherit"`
 	DeleteBranch string       `json:"deleteBranch"`
 	Rules        []BranchRule `json:"rules"`
@@ -158,7 +159,7 @@ func (s *Store) PutRepos(ctx context.Context, updates []RepoUpdate) error {
 		}
 		steps := []string{
 			`UPDATE repos SET default_method = u.method, is_new = CASE WHEN u.clear THEN 0 ELSE repos.is_new END,
-			        approvals_required = CASE WHEN u.approvals > 0 THEN u.approvals ELSE repos.approvals_required END,
+			        approvals_required = CASE WHEN u.approvals IS NOT NULL THEN u.approvals ELSE repos.approvals_required END,
 			        method_inherit = u.inherit,
 			        delete_branch = CASE WHEN u.delete_branch <> '' THEN u.delete_branch ELSE repos.delete_branch END
 			 FROM (SELECT json_extract(value, '$.id') AS id, json_extract(value, '$.method') AS method,

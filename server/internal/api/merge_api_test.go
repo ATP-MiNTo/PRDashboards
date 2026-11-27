@@ -300,8 +300,8 @@ func TestReposListGetAndPut(t *testing.T) {
 	if triggers, _, _ := g.p.counts(); triggers != 0 {
 		t.Fatal("saving settings must not start an outside refresh")
 	}
-	if one.ApprovalsRequired != 1 {
-		t.Fatalf("a repo that never set it needs one approval: %d", one.ApprovalsRequired)
+	if one.ApprovalsRequired != 0 {
+		t.Fatalf("a repo that never set it needs no approval: %d", one.ApprovalsRequired)
 	}
 	w = g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"rebase"`) {
@@ -410,13 +410,20 @@ func TestRepoApprovalsRequired(t *testing.T) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].ApprovalsRequired != 10 {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	for name, v := range map[string]string{"0": "0", "11": "11", "negative": "-1", "string": `"2"`, "fraction": "1.5", "null": "null"} {
+	for name, v := range map[string]string{"11": "11", "negative": "-1", "string": `"2"`, "fraction": "1.5", "null": "null"} {
 		if w := put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"approvalsRequired":` + v + `}`); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", name, w.Code, w.Body)
 		}
 	}
 	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); r.ApprovalsRequired != 10 {
 		t.Fatalf("a rejected update changed it: %+v", r)
+	}
+	// 0 is a value of its own, not "left out": it sets the setting to nothing required.
+	if r := read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"approvalsRequired":0}`)); r.ApprovalsRequired != 0 {
+		t.Fatalf("0 is allowed and stored: %+v", r)
+	}
+	if r := read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false}`)); r.ApprovalsRequired != 0 {
+		t.Fatalf("%+v", r)
 	}
 }
 
