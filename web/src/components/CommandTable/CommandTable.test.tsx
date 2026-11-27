@@ -184,7 +184,7 @@ describe('CommandTable', () => {
       expect(screen.getByText('Plain fix')).toBeInTheDocument();
     });
 
-    it('tints only the Blocked tile red, in the strip, and keeps it pressed when it is the filter', async () => {
+    it('marks only the Blocked tile with a red number, in the strip, and keeps it pressed when it is the filter', async () => {
       renderWithClient(<CommandTable />);
       await screen.findByText('Add login');
       const tiles = screen.getByRole('group', { name: 'Summary' });
@@ -275,7 +275,7 @@ describe('CommandTable', () => {
         expect(compact()).toHaveAttribute('aria-hidden', 'true');
       });
 
-      it('tints the Blocked button red like the tile, and keeps it pressed when it is on', async () => {
+      it('marks the Blocked button with a red number like the tile, and keeps it pressed when it is on', async () => {
         renderWithClient(<CommandTable />);
         await screen.findByText('Add login');
         strip(20, false);

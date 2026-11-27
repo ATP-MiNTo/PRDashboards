@@ -104,27 +104,9 @@
   background: oklch(var(--bc) / 0.08);
 }
 
-/* Blocked is red: a pastel red wash, a dark red number and a red-toned label, a deeper wash while
-   it is the filter. */
-.statBlocked {
-  background: var(--blocked-bg);
-}
-
-.statBlocked:hover {
-  background: var(--blocked-bg-hover);
-}
-
-.statBlocked.statOn,
-.statBlocked.statOn:hover {
-  background: var(--blocked-bg-on);
-}
-
+/* Blocked differs from the other tiles only by its red number; the box and the label are theirs. */
 .statBlocked .statValue {
   color: var(--blocked-fg);
-}
-
-.statBlocked .statTitle {
-  color: var(--blocked-label);
 }
 
 .statTitle {
@@ -173,25 +155,8 @@
   background: oklch(var(--bc) / 0.12);
 }
 
-.csBlocked {
-  background: var(--blocked-bg);
-}
-
-.csBlocked:hover {
-  background: var(--blocked-bg-hover);
-}
-
-.csBlocked.csOn,
-.csBlocked.csOn:hover {
-  background: var(--blocked-bg-on);
-}
-
 .csBlocked .csValue {
   color: var(--blocked-fg);
-}
-
-.csBlocked .csLabel {
-  color: var(--blocked-label);
 }
 
 .csLabel {
