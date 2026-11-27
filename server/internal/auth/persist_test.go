@@ -72,13 +72,14 @@ func TestSlidePersistsAndExpiredAreNotLoaded(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.db")
 	st := openStore(t, path, clock)
 	s := auth.NewSessions(testKey, clock.Now, &testutil.Rand{}, st, discard)
-	slid, _ := s.Create(ctx)
 	idle, _ := s.Create(ctx)
+	clock.Advance(12 * time.Hour)
+	slid, _ := s.Create(ctx)
 	clock.Advance(auth.ReissueAfter + time.Hour)
 	if got, ok := s.Authenticate(slid.Value); !ok || !got.Reissue {
 		t.Fatal("expected a reissue")
 	}
-	clock.Advance(auth.SessionTTL - 2*time.Hour)
+	clock.Advance(auth.MaxSessionAge - auth.ReissueAfter - 12*time.Hour - 30*time.Minute)
 
 	restarted := auth.NewSessions(testKey, clock.Now, &testutil.Rand{}, st, discard)
 	if err := restarted.Load(ctx); err != nil {
@@ -97,13 +98,45 @@ func TestExpiredSessionIsDeletedFromStore(t *testing.T) {
 	st := openStore(t, filepath.Join(t.TempDir(), "data.db"), clock)
 	s := auth.NewSessions(testKey, clock.Now, &testutil.Rand{}, st, discard)
 	created, _ := s.Create(ctx)
-	clock.Advance(auth.SessionTTL + time.Second)
+	clock.Advance(auth.MaxSessionAge + time.Second)
 	if _, ok := s.Authenticate(created.Value); ok {
 		t.Fatal("expired session accepted")
 	}
-	clock.Advance(-auth.SessionTTL) // look at the row as if it were still in range
+	clock.Advance(-auth.MaxSessionAge) // look at the row as if it were still in range
 	if rows, _ := st.LoadSessions(ctx, clock.Now()); len(rows) != 0 {
 		t.Fatalf("row kept: %v", rows)
+	}
+}
+
+func TestLoadDropsAndClampsSessionsPastTheAbsoluteLimit(t *testing.T) {
+	clock := testutil.NewClock()
+	st := openStore(t, filepath.Join(t.TempDir(), "data.db"), clock)
+	rnd := &testutil.Rand{}
+	old := auth.NewSessions(testKey, clock.Now, rnd, st, discard)
+	stale, _ := old.Create(ctx)
+	clock.Advance(10 * 24 * time.Hour)
+	fresh, _ := old.Create(ctx)
+	// Rows written before the absolute limit existed carry a sliding expiry far past it.
+	rows, err := st.LoadSessions(ctx, clock.Now())
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("%v %v", rows, err)
+	}
+	for _, r := range rows {
+		if err := st.SlideSession(ctx, r.IDHash, r.LastIssuedAt, r.CreatedAt.Add(auth.SessionTTL)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock.Advance(5 * 24 * time.Hour)
+	restarted := auth.NewSessions(testKey, clock.Now, rnd, st, discard)
+	if err := restarted.Load(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := restarted.Authenticate(stale.Value); ok {
+		t.Fatal("session past 14 days restored")
+	}
+	got, ok := restarted.Authenticate(fresh.Value)
+	if !ok || !got.Expires.Equal(fresh.Expires) {
+		t.Fatalf("fresh session: %+v ok=%v", got, ok)
 	}
 }
 

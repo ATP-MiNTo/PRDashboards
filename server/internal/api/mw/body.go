@@ -32,6 +32,10 @@ func Validate(spec *openapi3.T) (func(http.Handler) http.Handler, error) {
 				next.ServeHTTP(w, r)
 				return
 			}
+			if !isWrite(r) && r.ContentLength != 0 {
+				WriteProblem(w, http.StatusBadRequest, CodeInvalidRequest, "this request takes no body")
+				return
+			}
 			if isWrite(r) && r.ContentLength != 0 {
 				body, ok := readJSONBody(w, r)
 				if !ok {
@@ -44,7 +48,12 @@ func Validate(spec *openapi3.T) (func(http.Handler) http.Handler, error) {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if err := check(r, route, params, opts); err != nil {
+			if err := check(w, r, route, params, opts); err != nil {
+				var tooLarge *http.MaxBytesError
+				if errors.As(err, &tooLarge) {
+					WriteProblem(w, http.StatusRequestEntityTooLarge, CodeBodyTooLarge, "")
+					return
+				}
 				code := CodeInvalidRequest
 				if isWrite(r) {
 					code = CodeInvalidBody
@@ -57,11 +66,11 @@ func Validate(spec *openapi3.T) (func(http.Handler) http.Handler, error) {
 	}, nil
 }
 
-func check(r *http.Request, route *routers.Route, params map[string]string, opts *openapi3filter.Options) error {
+func check(w http.ResponseWriter, r *http.Request, route *routers.Route, params map[string]string, opts *openapi3filter.Options) error {
 	var saved []byte
 	if r.Body != nil && r.Body != http.NoBody {
 		var err error
-		if saved, err = io.ReadAll(r.Body); err != nil {
+		if saved, err = io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBodyBytes)); err != nil {
 			return err
 		}
 		r.Body = io.NopCloser(bytes.NewReader(saved))

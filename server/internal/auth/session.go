@@ -25,6 +25,8 @@ const (
 	CookieName = "prd_session"
 	// SessionTTL is the sliding lifetime of a session.
 	SessionTTL = 30 * 24 * time.Hour
+	// MaxSessionAge is the absolute lifetime of a session from its creation, however often it is used.
+	MaxSessionAge = 14 * 24 * time.Hour
 	// ReissueAfter is the age of the last cookie issue after which the cookie is sent again.
 	ReissueAfter = 24 * time.Hour
 
@@ -45,9 +47,12 @@ type Session struct {
 	Reissue bool
 	// Value is the cookie value for this session.
 	Value string
+	// maxAge is the lifetime of the cookie: the sliding lifetime, cut short by the absolute one.
+	maxAge time.Duration
 }
 
 type record struct {
+	created    time.Time
 	lastIssued time.Time
 	expires    time.Time
 }
@@ -95,8 +100,12 @@ func (s *Sessions) Load(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.clock()
 	for _, r := range rows {
-		s.m[r.IDHash] = &record{lastIssued: r.LastIssuedAt, expires: r.ExpiresAt}
+		if !now.Before(r.CreatedAt.Add(MaxSessionAge)) {
+			continue
+		}
+		s.m[r.IDHash] = &record{created: r.CreatedAt, lastIssued: r.LastIssuedAt, expires: earliest(r.ExpiresAt, r.CreatedAt.Add(MaxSessionAge))}
 	}
 	return nil
 }
@@ -109,7 +118,7 @@ func (s *Sessions) Create(ctx context.Context) (Session, error) {
 	}
 	now := s.clock()
 	h := sha256.Sum256(id)
-	rec := &record{lastIssued: now, expires: now.Add(SessionTTL)}
+	rec := &record{created: now, lastIssued: now, expires: slid(now, now)}
 	if s.persist != nil {
 		row := store.Session{IDHash: h, CreatedAt: now, LastIssuedAt: now, ExpiresAt: rec.expires}
 		if err := s.persist.InsertSession(ctx, row); err != nil {
@@ -120,7 +129,7 @@ func (s *Sessions) Create(ctx context.Context) (Session, error) {
 	s.purge(now)
 	s.m[h] = rec
 	s.mu.Unlock()
-	return s.session(id, rec, false), nil
+	return s.session(id, rec, false, now), nil
 }
 
 // Authenticate verifies a cookie value and slides the session. It reports false for forged,
@@ -138,7 +147,7 @@ func (s *Sessions) Authenticate(value string) (Session, bool) {
 		s.mu.Unlock()
 		return Session{}, false
 	}
-	if !now.Before(rec.expires) {
+	if !now.Before(rec.expires) || !now.Before(rec.created.Add(MaxSessionAge)) {
 		delete(s.m, h)
 		s.mu.Unlock()
 		s.write("delete expired session", func(ctx context.Context) error { return s.persist.DeleteSession(ctx, h) })
@@ -147,9 +156,9 @@ func (s *Sessions) Authenticate(value string) (Session, bool) {
 	reissue := now.Sub(rec.lastIssued) >= ReissueAfter
 	if reissue {
 		rec.lastIssued = now
-		rec.expires = now.Add(SessionTTL)
+		rec.expires = slid(rec.created, now)
 	}
-	out := s.session(id, rec, reissue)
+	out := s.session(id, rec, reissue, now)
 	last, exp := rec.lastIssued, rec.expires
 	s.mu.Unlock()
 	if reissue {
@@ -202,13 +211,26 @@ func (s Session) Cookie() *http.Cookie {
 		Name:     CookieName,
 		Value:    s.Value,
 		Path:     "/",
-		MaxAge:   int(SessionTTL / time.Second),
+		MaxAge:   int(s.maxAge / time.Second),
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
 	}
 }
 
-func (s *Sessions) session(id []byte, rec *record, reissue bool) Session {
+// slid returns the expiry of a session created at created and used at now: the sliding lifetime
+// from now, never past the absolute one.
+func slid(created, now time.Time) time.Time {
+	return earliest(now.Add(SessionTTL), created.Add(MaxSessionAge))
+}
+
+func earliest(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
+func (s *Sessions) session(id []byte, rec *record, reissue bool, now time.Time) Session {
 	h := sha256.Sum256(id)
 	return Session{
 		Key:     b64.EncodeToString(h[:]),
@@ -216,6 +238,7 @@ func (s *Sessions) session(id []byte, rec *record, reissue bool) Session {
 		Expires: rec.expires,
 		Reissue: reissue,
 		Value:   b64.EncodeToString(id) + "." + b64.EncodeToString(s.mac(id)),
+		maxAge:  rec.expires.Sub(now),
 	}
 }
 

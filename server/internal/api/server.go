@@ -123,6 +123,7 @@ var _ gen.StrictServerInterface = (*handlers)(nil)
 
 func (h *handlers) CreateSession(ctx context.Context, req gen.CreateSessionRequestObject) (gen.CreateSessionResponseObject, error) {
 	if req.Body == nil || !h.cfg.Launcher.Consume(req.Body.LaunchToken) {
+		mw.ChargeLaunchFailure(ctx)
 		return gen.CreateSession401ApplicationProblemPlusJSONResponse{
 			InvalidLaunchTokenApplicationProblemPlusJSONResponse: gen.InvalidLaunchTokenApplicationProblemPlusJSONResponse{
 				Type:   "/problems/invalid_launch_token",

@@ -1,6 +1,7 @@
 package mw
 
 import (
+	"context"
 	"math"
 	"net/http"
 	"strconv"
@@ -31,25 +32,36 @@ func newBuckets(perMinute int) *buckets {
 	}
 }
 
-// take returns zero when the request is allowed, otherwise how long to wait.
-func (b *buckets) take(key string, now time.Time) time.Duration {
+func (b *buckets) limiter(key string) *rate.Limiter {
 	b.mu.Lock()
+	defer b.mu.Unlock()
 	l, ok := b.m[key]
 	if !ok {
 		l = rate.NewLimiter(b.limit, b.burst)
 		b.m[key] = l
 	}
-	b.mu.Unlock()
-	res := l.ReserveN(now, 1)
-	if d := res.DelayFrom(now); d > 0 {
-		res.CancelAt(now)
-		return d
-	}
-	return 0
+	return l
 }
 
+// reserve returns zero when a token is available, otherwise how long to wait. The token is
+// spent only when spend is true.
+func (b *buckets) reserve(key string, now time.Time, spend bool) time.Duration {
+	res := b.limiter(key).ReserveN(now, 1)
+	d := res.DelayFrom(now)
+	if d > 0 || !spend {
+		res.CancelAt(now)
+	}
+	return d
+}
+
+func (b *buckets) take(key string, now time.Time) time.Duration { return b.reserve(key, now, true) }
+
+func (b *buckets) peek(key string, now time.Time) time.Duration { return b.reserve(key, now, false) }
+
 // RateLimit applies a token bucket of 30 writes per minute per session (one shared bucket for
-// requests without a session) and a stricter one of 10 per minute for session creation.
+// requests without a session) and a stricter one of 10 per minute for session creation. Only
+// failed launches spend a session-creation token, through ChargeLaunchFailure; a request is
+// refused while the bucket is empty.
 func RateLimit(clock func() time.Time) func(http.Handler) http.Handler {
 	writes := newBuckets(writeBurst)
 	creates := newBuckets(sessionBurst)
@@ -61,7 +73,10 @@ func RateLimit(clock func() time.Time) func(http.Handler) http.Handler {
 			}
 			var wait time.Duration
 			if isSessionCreate(r) {
-				wait = creates.take("", clock())
+				wait = creates.peek("", clock())
+				if wait == 0 {
+					r = r.WithContext(context.WithValue(r.Context(), chargeKey{}, func() { creates.take("", clock()) }))
+				}
 			} else {
 				key := ""
 				if s, ok := SessionFrom(r.Context()); ok {
@@ -77,5 +92,15 @@ func RateLimit(clock func() time.Time) func(http.Handler) http.Handler {
 			}
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+type chargeKey struct{}
+
+// ChargeLaunchFailure spends one session-creation token. The handler calls it after a launch
+// token is refused, so only failed attempts are limited.
+func ChargeLaunchFailure(ctx context.Context) {
+	if f, ok := ctx.Value(chargeKey{}).(func()); ok {
+		f()
 	}
 }
