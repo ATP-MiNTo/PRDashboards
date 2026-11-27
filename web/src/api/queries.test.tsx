@@ -131,7 +131,10 @@ describe('rule previews', () => {
 
   it('asks once for all rules and pairs each answer with its rule', async () => {
     const { wrapper } = setup();
-    const a = { moves: [{ ticketKey: 'INP-1', status: 'To Do', alreadyInTarget: false }], waiting: [] };
+    const a = {
+      moves: [{ ticketKey: 'INP-1', status: 'To Do', alreadyInTarget: false }],
+      waiting: [],
+    };
     const b = { moves: [], waiting: [] };
     api.previewRules.mockResolvedValue({ previews: [a, b] });
     const { result } = renderHook(() => usePreviewRules(), { wrapper });
