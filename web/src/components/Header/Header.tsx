@@ -29,7 +29,7 @@ export interface HeaderProps {
   history?: { active: boolean; onToggle: () => void };
   /** The page title in the title bar. */
   title?: ReactNode;
-  /** The summary shown in the right pill once the stat strip has scrolled away, from 1024px up. */
+  /** The summary shown in the right pill once the stat strip has scrolled away, at every width. */
   compactStats?: ReactNode;
   showCompactStats?: boolean;
 }
@@ -63,7 +63,7 @@ export function Header({
   return (
     <>
       <div className={styles.bar}>
-        <div className={pill(styles.pillLeft)} data-stuck={stuck}>
+        <div className={pill(styles.pillLeft)} data-stuck={stuck} data-stats={showCompactStats}>
           <button
             ref={burgerRef}
             type="button"
@@ -82,12 +82,14 @@ export function Header({
             <BrandIcon />
           </span>
         </div>
-        <div className={pill(styles.pillRight)}>
+        <div className={pill(styles.pillRight)} data-stats={showCompactStats}>
+          {/* Hidden, it is inert: no focus, no reading, until the strip has scrolled away. */}
           <div
             className={showCompactStats ? `${styles.stats} ${styles.statsOn}` : styles.stats}
-            role={compactStats ? 'group' : undefined}
-            aria-label={compactStats ? 'Summary' : undefined}
-            aria-hidden={compactStats ? undefined : true}
+            role="group"
+            aria-label="Summary, compact"
+            aria-hidden={showCompactStats ? undefined : true}
+            inert={!showCompactStats}
           >
             {compactStats}
           </div>

@@ -94,19 +94,36 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   return { readiness: 'ready', reason: null };
 }
 
-/** What the stat tiles filter the list by: everything, ready to merge, running CI, or stacks only. */
-export type Filter = 'all' | 'ready' | 'running' | 'stacks';
+/** A pull request is stale when its last commit is older than this. */
+export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
-export const FILTERS: Filter[] = ['all', 'ready', 'running', 'stacks'];
+/** Whether the last commit is older than three days. No commit time means not stale. */
+export function isStale(pr: SnapshotPr, now: number): boolean {
+  if (!pr.committedAt) return false;
+  return now - Date.parse(pr.committedAt) > STALE_AFTER_MS;
+}
 
-export function matches(pr: SnapshotPr, filter: Filter): boolean {
+/**
+ * What the stat tiles filter the list by: everything, ready to merge, running CI, blocked, draft,
+ * stale, or stacks only.
+ */
+export type Filter = 'all' | 'ready' | 'running' | 'blocked' | 'draft' | 'stale' | 'stacks';
+
+export const FILTERS: Filter[] = ['all', 'ready', 'running', 'blocked', 'draft', 'stale', 'stacks'];
+
+/** Whether a pull request is in a filter. `now` (ms) is the clock that "stale" reads. */
+export function matches(pr: SnapshotPr, filter: Filter, now: number = Date.now()): boolean {
   switch (filter) {
     case 'all':
       return true;
     case 'ready':
-      return blockOf(pr).readiness === 'ready';
+    case 'blocked':
+    case 'draft':
+      return blockOf(pr).readiness === filter;
     case 'running':
       return pr.ci.state === 'running';
+    case 'stale':
+      return isStale(pr, now);
     case 'stacks':
       return pr.stack !== null;
   }
@@ -125,6 +142,7 @@ const NO_REPOS: ReadonlySet<string> = new Set();
  * Groups the filtered pull requests into rows: stacks stay together, in stack order, and everything
  * else is its own group. Only pull requests the Show mode lists, the search terms match and a repository
  * that is not switched off (`off`, repository ids) has are kept. The result holds ids only, so a row's data changing leaves it equal.
+ * `now` (ms) is the clock of the "stale" filter.
  */
 export function groupsOf(
   s: Snapshot,
@@ -132,6 +150,7 @@ export function groupsOf(
   show: ShowMode = 'everything',
   terms: readonly string[] = [],
   off: ReadonlySet<string> = NO_REPOS,
+  now: number = Date.now(),
 ): Group[] {
   const groups: Group[] = [];
   const byStack = new Map<string, Group>();
@@ -140,7 +159,10 @@ export function groupsOf(
     rows
       .filter(
         (p) =>
-          !off.has(p.repo.id) && matches(p, filter) && inShow(p, show) && matchesSearch(p, terms),
+          !off.has(p.repo.id) &&
+          matches(p, filter, now) &&
+          inShow(p, show) &&
+          matchesSearch(p, terms),
       )
       .map((p) => p.id),
   );

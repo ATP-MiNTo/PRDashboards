@@ -36,6 +36,7 @@
 }
 
 .pillRight {
+  min-width: 0;
   gap: 4px;
   margin-right: 12px;
   padding-inline: 8px;
@@ -85,32 +86,45 @@
   opacity: 1;
 }
 
-/* The summary that slides into the right pill once the stat strip has scrolled out of view. */
+/* The summary that slides into the right pill once the stat strip has scrolled out of view, at every
+   width. It shrinks (and scrolls, without a scrollbar) before anything else in the pill does. The
+   pills float over the page in a bar that is no higher than nothing, so it moves nothing when it
+   opens. */
 .stats {
-  display: none;
+  display: flex;
+  flex: 0 1 auto;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.25rem;
+  min-width: 0;
   max-width: 0;
-  overflow: hidden;
-  font-size: 0.78rem;
-  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
   opacity: 0;
+  scrollbar-width: none;
   transition:
     max-width 0.4s ease,
     opacity 0.3s ease,
     margin 0.4s ease;
 }
 
-@media (min-width: 1024px) {
-  .stats {
-    display: flex;
-  }
+.stats::-webkit-scrollbar {
+  display: none;
 }
 
 .statsOn {
-  max-width: 30rem;
+  max-width: 40rem;
   margin: 0 0.5rem 0 0.3rem;
   opacity: 1;
+}
+
+/* A little less room (the sidebar takes 320px of it): the name leaves the left pill while the
+   summary shows. */
+@media (max-width: 1439px) {
+  .pillLeft[data-stats='true'] .pillTitle {
+    max-width: 0;
+    margin: 0;
+    opacity: 0;
+  }
 }
 
 /* The round buttons of the right pill: ghost, 32px. */

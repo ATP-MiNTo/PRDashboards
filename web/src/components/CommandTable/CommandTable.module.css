@@ -55,45 +55,35 @@
   border-radius: var(--radius-ctl);
 }
 
-/* Stat strip: one glass strip of tiles (daisyUI stats). A tile is a button that applies a filter. */
+/* Stat strip: one glass strip of tiles (daisyUI stats). A tile is a button that applies a filter.
+   The tiles are as many as fit in a row and the rest wrap, each row sharing the width. The 1px
+   lines between tiles are the top and left borders of the tiles, pulled 1px out of the strip, which
+   clips the outer ones, so a line is right wherever the strip wraps. */
 .stats {
   composes: glass from global;
-  display: grid;
-  grid-auto-flow: row;
+  display: flex;
+  flex-wrap: wrap;
   width: 100%;
   margin: 0;
-  overflow: auto;
-}
-
-@media (min-width: 640px) {
-  .stats {
-    grid-auto-flow: column;
-  }
+  overflow: hidden;
 }
 
 .stat {
   display: grid;
+  flex: 1 1 9.5rem;
   grid-template-columns: repeat(1, 1fr);
   column-gap: 1rem;
-  width: 100%;
-  padding: 1rem 1.5rem;
+  min-width: 0;
+  margin: -1px 0 0 -1px;
+  padding: 1rem 1.25rem;
   border: 0 solid oklch(var(--bc) / 0.1);
+  border-top-width: 1px;
+  border-left-width: 1px;
   background: none;
   color: inherit;
   font: inherit;
   line-height: 1.5rem;
   text-align: left;
-}
-
-.stat + .stat {
-  border-top-width: 1px;
-}
-
-@media (min-width: 640px) {
-  .stat + .stat {
-    border-top-width: 0;
-    border-left-width: 1px;
-  }
 }
 
 .stat:hover {
@@ -130,6 +120,46 @@
 }
 
 .statHl {
+  color: oklch(var(--p));
+}
+
+/* The same tiles in the right header pill: a small label and its number. */
+.cs {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-height: 0;
+  padding: 0.2rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-ctl);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.cs:hover {
+  background: oklch(var(--bc) / 0.08);
+}
+
+.csOn,
+.csOn:hover {
+  background: oklch(var(--bc) / 0.12);
+}
+
+.csLabel {
+  color: var(--sub);
+}
+
+.csValue {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.csHl {
   color: oklch(var(--p));
 }
 

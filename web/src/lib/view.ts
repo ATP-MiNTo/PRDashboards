@@ -1,6 +1,6 @@
 import type { Snapshot } from '@/api/client';
 import type { ShowMode } from './show';
-import { blockOf, groupsOf, type Filter, type Group } from './snapshot';
+import { blockOf, groupsOf, isStale, type Filter, type Group } from './snapshot';
 
 /** Which pull requests the list shows: visible only, all with hidden ones dimmed, hidden only. */
 export type HideMode = 'visible' | 'all' | 'hidden';
@@ -98,9 +98,16 @@ export function pageItems(current: number, count: number): (number | null)[] {
 export interface ListStats {
   /** Pull requests in the list, with the tile filter applied. */
   showing: number;
-  /** The three below ignore the tile filter, so a tile keeps its number while it is the filter. */
+  /**
+   * The ones below ignore the tile filter, so a tile keeps its number while it is the filter.
+   * Ready, blocked and draft split the list (`blockOf`); running CI and stale (last commit older
+   * than three days) cut across them.
+   */
   ready: number;
   running: number;
+  blocked: number;
+  draft: number;
+  stale: number;
   /** Stacks, not the pull requests in them. */
   stacks: number;
 }
@@ -113,28 +120,39 @@ export interface ListView {
   mode: HideMode;
   /** Ids of the repositories switched off in the sidebar. */
   off: ReadonlySet<string>;
+  /** The clock (ms) that "stale" reads. */
+  now: number;
 }
 
 const count = (groups: Group[]) => groups.reduce((n, g) => n + g.ids.length, 0);
 
 /** What the stat tiles say about the list as the Show, hide and search switches leave it. */
 export function listStats(s: Snapshot, v: ListView): ListStats {
-  const base = applyHidden(groupsOf(s, 'all', v.show, v.terms, v.off), v.hidden, v.mode);
+  const base = applyHidden(groupsOf(s, 'all', v.show, v.terms, v.off, v.now), v.hidden, v.mode);
   const byId = new Map(s.prs.map((p) => [p.id, p]));
-  const out: ListStats = { showing: 0, ready: 0, running: 0, stacks: 0 };
+  const out: ListStats = {
+    showing: 0,
+    ready: 0,
+    running: 0,
+    blocked: 0,
+    draft: 0,
+    stale: 0,
+    stacks: 0,
+  };
   for (const g of base) {
     if (g.stacked) out.stacks += 1;
     for (const id of g.ids) {
       const p = byId.get(id);
       if (!p) continue;
-      if (blockOf(p).readiness === 'ready') out.ready += 1;
+      out[blockOf(p).readiness] += 1;
       if (p.ci.state === 'running') out.running += 1;
+      if (isStale(p, v.now)) out.stale += 1;
     }
   }
   out.showing =
     v.filter === 'all'
       ? count(base)
-      : count(applyHidden(groupsOf(s, v.filter, v.show, v.terms, v.off), v.hidden, v.mode));
+      : count(applyHidden(groupsOf(s, v.filter, v.show, v.terms, v.off, v.now), v.hidden, v.mode));
   return out;
 }
 

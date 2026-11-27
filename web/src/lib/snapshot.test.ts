@@ -8,7 +8,9 @@ import {
   githubChecksUrl,
   githubPrUrl,
   groupsOf,
+  isStale,
   matches,
+  STALE_AFTER_MS,
   orgSsoUrl,
   relativeTime,
   safeLink,
@@ -120,9 +122,20 @@ describe('filters and groups', () => {
     ['all', ['a', 'c', 'b', 'd']],
     ['ready', ['a']],
     ['running', ['c']],
+    ['blocked', ['c', 'b']],
+    ['draft', ['d']],
+    ['stale', ['d']],
     ['stacks', ['a', 'b']],
   ] as const)('the %s filter matches %j', (filter, ids) => {
-    expect(rows.filter((p) => matches(p, filter)).map((p) => p.id)).toEqual(ids);
+    expect(rows.filter((p) => matches(p, filter, NOW)).map((p) => p.id)).toEqual(ids);
+  });
+
+  it('says a pull request is stale after three days without a commit, by the clock it is given', () => {
+    const p = pr('x', 1, { committedAt: '2026-11-20T00:00:00Z' });
+    const at = Date.parse('2026-11-20T00:00:00Z');
+    expect(isStale(p, at + STALE_AFTER_MS)).toBe(false);
+    expect(isStale(p, at + STALE_AFTER_MS + 1)).toBe(true);
+    expect(isStale(pr('y', 2, { committedAt: null }), at + 99 * STALE_AFTER_MS)).toBe(false);
   });
 
   it('keeps stacks together in stack order and the rest in list order', () => {
@@ -134,6 +147,9 @@ describe('filters and groups', () => {
     expect(groupsOf(snap, 'running')).toEqual([{ key: 'c', ids: ['c'], stacked: false }]);
     expect(groupsOf(snap, 'stacks')).toEqual([{ key: 'a', ids: ['a', 'b'], stacked: true }]);
     expect(groupsOf(snap, 'ready')).toEqual([{ key: 'a', ids: ['a'], stacked: true }]);
+    expect(groupsOf(snap, 'stale', 'everything', [], new Set(), NOW)).toEqual([
+      { key: 'd', ids: ['d'], stacked: false },
+    ]);
   });
 
   it('drops the pull requests of a repository that is switched off', () => {
