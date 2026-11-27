@@ -3,34 +3,39 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { Provider } from '@/api/client';
 import { ApiError } from '@/api/client';
+import type { GithubToken } from '@/api/client';
 import {
   useAccounts,
+  useAddToken,
   useCheck,
+  useCheckToken,
   useDisconnect,
+  useRemoveToken,
+  useRenameToken,
+  useRepoTokens,
   useRepos,
   useRevokeAll,
-  useSavePat,
   useSaveSettings,
   useSettings,
   useSetup,
 } from '@/api/queries';
-import { SOURCE_NAME, siteHost, sourceOf, type Source } from '@/lib/accounts';
+import {
+  SOURCE_NAME,
+  TOKEN_NAME_MAX,
+  kindOf,
+  siteHost,
+  sourceOf,
+  tokenBadgeText,
+  tokenNameProblem,
+  tokenOfRepo,
+} from '@/lib/accounts';
 import { describeProblem } from '@/lib/problems';
+import { InfoTip } from '../InfoTip/InfoTip';
 import { Modal } from '../Modal/Modal';
 import { ModalHead } from '../Modal/ModalHead';
 import styles from './AccountsModal.module.css';
 
 const problemText = (e: unknown) => describeProblem(e instanceof ApiError ? e.code : undefined);
-
-/** What the person is told about how GitHub is connected. */
-const SOURCE_ABOUT: Record<Source, string> = {
-  app: 'Signed in through the GitHub App. The token is kept in the encrypted vault.',
-  oauth: 'Signed in with OAuth. The token is kept in the encrypted vault.',
-  'fine-grained':
-    'A personal access token, kept in the encrypted vault. It only sees the repositories it was granted.',
-  classic:
-    'A personal access token, kept in the encrypted vault. It sees every repository you can.',
-};
 
 /** A link that looks like a button: the sign-in flows start at a server route, not an API call. */
 function Start({
@@ -38,14 +43,17 @@ function Start({
   configured,
   label,
   size,
+  name,
 }: {
   provider: Provider;
   configured: boolean;
   label: string;
   size: 'xs' | 'sm';
+  /** The accessible name, when the visible label alone does not say what it reconnects. */
+  name?: string;
 }) {
   return configured ? (
-    <a className={styles[size]} href={`/oauth/${provider}/start`}>
+    <a className={styles[size]} href={`/oauth/${provider}/start`} aria-label={name}>
       {label}
     </a>
   ) : (
@@ -55,38 +63,249 @@ function Start({
   );
 }
 
-/** Replaces the stored token: the same call as the Setup page's form. The token is never shown again. */
-function TokenForm({ onDone }: { onDone: () => void }) {
+const NEEDS_APP_SIGN_IN = 'The GitHub authorization expired. Reconnect to continue.';
+const NEEDS_NEW_TOKEN = 'GitHub no longer accepts this token. Remove it and add a new one.';
+
+/** One stored token: its name (renamed in place), kind, login and state, with Reconnect, Check and Remove. */
+function TokenRow({
+  token,
+  primary,
+  last,
+  configured,
+}: {
+  token: GithubToken;
+  primary: boolean;
+  last: boolean;
+  configured: boolean;
+}) {
+  const rename = useRenameToken();
+  const remove = useRemoveToken();
+  const check = useCheckToken();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(token.name);
+  const [confirming, setConfirming] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const kind = kindOf(token);
+  const viaSignIn = token.method !== 'pat';
+  const nameProblem = tokenNameProblem(name);
+  const failure = [rename, remove, check].find((m) => m.isError)?.error;
+
+  const startEdit = () => {
+    setName(token.name);
+    rename.reset();
+    setEditing(true);
+  };
+  const stopEdit = () => {
+    rename.reset();
+    setEditing(false);
+  };
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    const next = name.trim();
+    if (nameProblem) return;
+    if (next === token.name) return stopEdit();
+    rename.mutate({ id: token.id, name: next }, { onSuccess: () => setEditing(false) });
+  };
+
+  return (
+    <li className={styles.token}>
+      <div className={styles.tokenHead}>
+        {editing ? (
+          <form className={styles.form} onSubmit={save}>
+            <input
+              className={styles.field}
+              type="text"
+              autoComplete="off"
+              autoFocus
+              maxLength={TOKEN_NAME_MAX}
+              aria-label={`Name of ${token.name}`}
+              aria-invalid={nameProblem !== null}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation();
+                  stopEdit();
+                }
+              }}
+            />
+            <button
+              type="submit"
+              className={styles.xs}
+              disabled={rename.isPending || nameProblem !== null}
+            >
+              Save name
+            </button>
+            <button type="button" className={styles.xs} onClick={stopEdit}>
+              Cancel
+            </button>
+          </form>
+        ) : (
+          <span className={styles.tokenName}>
+            <b className={styles.tokenTitle}>{token.name}</b>
+            <button
+              type="button"
+              className={styles.xs}
+              aria-label={`Rename ${token.name}`}
+              onClick={startEdit}
+            >
+              Rename
+            </button>
+          </span>
+        )}
+        <span className={styles.badges}>
+          <span className={`${styles.badge} ${styles.ghost}`}>{SOURCE_NAME[kind]}</span>
+          {primary && (
+            <>
+              <span className={`${styles.badge} ${styles.ghost}`}>Primary</span>
+              <InfoTip
+                tip="The primary token is the first one. It wins a tie when several tokens see the same repository."
+                label="About the primary token"
+              />
+            </>
+          )}
+          {token.needsReconnect ? (
+            <span className={`${styles.badge} ${styles.warn}`}>Needs reconnect</span>
+          ) : (
+            <span className={`${styles.badge} ${styles.good}`}>Connected</span>
+          )}
+        </span>
+      </div>
+      {editing && nameProblem && name !== '' && <p className={styles.problem}>{nameProblem}</p>}
+      <div className={styles.sub}>{token.login}</div>
+      {token.needsReconnect ? (
+        <p className={styles.attention}>{viaSignIn ? NEEDS_APP_SIGN_IN : NEEDS_NEW_TOKEN}</p>
+      ) : (
+        token.warning && <p className={styles.attention}>{token.warning}</p>
+      )}
+      {checked && !check.isPending && !token.needsReconnect && (
+        <div className={styles.sub}>Checked just now. GitHub accepts this token.</div>
+      )}
+      <div className={styles.actions}>
+        {viaSignIn && (
+          <Start
+            provider="github"
+            configured={configured}
+            label="Reconnect"
+            name={`Reconnect ${token.name}`}
+            size="xs"
+          />
+        )}
+        <button
+          type="button"
+          className={styles.xs}
+          aria-label={`Check ${token.name}`}
+          disabled={check.isPending}
+          onClick={() => {
+            setChecked(false);
+            check.mutate(token.id, { onSuccess: () => setChecked(true) });
+          }}
+        >
+          Check
+        </button>
+        {!confirming && (
+          <button
+            type="button"
+            className={styles.xs}
+            aria-label={`Remove ${token.name}`}
+            onClick={() => setConfirming(true)}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div className={styles.confirm} role="group" aria-label={`Remove ${token.name}?`}>
+          <span>
+            {last
+              ? `Remove ${token.name}? It is your only token, so this disconnects GitHub.`
+              : `Remove ${token.name}? Repositories only it can see leave the list.`}
+          </span>
+          <button
+            type="button"
+            className={`${styles.xs} ${styles.error}`}
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(token.id, { onError: () => setConfirming(false) })}
+          >
+            Confirm remove
+          </button>
+          <button type="button" className={styles.xs} onClick={() => setConfirming(false)}>
+            Keep
+          </button>
+        </div>
+      )}
+      {failure !== undefined && failure !== null && (
+        <p className={styles.problem} role="alert">
+          {problemText(failure)}
+        </p>
+      )}
+    </li>
+  );
+}
+
+/** Adds a token with an optional name. The token is never shown again. */
+function AddTokenForm({ count, limit }: { count: number; limit: number }) {
+  const add = useAddToken();
+  const [name, setName] = useState('');
   const [token, setToken] = useState('');
-  const save = useSavePat();
+  const full = count >= limit;
+  const nameProblem = name.trim() === '' ? null : tokenNameProblem(name);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate(token, {
+    const trimmed = name.trim();
+    add.mutate(trimmed === '' ? { token } : { token, name: trimmed }, {
       onSuccess: () => {
         setToken('');
-        onDone();
+        setName('');
       },
     });
   };
   return (
-    <form className={styles.form} onSubmit={submit}>
-      <input
-        className={styles.token}
-        type="password"
-        autoComplete="off"
-        required
-        maxLength={512}
-        placeholder="Paste the new token"
-        aria-label="Personal access token"
-        value={token}
-        onChange={(e) => setToken(e.target.value)}
-      />
-      <button type="submit" className={styles.xs} disabled={save.isPending || token === ''}>
-        Validate and save
-      </button>
-      {save.isError && (
+    <form className={styles.addForm} aria-label="Add token" onSubmit={submit}>
+      <div className={styles.name}>Add token</div>
+      <div className={styles.form}>
+        <input
+          className={styles.field}
+          type="text"
+          autoComplete="off"
+          maxLength={TOKEN_NAME_MAX}
+          placeholder="Name (optional)"
+          aria-label="Token name (optional)"
+          aria-invalid={nameProblem !== null}
+          disabled={full}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <input
+          className={styles.field}
+          type="password"
+          autoComplete="off"
+          required
+          maxLength={512}
+          placeholder="Paste the token"
+          aria-label="Personal access token"
+          disabled={full}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+        />
+        <button
+          type="submit"
+          className={styles.xs}
+          disabled={full || add.isPending || token === '' || nameProblem !== null}
+        >
+          Validate and add
+        </button>
+      </div>
+      {nameProblem && <p className={styles.problem}>{nameProblem}</p>}
+      {full && <p className={styles.sub}>You can connect up to {limit} tokens</p>}
+      {add.isError && (
         <p className={styles.problem} role="alert">
-          {problemText(save.error)}
+          {problemText(add.error)}
+        </p>
+      )}
+      {add.isSuccess && !add.isPending && (
+        <p className={styles.sub} role="status">
+          Added {add.data.name}.
         </p>
       )}
     </form>
@@ -108,7 +327,6 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
   const disconnect = useDisconnect();
   const check = useCheck();
   const revoke = useRevokeAll();
-  const [replacing, setReplacing] = useState(false);
   const [checked, setChecked] = useState<Provider | null>(null);
 
   const github = accounts.data?.github;
@@ -121,7 +339,9 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
   const failure = [disconnect, check, saveSettings, revoke].find((m) => m.isError)?.error;
   const site = jira?.sites.find((s) => s.id === jira.selectedSiteId) ?? jira?.sites[0];
   const host = site ? (siteHost(site.url) ?? site.name) : null;
-  const isToken = source === 'fine-grained' || source === 'classic';
+  const tokens = accounts.data?.githubTokens ?? [];
+  const limit = accounts.data?.githubTokenLimit ?? 10;
+  const repoTokens = useRepoTokens().data ?? {};
   const list = repos.data?.repos ?? [];
 
   const runCheck = (p: Provider) =>
@@ -144,12 +364,18 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
           <section className={styles.card} aria-label="GitHub">
             <div className={styles.row}>
               <div>
-                <div className={styles.name}>
-                  GitHub{github.connected && github.login ? ` · ${github.login}` : ''}
-                </div>
+                <h4 className={styles.name}>
+                  GitHub tokens
+                  {github.connected && (
+                    <span className={styles.count}>
+                      {tokens.length} of {limit}
+                      <span className={styles.sr}> tokens connected</span>
+                    </span>
+                  )}
+                </h4>
                 <div className={styles.sub}>
-                  {source
-                    ? `${SOURCE_ABOUT[source]} Each repository below says which one fetches its pull requests.`
+                  {github.connected
+                    ? 'A fine-grained token works for one owner only. Add one token per owner to read and act on all your repositories.'
                     : 'Not connected. Connect with the GitHub App or paste a personal access token.'}
                 </div>
               </div>
@@ -161,65 +387,33 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
                   size="sm"
                 />
               )}
+              {github.connected && (
+                <button
+                  type="button"
+                  className={styles.xs}
+                  disabled={disconnect.isPending}
+                  onClick={() => disconnect.mutate('github')}
+                >
+                  Disconnect GitHub
+                </button>
+              )}
             </div>
 
-            {github.connected && source && (
-              <div className={styles.pair}>
-                <div className={styles.inner}>
-                  <div className={styles.innerHead}>
-                    <b>{SOURCE_NAME[source]}</b>
-                    {github.needsReconnect ? (
-                      <span className={`${styles.badge} ${styles.warn}`}>Needs reconnect</span>
-                    ) : (
-                      <span className={`${styles.badge} ${styles.good}`}>Connected</span>
-                    )}
-                  </div>
-                  <div className={styles.sub}>
-                    {github.needsReconnect
-                      ? 'The GitHub authorization expired. Reconnect to continue.'
-                      : checked === 'github'
-                        ? 'Checked just now. GitHub accepts the connection.'
-                        : (github.warning ?? SOURCE_ABOUT[source])}
-                  </div>
-                  <div className={styles.actions}>
-                    {!isToken && (
-                      <Start
-                        provider="github"
-                        configured={configured.github}
-                        label="Reconnect GitHub"
-                        size="xs"
-                      />
-                    )}
-                    {isToken && (
-                      <button
-                        type="button"
-                        className={styles.xs}
-                        aria-expanded={replacing}
-                        onClick={() => setReplacing(!replacing)}
-                      >
-                        Replace token
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className={styles.xs}
-                      disabled={check.isPending}
-                      onClick={() => runCheck('github')}
-                    >
-                      Check GitHub
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.xs}
-                      disabled={disconnect.isPending}
-                      onClick={() => disconnect.mutate('github')}
-                    >
-                      Disconnect GitHub
-                    </button>
-                  </div>
-                  {isToken && replacing && <TokenForm onDone={() => setReplacing(false)} />}
-                </div>
-              </div>
+            {github.connected && tokens.length > 0 && (
+              <>
+                <ul className={styles.tokens} aria-label="Connected tokens">
+                  {tokens.map((t, i) => (
+                    <TokenRow
+                      key={t.id}
+                      token={t}
+                      primary={i === 0}
+                      last={tokens.length === 1}
+                      configured={configured.github}
+                    />
+                  ))}
+                </ul>
+                <AddTokenForm count={tokens.length} limit={limit} />
+              </>
             )}
 
             {github.connected && source && list.length > 0 && (
@@ -232,18 +426,22 @@ export function AccountsModal({ onClose }: { onClose: () => void }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {list.map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.nameWithOwner}</td>
-                        <td>
-                          <span
-                            className={`${styles.badge} ${source === 'app' || source === 'oauth' ? styles.good : styles.warn}`}
-                          >
-                            {SOURCE_NAME[source]}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {list.map((r) => {
+                      const ref = tokenOfRepo(repoTokens[r.id], tokens);
+                      const kind = ref?.kind ?? source;
+                      return (
+                        <tr key={r.id}>
+                          <td>{r.nameWithOwner}</td>
+                          <td>
+                            <span
+                              className={`${styles.badge} ${styles.source} ${kind === 'app' || kind === 'oauth' ? styles.good : styles.warn}`}
+                            >
+                              {ref ? tokenBadgeText(ref) : SOURCE_NAME[source]}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
