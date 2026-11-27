@@ -1,0 +1,105 @@
+/* The design's dialog (daisyUI modal): a dim scrim, and a centred box of at most 32rem that is
+   91.666667% of the width on a narrow screen. The box is the page surface, not glass. */
+
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  overscroll-behavior: contain;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.box {
+  position: relative;
+  box-sizing: border-box;
+  width: 91.666667%;
+  max-width: 32rem;
+  max-height: calc(100vh - 5em);
+  padding: 1.5rem;
+  overflow-y: auto;
+  border-radius: 1rem;
+  background-color: var(--surface);
+  color: var(--text);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overscroll-behavior: contain;
+}
+
+.box:focus {
+  outline: none;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.75rem;
+  text-wrap: pretty;
+}
+
+.subtitle {
+  margin: 0;
+  padding: 0.75rem 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  opacity: 0.8;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.hint {
+  order: -1;
+  flex: 1 0 100%;
+  margin: 0 0 0.25rem;
+  color: var(--sub);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* The two footer buttons of the design are the default daisyUI size: 3rem tall, 1rem of padding. */
+.cancel {
+  composes: ui-ghost from global;
+  min-height: 3rem;
+  padding: 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .scrim {
+    animation: scrim-in 0.2s ease-out;
+  }
+
+  .box {
+    animation: box-in 0.2s cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes box-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
