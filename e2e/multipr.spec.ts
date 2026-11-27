@@ -66,8 +66,10 @@ test("moves INP-105 only after the third approval", async ({
     .check();
   await card.getByRole("button", { name: "Save rule" }).click();
   await expect(card.getByText("Unsaved")).toBeHidden();
+  // A new rule follows the global Multi-PR setting, which resolves to All, so the ticket below
+  // still waits for the third approval.
   await expect(card.getByLabel("Tickets shared by several PRs")).toHaveValue(
-    "all",
+    "default",
   );
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(dialog).toBeHidden();
