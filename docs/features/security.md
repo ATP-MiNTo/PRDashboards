@@ -134,7 +134,7 @@ None.
   page that completes the flow with a protected `POST` ([auth.md](auth.md)). Do not add a session
   requirement to the callback, and do not add any other cookie-less route that takes input.
 - `TestProtectedSurface` lists which paths are protected, so a new route has to be classified.
-- The write endpoints `POST /api/prs/{id}/approve`, `/request-changes` and `/ready` pass the whole chain like the merge (session, CSRF, Origin, Sec-Fetch-Site, Host, rate limit, 64 KiB body, schema with `additionalProperties: false` and a hex `expectedHeadSha`), then re-check the pull request on GitHub (open, draft, head SHA, not opened by the viewer) before one write with the viewer's token through `github` and `netguard`. They are not proxies: each sends one fixed GitHub call built from validated parts ([review-actions.md](review-actions.md)).
+- The write endpoints `POST /api/prs/{id}/approve`, `/request-changes` and `/ready` pass the whole chain like the merge (session, CSRF, Origin, Sec-Fetch-Site, Host, rate limit, 64 KiB body, schema with `additionalProperties: false` and a hex `expectedHeadSha`), then re-check the pull request on GitHub (open, draft, head SHA, not opened by the viewer) before one write with the viewer's token through `github` and `netguard`. They are not proxies: each sends one fixed GitHub call built from validated parts ([review-actions.md](review-actions.md)). The browser disabling Merge and Ready for a read-only repository (`SnapshotRepo.viewerPermission`) is a convenience only: the server never trusts it, re-checks on fresh data, and GitHub itself refuses a write the account or token may not do.
 
 ## Tests
 

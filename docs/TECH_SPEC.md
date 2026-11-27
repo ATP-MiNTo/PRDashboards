@@ -574,7 +574,7 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
    the same with `author:@me` and with `review-requested:@me` (the pull requests waiting on my review).
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
-   mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate
+   mergeCommitAllowed rebaseMergeAllowed viewerPermission }, `commits(last: 1) { commit { committedDate
    statusCheckRollup { state contexts(first: 50) { totalCount nodes { __typename ... on CheckRun {
    name status conclusion detailsUrl startedAt completedAt checkSuite { app { name } } } ... on
    StatusContext { context state targetUrl createdAt } } } } } }`, `latestReviews(first: 10) { id state submittedAt author { login } }`,
