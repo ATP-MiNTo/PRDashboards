@@ -35,8 +35,8 @@ func (r *recorder) all() []sent {
 }
 
 // serveSearch answers every search with the fixtures in names, in order, separately for each
-// query: the assigned and the authored search both walk the same list (so the union is the same
-// pull requests, found twice).
+// query: the assigned, authored and review requested searches all walk the same list (so the union
+// is the same pull requests, found three times).
 func serveSearch(t *testing.T, names ...string) (*github.Client, *recorder) {
 	t.Helper()
 	return serveRouted(t, func(string) []string { return names })
@@ -134,10 +134,10 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 		t.Fatal(err)
 	}
 	reqs := rec.all()
-	if len(reqs) != 4 || res.Requests != 4 {
+	if len(reqs) != 6 || res.Requests != 6 {
 		t.Fatalf("requests %d", len(reqs))
 	}
-	if want := []string{github.OpenAssignedQuery, github.OpenAssignedQuery, github.OpenAuthoredQuery, github.OpenAuthoredQuery}; !slices.Equal(rec.queries(), want) {
+	if want := []string{github.OpenAssignedQuery, github.OpenAssignedQuery, github.OpenAuthoredQuery, github.OpenAuthoredQuery, github.OpenReviewQuery, github.OpenReviewQuery}; !slices.Equal(rec.queries(), want) {
 		t.Fatalf("queries %v", rec.queries())
 	}
 	cursors := 0
@@ -146,7 +146,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 			cursors++
 		}
 	}
-	if cursors != 2 {
+	if cursors != 3 {
 		t.Fatalf("each search follows its cursor once, got %d", cursors)
 	}
 	for _, want := range []string{"first: 50", "statusCheckRollup", "contexts(first: 50)", "totalCount", "rateLimit", "squashMergeAllowed", "latestReviews", "reviewRequests", "... on StatusContext", "app {", "updatedAt", "additions", "deletions", "author {"} {
@@ -157,7 +157,7 @@ func TestSearchOpenParsesPullRequestsAndPaginates(t *testing.T) {
 	if len(res.PRs) != 3 {
 		t.Fatalf("prs %d", len(res.PRs))
 	}
-	if res.RateLimit.Limit != 5000 || res.RateLimit.Remaining != 4989 || res.RateLimit.Cost != 4 ||
+	if res.RateLimit.Limit != 5000 || res.RateLimit.Remaining != 4989 || res.RateLimit.Cost != 6 ||
 		!res.RateLimit.ResetAt.Equal(time.Date(2026, 11, 24, 10, 0, 0, 0, time.UTC)) || res.RateLimit.Low() {
 		t.Fatalf("rate limit %+v", res.RateLimit)
 	}
@@ -267,7 +267,7 @@ func TestSearchOpenPartialResultWithBlockedOrg(t *testing.T) {
 func TestSearchOpenKeepsPRsWhenOtherErrorsCome(t *testing.T) {
 	c, _ := serveSearch(t, "search_open_other_error")
 	res, err := c.SearchOpen(context.Background(), "tok")
-	if err != nil || len(res.PRs) != 1 || len(res.Errors) != 2 || !strings.Contains(res.Errors[0], "INTERNAL") || len(res.Blocked) != 0 {
+	if err != nil || len(res.PRs) != 1 || len(res.Errors) != 3 || !strings.Contains(res.Errors[0], "INTERNAL") || len(res.Blocked) != 0 {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
@@ -294,7 +294,7 @@ func TestSearchOpenCapWarning(t *testing.T) {
 func TestSearchOpenLaterPageFailureKeepsEarlierPRs(t *testing.T) {
 	c, rec := serveSearch(t, "search_open_page1", "search_open_server_error")
 	res, err := c.SearchOpen(context.Background(), "tok")
-	if err != nil || !res.Incomplete || len(res.PRs) != 2 || len(rec.all()) != 4 {
+	if err != nil || !res.Incomplete || len(res.PRs) != 2 || len(rec.all()) != 6 {
 		t.Fatalf("%+v %v requests %d", res, err, len(rec.all()))
 	}
 }
@@ -341,11 +341,11 @@ func TestSearchMerged(t *testing.T) {
 		t.Fatal(err)
 	}
 	reqs := rec.all()
-	want := []string{"is:pr assignee:@me is:merged updated:>=2026-11-24T06:30:00Z", "is:pr author:@me is:merged updated:>=2026-11-24T06:30:00Z"}
-	if len(reqs) != 2 || !slices.Equal(rec.queries(), want) {
+	want := []string{"is:pr assignee:@me is:merged updated:>=2026-11-24T06:30:00Z", "is:pr author:@me is:merged updated:>=2026-11-24T06:30:00Z", "is:pr review-requested:@me is:merged updated:>=2026-11-24T06:30:00Z"}
+	if len(reqs) != 3 || !slices.Equal(rec.queries(), want) {
 		t.Fatalf("%+v", reqs)
 	}
-	if len(res.Merged) != 1 || !res.Merged["PR_9"].Equal(time.Date(2026, 11, 24, 8, 45, 0, 0, time.UTC)) || res.Requests != 2 {
+	if len(res.Merged) != 1 || !res.Merged["PR_9"].Equal(time.Date(2026, 11, 24, 8, 45, 0, 0, time.UTC)) || res.Requests != 3 {
 		t.Fatalf("%+v", res)
 	}
 }
@@ -380,44 +380,47 @@ func ids(prs []github.PR) []string {
 	return out
 }
 
-func TestSearchOpenSendsBothQueriesAndMergesByID(t *testing.T) {
+func TestSearchOpenSendsAllThreeQueriesAndMergesByID(t *testing.T) {
 	var mu sync.Mutex
 	var sentQueries []string
 	c := serveBodies(t, func(q string) fixtureBody {
 		mu.Lock()
 		sentQueries = append(sentQueries, q)
 		mu.Unlock()
-		if q == github.OpenAssignedQuery {
+		switch q {
+		case github.OpenAssignedQuery:
 			return page([]string{"A", "B", "C"}, 3, 4000, 1, nil)
+		case github.OpenAuthoredQuery:
+			return page([]string{"C", "D", "A", "E"}, 4, 4500, 1, nil)
 		}
-		return page([]string{"C", "D", "A", "E"}, 4, 4500, 1, nil)
+		return page([]string{"F", "B", "E"}, 3, 4700, 1, nil)
 	})
 	res, err := c.SearchOpen(context.Background(), "tok")
 	if err != nil {
 		t.Fatal(err)
 	}
 	slices.Sort(sentQueries)
-	if !slices.Equal(sentQueries, []string{"is:pr is:open assignee:@me archived:false", "is:pr is:open author:@me archived:false"}) {
+	if !slices.Equal(sentQueries, []string{"is:pr is:open assignee:@me archived:false", "is:pr is:open author:@me archived:false", "is:pr is:open review-requested:@me archived:false"}) {
 		t.Fatalf("queries %v", sentQueries)
 	}
-	if got := ids(res.PRs); !slices.Equal(got, []string{"A", "B", "C", "D", "E"}) {
-		t.Fatalf("assigned first, then authored ones not yet seen: %v", got)
+	if got := ids(res.PRs); !slices.Equal(got, []string{"A", "B", "C", "D", "E", "F"}) {
+		t.Fatalf("assigned first, then authored, then review requested ones not yet seen: %v", got)
 	}
 	roles := map[string][]string{}
 	for _, p := range res.PRs {
 		roles[p.ID] = p.Roles
 	}
-	assigned, authored, both := []string{github.RoleAssigned}, []string{github.RoleAuthored}, []string{github.RoleAssigned, github.RoleAuthored}
-	want := map[string][]string{"A": both, "B": assigned, "C": both, "D": authored, "E": authored}
+	const as, au, rv = github.RoleAssigned, github.RoleAuthored, github.RoleReviewer
+	want := map[string][]string{"A": {as, au}, "B": {as, rv}, "C": {as, au}, "D": {au}, "E": {au, rv}, "F": {rv}}
 	for id, w := range want {
 		if !slices.Equal(roles[id], w) {
 			t.Errorf("roles of %s: got %v, want %v", id, roles[id], w)
 		}
 	}
-	if res.Total != 5 || res.Capped || res.Incomplete || res.Requests != 2 || len(res.Errors) != 0 || len(res.Blocked) != 0 {
+	if res.Total != 6 || res.Capped || res.Incomplete || res.Requests != 3 || len(res.Errors) != 0 || len(res.Blocked) != 0 {
 		t.Fatalf("%+v", res)
 	}
-	if res.RateLimit.Cost != 2 || res.RateLimit.Remaining != 4000 || res.RateLimit.Limit != 5000 {
+	if res.RateLimit.Cost != 3 || res.RateLimit.Remaining != 4000 || res.RateLimit.Limit != 5000 {
 		t.Fatalf("rate limit takes the lowest remaining and sums cost: %+v", res.RateLimit)
 	}
 }
@@ -442,10 +445,10 @@ func TestSearchOpenMergesCapIncompleteBlockedAndErrors(t *testing.T) {
 	if !res.Capped || res.Total != 1500 || len(res.PRs) != 2 {
 		t.Fatalf("capped by either search: %+v", res)
 	}
-	if len(res.Blocked) != 1 || res.Blocked[0].Org != "acme-corp" || len(res.Errors) != 1 || !strings.Contains(res.Errors[0], "INTERNAL") {
+	if len(res.Blocked) != 1 || res.Blocked[0].Org != "acme-corp" || len(res.Errors) != 2 || !strings.Contains(res.Errors[0], "INTERNAL") {
 		t.Fatalf("blocked %+v errors %v", res.Blocked, res.Errors)
 	}
-	if res.RateLimit.Remaining != 100 || res.RateLimit.Cost != 4 || !res.RateLimit.Low() {
+	if res.RateLimit.Remaining != 100 || res.RateLimit.Cost != 7 || !res.RateLimit.Low() {
 		t.Fatalf("rate limit %+v", res.RateLimit)
 	}
 }
@@ -544,6 +547,19 @@ func TestSearchOpenOneSearchFailingReturnsTheError(t *testing.T) {
 	}
 }
 
+func TestSearchOpenReviewSearchFailingReturnsTheError(t *testing.T) {
+	c, _ := serveRouted(t, func(q string) []string {
+		if q == github.OpenReviewQuery {
+			return []string{"search_open_server_error"}
+		}
+		return []string{"search_open_page2_partial"}
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err == nil || !strings.Contains(err.Error(), "502") || len(res.PRs) != 0 {
+		t.Fatalf("%v (%d prs)", err, len(res.PRs))
+	}
+}
+
 func TestSearchOpenStopsOnCancelledContext(t *testing.T) {
 	c, _ := serveSearch(t, "search_open_page1")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -553,29 +569,32 @@ func TestSearchOpenStopsOnCancelledContext(t *testing.T) {
 	}
 }
 
-func TestSearchMergedUnionsBothSearches(t *testing.T) {
+func TestSearchMergedUnionsAllThreeSearches(t *testing.T) {
 	c := serveBodies(t, func(q string) fixtureBody {
 		if strings.HasPrefix(q, "is:pr assignee:@me") {
 			return page([]string{"M1", "M2"}, 2, 4000, 1, nil)
 		}
-		return page([]string{"M2", "M3"}, 2, 3000, 1, nil)
+		if strings.HasPrefix(q, "is:pr author:@me") {
+			return page([]string{"M2", "M3"}, 2, 3000, 1, nil)
+		}
+		return page([]string{"M4"}, 1, 3500, 1, nil) // review requested: only found there
 	})
 	res, err := c.SearchMerged(context.Background(), "tok", time.Date(2026, 11, 24, 7, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Merged) != 3 || res.Requests != 2 || res.RateLimit.Remaining != 3000 || res.RateLimit.Cost != 2 {
+	if len(res.Merged) != 4 || res.Requests != 3 || res.RateLimit.Remaining != 3000 || res.RateLimit.Cost != 3 {
 		t.Fatalf("%+v", res)
 	}
-	for _, id := range []string{"M1", "M2", "M3"} {
+	for _, id := range []string{"M1", "M2", "M3", "M4"} {
 		if _, ok := res.Merged[id]; !ok {
 			t.Errorf("missing %s", id)
 		}
 	}
 }
 
-func TestSearchMergedEitherSearchFailingIsAnError(t *testing.T) {
-	for _, failing := range []string{"is:pr assignee:@me", "is:pr author:@me"} {
+func TestSearchMergedAnySearchFailingIsAnError(t *testing.T) {
+	for _, failing := range []string{"is:pr assignee:@me", "is:pr author:@me", "is:pr review-requested:@me"} {
 		c := serveBodies(t, func(q string) fixtureBody {
 			if strings.HasPrefix(q, failing) {
 				return fixtureBody{status: 500, body: map[string]any{"message": "boom"}}

@@ -25,11 +25,12 @@ type fixturePR struct {
 	totalChecks    int
 	reviewApproved bool
 	requested      bool
-	// authored and unassigned say how the viewer relates to the pull request. By default it is
-	// assigned to the viewer and opened by someone else. authored marks one the viewer opened
-	// (assignee:@me and author:@me both match when it is also assigned), and unassigned drops
-	// the assignment (only author:@me matches).
-	authored, unassigned bool
+	// authored, unassigned and reviewer say how the viewer relates to the pull request. By
+	// default it is assigned to the viewer and opened by someone else. authored marks one the
+	// viewer opened (assignee:@me and author:@me both match when it is also assigned), unassigned
+	// drops the assignment (only author:@me matches) and reviewer marks one the viewer is asked to
+	// review (review-requested:@me matches; with unassigned it is the only search that does).
+	authored, unassigned, reviewer bool
 	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
 	stacked bool
 	// author, updatedAgo, additions and deletions fill the author, updatedAt and diff size. Left
@@ -46,18 +47,13 @@ type fixturePR struct {
 func (p fixturePR) viewerOpened() bool { return p.authored }
 
 // matchesViewer reports whether the search query selects the pull request for the viewer.
-// A query with neither assignee:@me nor author:@me matches everything.
+// A query with none of assignee:@me, author:@me and review-requested:@me matches everything.
 func (p fixturePR) matchesViewer(query string) bool {
-	assignee, author := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me")
-	switch {
-	case assignee && author:
-		return !p.unassigned || p.authored
-	case assignee:
-		return !p.unassigned
-	case author:
-		return p.authored
+	assignee, author, review := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me"), strings.Contains(query, "review-requested:@me")
+	if !assignee && !author && !review {
+		return true
 	}
-	return true
+	return (assignee && !p.unassigned) || (author && p.authored) || (review && p.reviewer)
 }
 
 func checkRun(name, app, status, conclusion, url string, started, completed time.Time) map[string]any {
@@ -195,6 +191,16 @@ func basePRs(now time.Time) []fixturePR {
 			authored: true, unassigned: true, // opened by the viewer, assigned to nobody: only author:@me finds it
 		},
 		{
+			repo: "acme/api", org: "acme", number: 10, additions: 31, deletions: 9, title: "Tighten rate limiter", head: "fix/rate-limiter", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 5 * time.Hour, rollup: "SUCCESS",
+			author: "dana", reviewer: true, unassigned: true, // someone else's, I am asked to review: only review-requested:@me finds it
+		},
+		{
+			repo: "acme/web", org: "acme", number: 104, additions: 17, deletions: 2, title: "Fix focus ring on tabs", head: "fix/tab-focus", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 2 * time.Hour, rollup: "SUCCESS",
+			author: "eve", reviewer: true, unassigned: true,
+		},
+		{
 			repo: "acme/api", org: "acme", number: 8, additions: 22, deletions: 7, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
 			mergeable: "CONFLICTING", mergeState: "DIRTY", decision: "APPROVED", committedAgo: 26 * time.Hour, rollup: "FAILURE", reviewApproved: true,
 			checks: []map[string]any{
@@ -308,8 +314,8 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 	}
 }
 
-// searchBody answers the open and merged pull request searches, honouring assignee:@me and
-// author:@me, so the dashboard's union of the two searches is exercised. With the sso option the pull
+// searchBody answers the open and merged pull request searches, honouring assignee:@me, author:@me
+// and review-requested:@me, so the dashboard's union of the three searches is exercised. With the sso option the pull
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
 func searchBody(query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {

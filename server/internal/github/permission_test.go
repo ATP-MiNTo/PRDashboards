@@ -292,12 +292,12 @@ func TestSearchErrorsAroundHiddenChecks(t *testing.T) {
 	cases := []struct {
 		name        string
 		errs        string
-		wantErrors  int // two searches (assigned and authored) each report the error once
+		wantErrors  int // three searches (assigned, authored, review requested) each report the error once
 		wantBlocked int
 	}{
 		{"hidden checks only", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `}]`, 0, 0},
-		{"permission error off the check path stays", `[{"type":"FORBIDDEN","path":["search","nodes",1],` + flags + `,` + msg + `}]`, 2, 0},
-		{"hidden check next to a real error", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `},{"type":"INTERNAL","message":"boom"}]`, 2, 0},
+		{"permission error off the check path stays", `[{"type":"FORBIDDEN","path":["search","nodes",1],` + flags + `,` + msg + `}]`, 3, 0},
+		{"hidden check next to a real error", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `},{"type":"INTERNAL","message":"boom"}]`, 3, 0},
 		{"saml flag on a check path is SSO", `[{"type":"FORBIDDEN",` + check + `,"extensions":{"saml_failure":true,"ip_allow_list_failure":false},"message":"Resource protected by organization SAML enforcement. You must grant your token access to \"acme\""}]`, 0, 1},
 	}
 	for _, tc := range cases {

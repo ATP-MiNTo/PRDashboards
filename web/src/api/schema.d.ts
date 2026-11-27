@@ -641,7 +641,7 @@ export interface components {
             resetAt: string | null;
             rateLimit?: components["schemas"]["RateLimitUsage"];
         };
-        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
+        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the three searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
         RateLimitUsage: {
             /** @description Points spent in the current window (limit minus remaining). */
             used: number;
@@ -762,8 +762,8 @@ export interface components {
             additions: number | null;
             /** @description Lines removed by the pull request. Null for a snapshot stored before the field existed. */
             deletions: number | null;
-            /** @description Why the pull request is listed. Both can be present, and the list is never empty. */
-            roles: ("assigned" | "authored")[];
+            /** @description Why the pull request is listed: assigned to the user, opened by the user, or waiting for the user's review (reviewer). Several can be present, and the list is never empty. */
+            roles: ("assigned" | "authored" | "reviewer")[];
             isDraft: boolean;
             /** @enum {string} */
             mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";

@@ -947,7 +947,7 @@ components:
       type: object
       description: >-
         The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the
-        two searches (no extra call). Only the github source has it. Absent before the first
+        three searches (no extra call). Only the github source has it. Absent before the first
         refresh, after the connection is lost, and in snapshots stored before it existed.
       additionalProperties: false
       required: [used, limit, resetAt]
@@ -1231,13 +1231,15 @@ components:
           minimum: 0
           nullable: true
         roles:
-          description: Why the pull request is listed. Both can be present, and the list is never empty.
+          description: >-
+            Why the pull request is listed: assigned to the user, opened by the user, or waiting for
+            the user's review (reviewer). Several can be present, and the list is never empty.
           type: array
           minItems: 1
           uniqueItems: true
           items:
             type: string
-            enum: [assigned, authored]
+            enum: [assigned, authored, reviewer]
         isDraft:
           type: boolean
         mergeable:
