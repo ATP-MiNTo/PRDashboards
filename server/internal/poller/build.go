@@ -110,15 +110,20 @@ func build(in buildInput) gen.Snapshot {
 	return snap
 }
 
-// mergeRepos maps the stored repos to the resolver's input.
-func mergeRepos(repos []store.RepoConfig) map[string]merge.Repo {
+// mergeRepos maps the stored repos to the resolver's input. A repo that follows the default takes
+// the global default method (Settings defaultMethodForNewRepos), not the one it has stored.
+func mergeRepos(repos []store.RepoConfig, global string) map[string]merge.Repo {
 	out := make(map[string]merge.Repo, len(repos))
 	for _, r := range repos {
 		rules := make([]merge.Rule, len(r.Rules))
 		for i, rule := range r.Rules {
 			rules[i] = merge.Rule{Pattern: rule.Pattern, Method: merge.Method(rule.Method)}
 		}
-		out[r.ID] = merge.Repo{Default: merge.Method(r.DefaultMethod), IsNew: r.IsNew, Rules: rules, Approvals: r.ApprovalsRequired}
+		method := r.DefaultMethod
+		if r.InheritMethod {
+			method = global
+		}
+		out[r.ID] = merge.Repo{Default: merge.Method(method), IsNew: r.IsNew, Rules: rules, Approvals: r.ApprovalsRequired}
 	}
 	return out
 }

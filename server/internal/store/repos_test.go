@@ -197,3 +197,45 @@ func TestApprovalsRequiredIsLimitedToOneThroughTen(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRepoPrefsNewReposFollowTheDefaultAndUpdatesReplaceOrKeepThem(t *testing.T) {
+	s, _, clock := open(t)
+	ctx := context.Background()
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Repo(ctx, "R1")
+	if !got.InheritMethod || got.DeleteBranch != "default" {
+		t.Fatalf("a repo seen for the first time follows the defaults: %+v", got)
+	}
+	yes := store.RepoUpdate{ID: "R1", Method: "merge", Inherit: false, DeleteBranch: "yes"}
+	if err := s.PutRepos(ctx, []store.RepoUpdate{yes}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.Repo(ctx, "R1")
+	if got.InheritMethod || got.DeleteBranch != "yes" || got.DefaultMethod != "merge" {
+		t.Fatalf("%+v", got)
+	}
+	// The delete-branch choice left out stays; the inheritance is replaced like the method.
+	if err := s.PutRepos(ctx, []store.RepoUpdate{{ID: "R1", Method: "rebase", Inherit: true}}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.Repo(ctx, "R1")
+	if !got.InheritMethod || got.DeleteBranch != "yes" || got.DefaultMethod != "rebase" {
+		t.Fatalf("%+v", got)
+	}
+	// PutRepo is the one-repo form: it keeps the delete-branch choice and uses the method itself.
+	if err := s.PutRepo(ctx, "R1", "squash", nil, false, 0); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.Repo(ctx, "R1")
+	if got.InheritMethod || got.DeleteBranch != "yes" {
+		t.Fatalf("%+v", got)
+	}
+	if other, _ := s.Repo(ctx, "R2"); !other.InheritMethod || other.DeleteBranch != "default" {
+		t.Fatalf("another repo changed: %+v", other)
+	}
+	if err := s.PutRepos(ctx, []store.RepoUpdate{{ID: "R1", Method: "squash", DeleteBranch: "maybe"}}); err == nil {
+		t.Fatal("an unknown delete-branch choice was stored")
+	}
+}

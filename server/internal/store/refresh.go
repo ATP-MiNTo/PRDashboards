@@ -100,8 +100,8 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 			sql  string
 			args []any
 		}{
-			{`INSERT INTO repos (id, name_with_owner, first_seen_at, default_method, is_new)
-			  SELECT json_extract(value, '$.id'), json_extract(value, '$.name'), ?, ?, 1 FROM json_each(?) WHERE true
+			{`INSERT INTO repos (id, name_with_owner, first_seen_at, default_method, is_new, method_inherit)
+			  SELECT json_extract(value, '$.id'), json_extract(value, '$.name'), ?, ?, 1, 1 FROM json_each(?) WHERE true
 			  ON CONFLICT (id) DO UPDATE SET name_with_owner = excluded.name_with_owner`,
 				[]any{now, r.DefaultMethod, marshal(r.Repos)}},
 			{`INSERT INTO repo_branch_rules (repo_id, position, pattern, method)

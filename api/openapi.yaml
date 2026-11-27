@@ -1388,10 +1388,16 @@ components:
       description: >
         Approvals a pull request of the repository needs before the dashboard lets it merge, counted
         as distinct reviewers whose latest review is an approval. 1 when never set.
+    DeleteBranchChoice:
+      type: string
+      enum: [default, 'yes', 'no']
+      description: >
+        Whether the merge dialog starts with "Delete branch after merge" ticked for the repository:
+        "default" follows Settings.deleteBranchAfterMerge.
     RepoSettings:
       type: object
       additionalProperties: false
-      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules, approvalsRequired]
+      required: [id, nameWithOwner, isNew, openPrs, defaultMethod, branchRules, approvalsRequired, inheritMethod, deleteBranch]
       properties:
         id:
           type: string
@@ -1409,6 +1415,13 @@ components:
             $ref: '#/components/schemas/BranchRule'
         approvalsRequired:
           $ref: '#/components/schemas/ApprovalsRequired'
+        inheritMethod:
+          type: boolean
+          description: >
+            True when the repository follows Settings.defaultMethodForNewRepos; defaultMethod is then
+            kept but not used.
+        deleteBranch:
+          $ref: '#/components/schemas/DeleteBranchChoice'
     Repos:
       type: object
       additionalProperties: false
@@ -1435,6 +1448,15 @@ components:
         approvalsRequired:
           allOf:
             - $ref: '#/components/schemas/ApprovalsRequired'
+          description: Left out, the stored value stays as it is.
+        inheritMethod:
+          type: boolean
+          description: >
+            True makes the repository follow Settings.defaultMethodForNewRepos (defaultMethod is kept
+            but not used). Like defaultMethod it is replaced by every update: left out means false.
+        deleteBranch:
+          allOf:
+            - $ref: '#/components/schemas/DeleteBranchChoice'
           description: Left out, the stored value stays as it is.
     ReposUpdate:
       type: object

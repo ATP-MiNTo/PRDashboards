@@ -419,3 +419,53 @@ func TestRepoApprovalsRequired(t *testing.T) {
 		t.Fatalf("a rejected update changed it: %+v", r)
 	}
 }
+
+func TestRepoMethodInheritanceAndDeleteBranchChoice(t *testing.T) {
+	g := newMergeRig(t)
+	seedRepo(t, g)
+	put := func(body string) *httptest.ResponseRecorder {
+		return g.do(http.MethodPut, "/api/repos/R1", body, g.l.write()...)
+	}
+	read := func(w *httptest.ResponseRecorder) gen.RepoSettings {
+		t.Helper()
+		var r gen.RepoSettings
+		if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &r) != nil {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+		return r
+	}
+	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); !r.InheritMethod || r.DeleteBranch != gen.Default {
+		t.Fatalf("a new repo follows the defaults: %+v", r)
+	}
+	r := read(put(`{"defaultMethod":"rebase","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"no"}`))
+	if r.InheritMethod || r.DeleteBranch != gen.No || r.DefaultMethod != "rebase" {
+		t.Fatalf("%+v", r)
+	}
+	// The delete-branch choice left out stays; the inheritance left out is false, like the method it goes with.
+	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false}`))
+	if r.InheritMethod || r.DeleteBranch != gen.No {
+		t.Fatalf("%+v", r)
+	}
+	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"inheritMethod":true,"deleteBranch":"yes"}`))
+	if !r.InheritMethod || r.DeleteBranch != gen.Yes {
+		t.Fatalf("%+v", r)
+	}
+	if _, relinks, _ := g.p.counts(); relinks != 3 {
+		t.Fatalf("each save rebuilds the snapshot: %d", relinks)
+	}
+	for name, v := range map[string]string{
+		"unknown choice": `"maybe"`, "boolean": `true`, "null": `null`, "empty": `""`,
+	} {
+		if w := put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"deleteBranch":` + v + `}`); w.Code != http.StatusBadRequest {
+			t.Errorf("%s: %d %s", name, w.Code, w.Body)
+		}
+	}
+	if w := put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"inheritMethod":"yes"}`); w.Code != http.StatusBadRequest {
+		t.Errorf("inheritMethod string: %d %s", w.Code, w.Body)
+	}
+	w := g.do(http.MethodPut, "/api/repos", `{"repos":[{"id":"R1","update":{"defaultMethod":"squash","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"default"}}]}`, g.l.write()...)
+	var list gen.Repos
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].InheritMethod || list.Repos[0].DeleteBranch != gen.Default {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}

@@ -104,7 +104,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	p.version++
 	version := p.version
 	snap := build(buildInput{
-		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
+		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos, st.DefaultMethod), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
 		GitHub: p.ghSrc, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
 	})
 	p.mu.Unlock()

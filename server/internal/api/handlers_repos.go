@@ -19,7 +19,21 @@ func toGenRepo(r store.RepoConfig) gen.RepoSettings {
 		Id: r.ID, NameWithOwner: r.NameWithOwner, IsNew: r.IsNew, OpenPrs: r.OpenPRs,
 		DefaultMethod: gen.MergeMethodName(r.DefaultMethod), BranchRules: rules,
 		ApprovalsRequired: r.ApprovalsRequired,
+		InheritMethod:     r.InheritMethod, DeleteBranch: gen.DeleteBranchChoice(r.DeleteBranch),
 	}
+}
+
+// inheritOf is whether a repo update asks the repo to follow the default method: false when it
+// leaves the field out, as the method itself is replaced by every update.
+func inheritOf(b *bool) bool { return b != nil && *b }
+
+// deleteBranchOf is the delete-branch choice of a repo update, "" (keep what is stored) when it
+// leaves it out.
+func deleteBranchOf(c *gen.DeleteBranchChoice) string {
+	if c == nil {
+		return ""
+	}
+	return string(*c)
 }
 
 // approvalsOf is the approvals a repo update asks for, 0 (keep what is stored) when it leaves them out.
@@ -57,6 +71,7 @@ func (h *handlers) PutRepos(ctx context.Context, req gen.PutReposRequestObject) 
 		updates[i] = store.RepoUpdate{
 			ID: u.Id, Method: string(u.Update.DefaultMethod), Rules: rules, ClearNew: u.Update.ClearNew,
 			Approvals: approvalsOf(u.Update.ApprovalsRequired),
+			Inherit:   inheritOf(u.Update.InheritMethod), DeleteBranch: deleteBranchOf(u.Update.DeleteBranch),
 		}
 	}
 	err := h.cfg.Store.PutRepos(ctx, updates)
@@ -101,7 +116,11 @@ func (h *handlers) PutRepo(ctx context.Context, req gen.PutRepoRequestObject) (g
 	for i, r := range req.Body.BranchRules {
 		rules[i] = store.BranchRule{Pattern: r.Pattern, Method: string(r.Method)}
 	}
-	err := h.cfg.Store.PutRepo(ctx, req.Id, string(req.Body.DefaultMethod), rules, req.Body.ClearNew, approvalsOf(req.Body.ApprovalsRequired))
+	err := h.cfg.Store.PutRepos(ctx, []store.RepoUpdate{{
+		ID: req.Id, Method: string(req.Body.DefaultMethod), Rules: rules, ClearNew: req.Body.ClearNew,
+		Approvals: approvalsOf(req.Body.ApprovalsRequired), Inherit: inheritOf(req.Body.InheritMethod),
+		DeleteBranch: deleteBranchOf(req.Body.DeleteBranch),
+	}})
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, problem(http.StatusNotFound, mw.CodeNotFound, "")
 	}

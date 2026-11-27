@@ -821,6 +821,11 @@ export interface components {
         };
         /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set. */
         ApprovalsRequired: number;
+        /**
+         * @description Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.
+         * @enum {string}
+         */
+        DeleteBranchChoice: "default" | "yes" | "no";
         RepoSettings: {
             id: string;
             nameWithOwner: string;
@@ -829,6 +834,9 @@ export interface components {
             defaultMethod: components["schemas"]["MergeMethodName"];
             branchRules: components["schemas"]["BranchRule"][];
             approvalsRequired: components["schemas"]["ApprovalsRequired"];
+            /** @description True when the repository follows Settings.defaultMethodForNewRepos; defaultMethod is then kept but not used. */
+            inheritMethod: boolean;
+            deleteBranch: components["schemas"]["DeleteBranchChoice"];
         };
         Repos: {
             repos: components["schemas"]["RepoSettings"][];
@@ -839,6 +847,10 @@ export interface components {
             clearNew: boolean;
             /** @description Left out, the stored value stays as it is. */
             approvalsRequired?: components["schemas"]["ApprovalsRequired"];
+            /** @description True makes the repository follow Settings.defaultMethodForNewRepos (defaultMethod is kept but not used). Like defaultMethod it is replaced by every update: left out means false. */
+            inheritMethod?: boolean;
+            /** @description Left out, the stored value stays as it is. */
+            deleteBranch?: components["schemas"]["DeleteBranchChoice"];
         };
         ReposUpdate: {
             repos: {
