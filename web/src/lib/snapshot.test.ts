@@ -147,15 +147,15 @@ describe('filters and groups', () => {
     expect(groupsOf(snap, 'running')).toEqual([{ key: 'c', ids: ['c'], stacked: false }]);
     expect(groupsOf(snap, 'stacks')).toEqual([{ key: 'a', ids: ['a', 'b'], stacked: true }]);
     expect(groupsOf(snap, 'ready')).toEqual([{ key: 'a', ids: ['a'], stacked: true }]);
-    expect(groupsOf(snap, 'stale', 'everything', [], new Set(), NOW)).toEqual([
+    expect(groupsOf(snap, 'stale', 'all', [], new Set(), NOW)).toEqual([
       { key: 'd', ids: ['d'], stacked: false },
     ]);
   });
 
   it('drops the pull requests of a repository that is switched off', () => {
     const repo = snap.prs[0]?.repo.id ?? '';
-    expect(groupsOf(snap, 'all', 'everything', [], new Set([repo]))).toEqual([]);
-    expect(groupsOf(snap, 'all', 'everything', [], new Set(['other']))).toHaveLength(3);
+    expect(groupsOf(snap, 'all', 'all', [], new Set([repo]))).toEqual([]);
+    expect(groupsOf(snap, 'all', 'all', [], new Set(['other']))).toHaveLength(3);
   });
 });
 

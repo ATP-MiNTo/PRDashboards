@@ -193,7 +193,7 @@
   background: var(--card-a-bg);
 }
 
-.card.role_authored {
+.card.role_reviewer {
   border-color: var(--card-r-line);
   background: var(--card-r-bg);
 }

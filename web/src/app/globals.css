@@ -78,8 +78,8 @@
   --merge: #007fff;
   --merge-hover: #1a8cff;
 
-  /* Roles and stacks. A card is tinted whole: cyan for assigned, red for opened by the user, split
-     46/54 for both. */
+  /* Roles and stacks. A card is tinted whole: cyan-teal for a pull request assigned to the user or
+     opened by the user, red for one the user is asked to review, split 46/54 for both. */
   --rc-a: #bfeaf1;
   --rc-r: #f9c9c9;
   --stack: #8b6cf0;

@@ -130,13 +130,13 @@ describe('listStats', () => {
       ...stackOf('b', 2),
       ci: { state: 'running', total: 0, checks: [] },
     }),
-    pr('c', 3, { roles: ['authored'], isDraft: true }),
-    pr('d', 4, { roles: ['authored'], ci: { state: 'running', total: 0, checks: [] } }),
-    pr('e', 5, { roles: ['authored'], committedAt: '2026-11-01T00:00:00Z' }),
+    pr('c', 3, { roles: ['reviewer'], isDraft: true }),
+    pr('d', 4, { roles: ['reviewer'], ci: { state: 'running', total: 0, checks: [] } }),
+    pr('e', 5, { roles: ['reviewer'], committedAt: '2026-11-01T00:00:00Z' }),
   ]);
   const view = (over: Partial<ListView> = {}): ListView => ({
     filter: 'all',
-    show: 'everything',
+    show: 'all',
     terms: [],
     hidden: new Set(),
     mode: 'visible',
@@ -186,8 +186,9 @@ describe('listStats', () => {
     expect(listStats(two, view({ off: new Set(['R1', 'R2']) })).showing).toBe(0);
   });
 
-  it('follows the Show state', () => {
-    expect(listStats(s, view({ show: 'authored' }))).toEqual({
+  it('follows the Show mode, so the tiles change when it does', () => {
+    // To review lists c (draft), d (CI running) and e (ready, old); Mine lists a and b, the stack.
+    expect(listStats(s, view({ show: 'review' }))).toEqual({
       showing: 3,
       ready: 1,
       running: 1,
@@ -196,6 +197,16 @@ describe('listStats', () => {
       stale: 1,
       stacks: 0,
     });
+    expect(listStats(s, view({ show: 'mine' }))).toEqual({
+      showing: 2,
+      ready: 1,
+      running: 1,
+      blocked: 1,
+      draft: 0,
+      stale: 0,
+      stacks: 1,
+    });
+    expect(listStats(s, view({ show: 'all' })).showing).toBe(5);
   });
 
   it('follows the search', () => {

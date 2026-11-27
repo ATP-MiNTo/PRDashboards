@@ -32,7 +32,7 @@ import { useStripOut } from './useStripOut';
 const NO_IDS: string[] = [];
 const selectIds = (s: Snapshot) => s.prs.map((p) => p.id);
 const HISTORY_TITLE = 'PRDashboards · History';
-const NO_SHOW_COUNTS = { everything: 0, assigned: 0, authored: 0 };
+const NO_SHOW_COUNTS = { all: 0, mine: 0, review: 0 };
 
 export function CommandTable() {
   const snapshot = useSnapshot();

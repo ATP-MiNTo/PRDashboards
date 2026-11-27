@@ -132,7 +132,7 @@ describe('card', () => {
   });
 
   it('has no style attribute, anywhere in the list', async () => {
-    await show([pr('a', 1), pr('b', 2, { roles: ['authored'] })]);
+    await show([pr('a', 1), pr('b', 2, { roles: ['reviewer'] })]);
     expect(document.querySelector('main [style]')).toBeNull();
   });
 });
