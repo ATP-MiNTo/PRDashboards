@@ -23,7 +23,7 @@ auto-collapse are not saved. Scroll position and the wide-screen media query are
 - [web/src/components/Shell/idleTimer.ts](../../web/src/components/Shell/idleTimer.ts): `createIdleTimer`, the pure one-shot timer with `arm`, `cancel`, `isArmed` and an `isHeld` check.
 - [web/src/components/Shell/Sidebar.tsx](../../web/src/components/Shell/Sidebar.tsx): the frosted `aside` with the "Settings" title and the collapse chevron, as a column or as an overlay with a scrim.
 - [web/src/components/Shell/Burger.tsx](../../web/src/components/Shell/Burger.tsx): the sticky burger pill. [BrandIcon.tsx](../../web/src/components/Shell/BrandIcon.tsx): the decorative repo and branch icon, also used by the top bar.
-- [web/src/components/Shell/Shell.module.css](../../web/src/components/Shell/Shell.module.css): glass look from theme tokens, pill and title transitions, animations.
+- [web/src/components/Shell/Shell.module.css](../../web/src/components/Shell/Shell.module.css): glass look from the glass tokens in [theme.md](theme.md) (pane colour, border, blur and shadow, radius 1.25rem), pill and title transitions, animations. The burger and the collapse chevron are `ui-ghost` buttons (32px, 20% ink on hover).
 - [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx): wires the hook, the burger, the sidebar with `SettingsContent` ([settings.md](settings.md)) and the top bar.
 
 ## Key flows

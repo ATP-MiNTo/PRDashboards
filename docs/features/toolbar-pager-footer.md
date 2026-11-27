@@ -39,7 +39,7 @@ Hidden ids that are no longer in the snapshot are ignored when read (`pruneHidde
 - [web/src/components/Toolbar/Hint.tsx](../../web/src/components/Toolbar/Hint.tsx): a label with a popover that opens on hover and on keyboard focus.
 - [web/src/components/Toolbar/Pager.tsx](../../web/src/components/Toolbar/Pager.tsx): "Showing X to Y of N", page size select and page buttons.
 - [web/src/components/Toolbar/Footer.tsx](../../web/src/components/Toolbar/Footer.tsx): the footer, the GitHub button and `fabPlacement`.
-- [Toolbar.module.css](../../web/src/components/Toolbar/Toolbar.module.css), [Footer.module.css](../../web/src/components/Toolbar/Footer.module.css): styles on the theme tokens.
+- [Toolbar.module.css](../../web/src/components/Toolbar/Toolbar.module.css), [Footer.module.css](../../web/src/components/Toolbar/Footer.module.css): styles on the theme tokens. The sort select, the page size select and the roll switches, the sort arrow and the page buttons are 32px controls with radius .5rem: `ui-select` and `ui-btn` from [theme.md](theme.md) (an outline button that fills with ink on hover). The legend dots are the role colours `--rc-a`, `--rc-r` and `--stack`.
 - [web/src/components/CommandTable/Table.tsx](../../web/src/components/CommandTable/Table.tsx) and [Row.tsx](../../web/src/components/CommandTable/Row.tsx): the pipeline (group, sort, hide, page), the Hide checkbox and the fade-out. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) wires the hook, the toolbar and the footer.
 
 ## Key flows
@@ -59,7 +59,7 @@ None. Nothing here calls the server, GitHub or Jira, on mount or on a timer. The
 ## Rules and invariants
 
 - No `style` attribute, no `<style>` block and no `style` prop in rendered markup (CSP `style-src 'self'`); dynamic state is a class, or a custom property set through the CSSOM after mount. A test checks the server-rendered footer for `style=`.
-- Every control has an accessible name: "Sort", "Reverse sort order", "Hide #N", "Show, now X, N" and "Hidden PRs, now X, N" for the switches, a "Legend" list, "Pull requests per page", "Previous page", "Next page", "Page N" (`aria-current="page"` on the active one), "GitHub repository". Controls are at least 24px high; focus uses the global focus ring.
+- Every control has an accessible name: "Sort", "Reverse sort order", "Hide #N", "Show, now X, N" and "Hidden PRs, now X, N" for the switches, a "Legend" list, "Pull requests per page", "Previous page", "Next page", "Page N" (`aria-current="page"` on the active one), "GitHub repository". Controls are at least 24px high (the sort, switch and page controls 32px); focus uses the global focus ring.
 - Pure logic stays in `lib/sort.ts` and `lib/view.ts`: no network, no storage, no clock.
 - Hiding is a view preference only; it never changes the snapshot, the stats strip or what the server does. A hidden PR still counts in "Open" and in the other stats.
 - Animations stop under `prefers-reduced-motion: reduce`.

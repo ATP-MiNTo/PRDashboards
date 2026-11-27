@@ -7,6 +7,10 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Light, Dark or Auto. Auto is light from 07:00 to 19:00 local time and dark otherwise. The choice is
 stored on the server in the settings, so it follows the user across browsers.
 
+It also holds the look of the whole app, the approved glass design: fonts, colour and surface
+tokens, shared control styles, cursors and the cross-fade between modes. Features style their own
+CSS Modules from these tokens and never from fixed colours.
+
 ## Data model
 
 `Settings.theme` (`light`, `dark`, `auto`, default `auto`) in the `settings` table, through `GET/PUT /api/settings`. The resolved mode is the `data-mode` attribute of `<html>` (`light` or `dark`). `useTheme` also sets `data-theme` to the matching daisyUI theme: `winter` for light and `night` for dark.
@@ -15,8 +19,10 @@ stored on the server in the settings, so it follows the user across browsers.
 
 - [web/src/theme/theme.ts](../../web/src/theme/theme.ts): `autoMode`, `resolveMode`, `msUntilSwitch` and `daisyTheme` (the pure light/dark to `winter`/`night` mapping).
 - [web/src/theme/useTheme.ts](../../web/src/theme/useTheme.ts): applies `data-mode` and `data-theme` and follows the clock while Auto. Returns `theme`, `mode` (the resolved mode, kept in step with the Auto timer) and `setTheme`.
+- [web/src/theme/transition.ts](../../web/src/theme/transition.ts): `applyMode` sets the two attributes, as a View Transition cross-fade when the mode really changes; `crossfade` is the guard around `document.startViewTransition`.
 - [web/tailwind.config.ts](../../web/tailwind.config.ts): the daisyUI plugin with the `winter` and `night` themes only. Its Tailwind and daisyUI setup is described in [app-shell.md](app-shell.md).
-- [web/src/app/globals.css](../../web/src/app/globals.css): palette tokens for light and `[data-mode='dark']`, taken from the prototype, plus the names used by the older pages.
+- [web/src/app/globals.css](../../web/src/app/globals.css): the tokens for light and `[data-mode='dark']`, the page background, the `.glass` pane, the shared control classes (`ui-btn`, `ui-ghost`, `ui-select`, `ui-input`, `ui-controls`), the cursor rules, the press and transition rules for buttons and the View Transition timing. The names `--bg`, `--fg`, `--muted`, `--card`, `--ok` and `--danger` stay for the setup and accounts pages.
+- [web/src/app/layout.tsx](../../web/src/app/layout.tsx): imports the two self-hosted font packages, [web/public/cursors/](../../web/public/cursors): the five cursor images.
 - [web/src/components/Settings/ThemeSwap.tsx](../../web/src/components/Settings/ThemeSwap.tsx): the rotating sun/moon toggle, a visually hidden checkbox named "Dark mode" (checked is dark) with two decorative SVGs, styled in `Settings.module.css`. The rotation is a CSS transition that `prefers-reduced-motion` turns off.
 - [web/src/components/Settings/SettingsContent.tsx](../../web/src/components/Settings/SettingsContent.tsx): the Theme section (a sun/moon swap and an Auto checkbox), after Sessions and before Activity. The top bar has no theme control. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) keeps `useTheme` mounted, so the mode is applied while the Settings sidebar is closed.
 
@@ -24,9 +30,10 @@ stored on the server in the settings, so it follows the user across browsers.
 
 1. The dashboard reads the settings, `useTheme` sets `data-mode` and `data-theme` on `<html>`.
 2. In Auto it sets a timer for the next 07:00 or 19:00 and switches then.
-3. Toggling the swap in the Settings sidebar is an explicit choice: it sends the full settings with `dark` or `light` to `PUT /api/settings` (this turns Auto off), then the query refetches and the mode follows. The swap shows the resolved `mode`, so in Auto it shows what the clock gives.
-4. The "Auto (light from 07:00 to 19:00)" checkbox is checked while the theme is `auto`. Checking it saves `auto`. Unchecking it saves the mode in effect, so the look does not jump.
-5. Both controls are disabled until the settings load.
+3. A change between light and dark cross-fades the whole page over 0.9s (`::view-transition-old(root)` and `-new(root)` in `globals.css`), through `document.startViewTransition` when the browser has it. Without it, or under `prefers-reduced-motion`, the attributes change at once. The first mode after load and an Auto timer that keeps the mode do not fade. A skipped transition (a newer one started) is ignored.
+4. Toggling the swap in the Settings sidebar is an explicit choice: it sends the full settings with `dark` or `light` to `PUT /api/settings` (this turns Auto off), then the query refetches and the mode follows. The swap shows the resolved `mode`, so in Auto it shows what the clock gives.
+5. The "Auto (light from 07:00 to 19:00)" checkbox is checked while the theme is `auto`. Checking it saves `auto`. Unchecking it saves the mode in effect, so the look does not jump.
+6. Both controls are disabled until the settings load.
 
 ## Outside calls
 
@@ -34,7 +41,24 @@ None.
 
 ## Rules and invariants
 
-- Colours are CSS custom properties only. No inline styles.
+The look (the approved glass design):
+
+- Fonts: Inter (body, 16px on a 24px line) and Space Grotesk (`h1`, `h2` and `.display`, and the brand names). Both come from the `@fontsource-variable/inter` and `@fontsource-variable/space-grotesk` packages (exact versions in `web/package.json`), imported in `layout.tsx`, so Next emits the variable `woff2` files under `_next/static/media/`. The font-face rules have `unicode-range`, so a browser fetches only the scripts a page uses. The CSP already allows them (`font-src 'self'`) and the service worker precaches them with the rest of `_next/static/`. The server maps `.woff2` to `font/woff2`. Controls use 14px, small print 12px.
+- Base colours come from the daisyUI themes: `--b1` surface, `--b2` page, `--bc` ink, `--p`, `--s`, `--a`, `--n`. `winter` is the default of `:root`, so they exist before `data-theme` is set, and `useTheme` sets `data-theme` with `data-mode`. Text is `oklch(var(--bc))` (light `oklch(0.4189 0.0539 255.8)`, dark `oklch(0.8415 0.008 265.8)`).
+- Muted text: `--sub` (and `--eyebrow` for the small capitals) is ink at 85% in light and 80% in dark. The design mutes to 70% and 65%, which is 3.3 to 3.8:1 on the glass in light mode, so the steps are raised until every muted text reaches 4.5:1 on every surface, tinted rows and hovers included.
+- Page: `html` carries `--page-image` over `--page-bg`, fixed. Light is three soft radial glows (`--p`, `--s`, `--a` at 28, 22 and 20%) over `oklch(var(--b2))`. Dark is the aurora, three radial glows over a `160deg` gradient from `#0d1226` through `#0a0f1f` to `#0c1424`.
+- Glass: `.glass`, or `--glass-bg`, `--glass-border`, `--glass-blur`, `--glass-shadow` and `--radius-glass` (1.1rem) in a CSS Module. Light is `oklch(var(--b1) / .55)`, a `1px` `oklch(var(--bc) / .12)` border and `blur(16px) saturate(140%)`. Dark is a white-to-clear gradient, a `rgba(255,255,255,.11)` border, `blur(22px) saturate(150%)`, an inset highlight and a `0 10px 30px -12px` shadow. Do not put `backdrop-filter` on an ancestor of a `position: fixed` popover; the sidebar blurs a `::before` layer for this reason. Popovers, the FAB and pickers are opaque (`--surface`).
+- Radius scale: `--radius-ctl` .5rem (controls), `--radius-stack` .6rem, `--radius-box` 1rem (popovers), `--radius-glass` 1.1rem, `--radius-pill`.
+- Roles and stacks: `--rc-a` assignee cyan (`#bfeaf1`, dark `#1d5560`), `--rc-r` reviewer and authored red (`#f9c9c9`, dark `#6a363c`) and `--stack` (`#8b6cf0`, dark `#a994ff`) are the colours of the design. The legend dots use them as they are. `--role-*` are the row tints and bars built from them (28% over the surface in light, the translucent teal and pink of the design in dark).
+- Focus: `:focus-visible` is a 2px solid ring in the ink colour, 2px away, as daisyUI draws it.
+- Controls: `ui-btn` is daisyUI `btn btn-sm btn-outline` (32px, radius .5rem, 1px ink border, hover fills with ink and turns the text to the surface colour, disabled is 20% neutral with 20% ink text). Dark uses the translucent fill and the white 18% border of the design, and keeps the same ink fill on hover. `ui-ghost` is `btn-ghost` (hover fills with 20% ink), `ui-select` is `select select-sm` and `ui-input` an input with a border. A checkbox is 1rem and takes the ink colour when checked. A CSS Module takes one with `composes: ui-btn from global;`; a container takes it for every button, select and text field inside with `composes: ui-controls from global;` (the Settings sidebar), and then needs two-class selectors for a borderless button. The Merge button is `ui-btn` in the blue `--merge` (`#007fff`, hover `--merge-hover` `#1a8cff`, white text, radius .5rem, 32px, the merge mark) with an aura that pulses for 2.6s while enabled (`aura` keyframes in `CommandTable.module.css`). The primary action is `--accent` (`oklch(var(--p))`).
+- Every `button` has the 0.2s transition on colour, background, border, opacity, shadow and transform, and scales to 0.95 while pressed. Reduced motion turns the transition, the press and the aura off.
+- Cursors: `/cursors/arrow.svg` (hotspot 5 3) on the page, `hand.svg` (12 4) on buttons, links, tabs, summaries, selects, checkboxes, radios and ranges, `merge.svg` (16 16) on Merge buttons, `no.svg` (16 16) on disabled buttons, selects and inputs, and `ready.svg` (16 16) kept for the Ready button. Text fields keep the text cursor. The files are static (`web/public/cursors`, 32x32 SVG), referenced as `cursor: url(/cursors/x.svg) x y, fallback`, so the CSP needs no change: a cursor image is governed by `img-src 'self'`. The service worker precaches them and the server serves `.svg` as `image/svg+xml`.
+
+Rules:
+
+- Colours are CSS custom properties only. No inline styles, no external fonts or images.
+- Text on any surface has at least 4.5:1 contrast, except the Merge button (white on `#007fff`, 3.8:1, and 3.4:1 on hover), whose colours are fixed by the design, and disabled controls.
 - Before the settings load, the page uses the light tokens and has no `data-theme`, which no daisyUI component needs yet. The accounts and setup pages do not apply `data-mode` or `data-theme`.
 - `data-mode` drives the palette in `globals.css`. `data-theme` only selects the daisyUI theme. Both are set in the same call, so they never disagree.
 - The decision logic lives in pure functions with the clock passed in.
@@ -42,4 +66,6 @@ None.
 ## Tests
 
 - [web/src/theme/theme.test.ts](../../web/src/theme/theme.test.ts): Auto at each hour, explicit choices, time to the next switch, and the light/dark to `winter`/`night` mapping.
+- [web/src/theme/transition.test.ts](../../web/src/theme/transition.test.ts): the cross-fade runs the change inside a view transition, is skipped under reduced motion or without browser support, ignores a skipped transition, and `applyMode` fades only a real change.
+- [server/internal/api/static_test.go](../../server/internal/api/static_test.go): fonts are served as `font/woff2` and cursors as `image/svg+xml`, with the CSP `font-src 'self'` and `img-src 'self'`. [web/scripts/pwa.test.ts](../../web/scripts/pwa.test.ts): fonts and cursors are precached.
 - [web/src/components/CommandTable/CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx): applying the stored theme (both `data-mode` and `data-theme`), no theme control in the top bar. [SettingsContent.test.tsx](../../web/src/components/Settings/SettingsContent.test.tsx): the swap reflecting the theme, saving an explicit dark or light, turning Auto on and off, disabled while loading.
