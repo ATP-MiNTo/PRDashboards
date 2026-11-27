@@ -38,6 +38,11 @@ export type MethodChoice = 'default' | MergeMethodName;
 
 export const DELETE_CHOICES: readonly DeleteBranchChoice[] = ['default', 'yes', 'no'];
 
+/** Whether two lists of rules say the same, whatever order the keys of each rule came in. */
+export const sameRules = (a: readonly BranchRule[], b: readonly BranchRule[]): boolean =>
+  a.length === b.length &&
+  a.every((r, i) => r.pattern === b[i]?.pattern && r.method === b[i]?.method);
+
 export const draftOf = (r: RepoSettings): RepoDraft => ({
   method: r.inheritMethod ? 'default' : r.defaultMethod,
   ownMethod: r.defaultMethod,
@@ -52,7 +57,7 @@ export const updateOf = (d: RepoDraft): RepoUpdate => ({
   inheritMethod: d.method === 'default',
   deleteBranch: d.deleteBranch,
   approvalsRequired: d.approvals,
-  branchRules: d.rules,
+  branchRules: d.rules.map((r) => ({ pattern: r.pattern, method: r.method })),
   clearNew: true,
 });
 
@@ -68,7 +73,7 @@ export function draftChanged(d: RepoDraft, r: RepoSettings): boolean {
     (d.method !== 'default' && d.method !== s.ownMethod) ||
     d.deleteBranch !== s.deleteBranch ||
     d.approvals !== s.approvals ||
-    JSON.stringify(d.rules) !== JSON.stringify(s.rules)
+    !sameRules(d.rules, s.rules)
   );
 }
 
@@ -126,7 +131,7 @@ export function isCustom(r: RepoSettings): boolean {
     r.deleteBranch !== 'default' ||
     !r.inheritMethod ||
     r.approvalsRequired !== MIN_APPROVALS ||
-    JSON.stringify(r.branchRules) !== JSON.stringify(SEED_RULES)
+    !sameRules(r.branchRules, SEED_RULES)
   );
 }
 

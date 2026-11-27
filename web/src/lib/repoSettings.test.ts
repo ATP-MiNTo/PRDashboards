@@ -124,6 +124,14 @@ describe('isCustom', () => {
     expect(isCustom(repo())).toBe(false);
   });
 
+  it('does not depend on the order of the keys of a rule, as the server writes them', () => {
+    const fromServer = JSON.parse(
+      '[{"method":"merge","pattern":"main"},{"method":"merge","pattern":"production"}]',
+    ) as RepoSettings['branchRules'];
+    expect(isCustom(repo({ branchRules: fromServer }))).toBe(false);
+    expect(draftChanged(draftOf(repo({ branchRules: fromServer })), repo())).toBe(false);
+  });
+
   it.each([
     ['a delete-branch choice', { deleteBranch: 'no' as const }],
     ['a method of its own', { inheritMethod: false }],
