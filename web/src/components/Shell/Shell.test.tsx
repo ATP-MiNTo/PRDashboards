@@ -127,6 +127,19 @@ describe('sidebar on a wide screen', () => {
       expect(burger()).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('waits while any dialog is open over the page', () => {
+      render(<Harness />);
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      document.body.append(dialog);
+      advance(120_000);
+      expect(burger()).toHaveAttribute('aria-expanded', 'true');
+      dialog.remove();
+      advance(AUTO_COLLAPSE_MS);
+      expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    });
+
     it('waits while a panel is open', () => {
       const { rerender } = render(<Harness hold />);
       advance(120_000);

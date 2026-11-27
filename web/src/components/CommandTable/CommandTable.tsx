@@ -46,7 +46,7 @@ export function CommandTable() {
   const [account, setAccount] = useState(false);
   const [rules, setRules] = useState(false);
   const [history, setHistory] = useState(false);
-  const sidebar = useSidebar({ hold: account || rules });
+  const sidebar = useSidebar();
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
