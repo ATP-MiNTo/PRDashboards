@@ -202,7 +202,8 @@ describe('CommandTable', () => {
   it('syncs on demand and follows the sync status events', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    fireEvent.click(screen.getByRole('button', { name: 'Sync' }));
+    expect(screen.queryByRole('button', { name: 'Sync' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
     await waitFor(() => expect(api.syncNow).toHaveBeenCalledTimes(1));
     act(() => {
       FakeEventSource.last!.emit('sync-status', {
@@ -213,7 +214,9 @@ describe('CommandTable', () => {
         nextJiraAt: null,
       });
     });
-    await screen.findByRole('button', { name: 'Syncing' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Refresh' })).toHaveAttribute('aria-busy', 'true'),
+    );
     act(() => {
       FakeEventSource.last!.emit('sync-status', {
         running: false,
@@ -223,8 +226,12 @@ describe('CommandTable', () => {
         nextJiraAt: null,
       });
     });
-    expect(await screen.findByRole('button', { name: 'Sync' })).toBeEnabled();
-    expect(screen.getByText(/Next sync in 1m/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Refresh' })).not.toHaveAttribute('aria-busy'),
+    );
+    // The sync details are in the popover of the refresh button.
+    fireEvent.focus(screen.getByRole('button', { name: 'Refresh' }));
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/Next sync in 1m/);
   });
 
   it('refetches the snapshot on a snapshot event and ignores malformed status events', async () => {
@@ -327,33 +334,74 @@ describe('CommandTable', () => {
     expect(burger).toHaveAttribute('aria-expanded', 'true');
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(
-      await within(dialog).findByRole('heading', { name: 'Repositories' }),
+      await within(dialog).findByRole('heading', { name: /^Repositories setting/ }),
     ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(burger).toHaveFocus();
   });
 
-  it('opens the account panel from the Account button', async () => {
+  it('opens the account panel from Manage accounts in the sidebar', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    const account = screen.getByRole('button', { name: 'Account' });
-    account.focus();
-    fireEvent.click(account);
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const manage = await screen.findByRole('button', { name: 'Manage accounts' });
+    manage.focus();
+    fireEvent.click(manage);
     const dialog = screen.getByRole('dialog', { name: 'Account' });
     expect(
       await within(dialog).findByRole('heading', { name: 'Connected accounts' }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close account' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(account).toHaveFocus();
+    expect(screen.queryByRole('dialog', { name: 'Account' })).toBeNull();
+    expect(manage).toHaveFocus();
 
-    fireEvent.click(account);
+    fireEvent.click(manage);
     fireEvent.click(screen.getByTestId('side-panel-scrim'));
-    expect(screen.queryByRole('dialog')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    expect(screen.queryByRole('dialog', { name: 'Account' })).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
+  });
+
+  it('shows the connected accounts at the bottom of the sidebar', async () => {
+    api.getAccounts.mockResolvedValue({
+      github: { connected: true, login: 'minatpt', method: 'app' },
+      jira: {
+        connected: true,
+        needsReconnect: false,
+        sites: [{ id: 's1', name: 'acme', url: 'https://acme.atlassian.net' }],
+        selectedSiteId: 's1',
+      },
+    });
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    expect(await within(accounts).findByText('minatpt')).toBeInTheDocument();
+    expect(within(accounts).getByText('GitHub App')).toBeInTheDocument();
+    expect(within(accounts).getByText('acme')).toBeInTheDocument();
+    expect(within(accounts).getByText('Atlassian')).toBeInTheDocument();
+  });
+
+  it('has no Sync or Account button in the header', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    expect(screen.queryByRole('button', { name: 'Sync' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Account' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Theme:/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'History' })).toBeNull();
+  });
+
+  it('switches the theme from the header button', async () => {
+    api.getSettings.mockResolvedValue({ ...settings, theme: 'light' });
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Theme: light' }));
+    await waitFor(() =>
+      expect(api.putSettings).toHaveBeenLastCalledWith({ ...settings, theme: 'dark' }),
+    );
   });
 });

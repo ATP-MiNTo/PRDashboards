@@ -64,10 +64,10 @@ export function Table({ prefs }: { prefs: ListPrefs }) {
     terms.length > 0
       ? 'No pull requests match the search.'
       : mode === 'hidden'
-      ? 'No hidden pull requests match.'
-      : hidden.size > 0 && mode === 'visible'
-        ? 'No pull requests match. Some are hidden.'
-        : 'No pull requests match.';
+        ? 'No hidden pull requests match.'
+        : hidden.size > 0 && mode === 'visible'
+          ? 'No pull requests match. Some are hidden.'
+          : 'No pull requests match.';
 
   return (
     <>

@@ -1,27 +1,48 @@
-/* Left sidebar and floating burger. Colours come from the theme tokens in globals.css. */
+/* Left sidebar. Colours come from the theme tokens in globals.css; the sizes and the 0.3s slide
+   are those of the approved design (a daisyUI drawer, w-80, p-5, gap-4). */
 
+/* Wide screens: a sticky column beside the page. Closed, it leaves the flow at once and the
+   sidebar slides out; it turns invisible when the slide is done. */
 .column {
   position: sticky;
   top: 0;
   z-index: 25;
   flex: none;
   align-self: flex-start;
-  width: 24rem;
-  max-width: 40vw;
+  width: 20rem;
   height: 100dvh;
-  padding-block: 12px;
 }
 
+.column[data-open='false'] {
+  position: fixed;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: visibility 0s linear 0.3s;
+}
+
+/* Narrow screens: a fixed layer with a scrim and the sidebar on top. */
 .layer {
   position: fixed;
   inset: 0;
   z-index: 50;
 }
 
+.layer[data-open='false'] {
+  visibility: hidden;
+  pointer-events: none;
+  transition: visibility 0s linear 0.3s;
+}
+
 .scrim {
   position: absolute;
   inset: 0;
-  background: rgba(10, 16, 24, 0.5);
+  background: transparent;
+}
+
+.layer[data-open='true'] .scrim {
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .sidebar {
@@ -29,9 +50,10 @@
   isolation: isolate;
   display: flex;
   flex-direction: column;
+  gap: 1rem;
   height: 100%;
+  padding: 1.25rem;
   border: var(--glass-border);
-  border-left: 0;
   border-radius: 0 1.25rem 1.25rem 0;
   color: var(--text);
   box-shadow: var(--glass-shadow);
@@ -42,8 +64,19 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: min(24rem, 92vw);
-  border-radius: 0 1.25rem 1.25rem 0;
+  width: min(20rem, 92vw);
+}
+
+[data-open='false'] > .sidebar {
+  transform: translateX(-100%);
+}
+
+[data-animate='true'] > .sidebar {
+  transition: transform 0.3s cubic-bezier(0, 0, 0.2, 1);
+}
+
+[data-animate='true'] > .scrim {
+  transition: background-color 0.2s cubic-bezier(0, 0, 0.2, 1);
 }
 
 .sidebar:focus {
@@ -63,117 +96,147 @@
   backdrop-filter: var(--glass-blur);
 }
 
-.sidebarHead {
+/* The title row is one button that folds the sidebar. */
+.head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px 12px 16px;
-  border-bottom: 1px solid var(--line);
+  gap: 0.75rem;
+  margin: -0.5rem;
+  padding: 0.5rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
-.sidebarHead h2 {
-  margin: 0;
+.head:hover {
+  background: oklch(var(--bc) / 0.05);
+}
+
+.gear {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.gear svg {
+  width: 22px;
+  height: 22px;
+}
+
+.headTitle {
   font-size: 1.125rem;
   font-weight: 700;
+  line-height: 1.75rem;
 }
 
+.headChevron {
+  margin-left: auto;
+  opacity: 0.6;
+}
+
+/* The content scrolls without a visible scrollbar. */
 .sidebarBody {
-  flex: 1;
-  min-height: 0;
-  padding: 16px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.collapse,
-.burger {
-  composes: ui-ghost from global;
-  width: var(--ctl-h);
-  height: var(--ctl-h);
-  padding: 0;
-}
-
-.burgerWrap {
-  position: sticky;
-  top: 0;
-  z-index: 30;
-  height: 0;
-  padding-left: 12px;
-  pointer-events: none;
-}
-
-.pill {
-  display: inline-flex;
-  align-items: center;
-  height: 40px;
-  margin-top: 4px;
-  padding-inline: 6px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  color: var(--tb-fg);
-  pointer-events: auto;
-  transition:
-    background-color 0.2s,
-    box-shadow 0.2s,
-    border-color 0.2s;
-}
-
-.stuck {
-  border-color: oklch(var(--bc) / 0.15);
-  background: oklch(var(--b1) / 0.94);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.45);
-}
-
-.pillTitle {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 0;
-  overflow: hidden;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
-  white-space: nowrap;
-  opacity: 0;
-  transition:
-    max-width 0.4s ease,
-    opacity 0.3s ease,
-    margin 0.4s ease;
+  flex: 1;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-height: 0;
+  padding-bottom: 0.5rem;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
 
-.stuck .pillTitle {
-  max-width: 14rem;
-  margin: 0 10px 0 4px;
-  opacity: 1;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .layer .sidebar {
-    animation: side-in 180ms ease-out;
-  }
-
-  .scrim {
-    animation: side-fade 180ms ease-out;
-  }
+.sidebarBody::-webkit-scrollbar {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pill,
-  .pillTitle {
+  .column,
+  .layer,
+  [data-animate='true'] > .sidebar,
+  [data-animate='true'] > .scrim {
     transition: none;
   }
 }
 
-@keyframes side-in {
-  from {
-    transform: translateX(-100%);
-  }
+/* The accounts block under the content. */
+.accounts {
+  composes: ui-controls from global;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid oklch(var(--bc) / 0.15);
 }
 
-@keyframes side-fade {
-  from {
-    opacity: 0;
-  }
+.accountsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  color: var(--eyebrow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.dim {
+  color: var(--sub);
+}
+
+.badges {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* A small outline badge (daisyUI "badge badge-outline badge-xs"). */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.25rem;
+  padding: 0 0.5rem;
+  border: 1px solid;
+  border-radius: 1.9rem;
+  font-size: 0.7rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.good {
+  border-color: var(--good-fill);
+  color: var(--good);
+}
+
+.warn {
+  border-color: var(--warn-fill);
+  color: var(--warn);
+}
+
+.accountNote {
+  margin: 0;
+  color: var(--sub);
+  font-size: 0.875rem;
+}
+
+.manage {
+  width: 100%;
 }

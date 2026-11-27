@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SnapshotPr } from '@/api/client';
-import { pr, snapshot } from '@/test-fixtures';
+import { pr, snapshot, ticket } from '@/test-fixtures';
 import { renderWithClient } from '@/test-utils';
 
 const api = vi.hoisted(() => ({
@@ -371,6 +371,67 @@ describe('hidden pull requests', () => {
     expect(label).toHaveAttribute('aria-describedby', tip.id);
     fireEvent.keyDown(label, { key: 'Escape' });
     expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+});
+
+describe('search', () => {
+  const search = () => screen.getByPlaceholderText('Title, repo, PR or Jira key');
+
+  it('filters by title, repository, PR number and Jira key, and says when nothing matches', async () => {
+    load([
+      pr('a', 11, { title: 'Login form', tickets: [ticket('INP-7')] }),
+      pr('b', 12, {
+        title: 'Billing page',
+        repo: {
+          id: 'R2',
+          nameWithOwner: 'acme/billing-api',
+          isNew: false,
+          squashAllowed: true,
+          mergeAllowed: true,
+          rebaseAllowed: true,
+        },
+      }),
+      pr('c', 13, { title: 'Export CSV' }),
+    ]);
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Billing page');
+    const type = (value: string) => fireEvent.change(search(), { target: { value } });
+
+    type('login');
+    expect(rowOrder()).toEqual(['a']);
+    type('BILLING-API');
+    expect(rowOrder()).toEqual(['b']);
+    type('#13');
+    expect(rowOrder()).toEqual(['c']);
+    type('inp-7');
+    expect(rowOrder()).toEqual(['a']);
+    type('nothing like this');
+    expect(rowOrder()).toEqual([]);
+    expect(screen.getByText('No pull requests match the search.')).toBeInTheDocument();
+    type('');
+    expect(rowOrder()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('shares the query with the field of narrow screens', async () => {
+    load(many(3));
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Item 03');
+    fireEvent.change(screen.getByPlaceholderText('Search pull requests'), {
+      target: { value: 'item 02' },
+    });
+    expect(rowOrder()).toEqual(['p2']);
+    expect(search()).toHaveValue('item 02');
+  });
+
+  it('keeps the counts of the stat strip and goes back to the first page', async () => {
+    load(many(25));
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Item 25');
+    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }));
+    fireEvent.change(search(), { target: { value: 'item 1' } });
+    expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('Showing 1 to 10 of 12')).toBeInTheDocument();
+    expect(document.querySelector('dl')!.textContent).toContain('Open25');
   });
 });
 

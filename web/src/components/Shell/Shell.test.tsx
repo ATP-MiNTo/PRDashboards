@@ -1,9 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Burger } from './Burger';
 import { Sidebar } from './Sidebar';
-import { AUTO_COLLAPSE_MS, SIDEBAR_KEY, useScrolled, useSidebar } from './useSidebar';
+import { AUTO_COLLAPSE_MS, SIDEBAR_KEY, useSidebar } from './useSidebar';
 
 function mockWide(wide: boolean) {
   vi.stubGlobal(
@@ -17,22 +16,18 @@ function mockWide(wide: boolean) {
   );
 }
 
-function setScrollY(y: number) {
-  Object.defineProperty(window, 'scrollY', { configurable: true, value: y });
-}
-
 function Harness({ hold = false }: { hold?: boolean }) {
   const sidebar = useSidebar({ hold });
-  const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <Burger
-        open={sidebar.open}
-        stuck={scrolled}
-        onToggle={sidebar.toggle}
-        buttonRef={burger}
-        controls="side"
+      <button
+        ref={burger}
+        type="button"
+        aria-label="Settings sidebar"
+        aria-expanded={sidebar.open}
+        aria-controls="side"
+        onClick={sidebar.toggle}
       />
       <Sidebar
         id="side"
@@ -54,7 +49,6 @@ const collapse = () => screen.getByRole('button', { name: 'Collapse sidebar' });
 
 beforeEach(() => {
   localStorage.clear();
-  setScrollY(0);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -68,7 +62,7 @@ describe('sidebar on a wide screen', () => {
     render(<Harness />);
     expect(burger()).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByRole('complementary', { name: 'Settings' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Settings')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-scrim')).toBeNull();
     expect(screen.getByRole('button', { name: 'Inside' })).toBeInTheDocument();
   });
@@ -195,37 +189,5 @@ describe('sidebar on a narrow screen', () => {
     dialog.focus();
     fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: true });
     expect(last).toHaveFocus();
-  });
-});
-
-describe('burger pill', () => {
-  beforeEach(() => mockWide(true));
-  const pill = () => burger().parentElement!;
-
-  it('is frosted only after scrolling past 24px', () => {
-    render(<Harness />);
-    expect(pill()).toHaveAttribute('data-stuck', 'false');
-    setScrollY(24);
-    fireEvent.scroll(window);
-    expect(pill()).toHaveAttribute('data-stuck', 'false');
-    setScrollY(25);
-    fireEvent.scroll(window);
-    expect(pill()).toHaveAttribute('data-stuck', 'true');
-    setScrollY(0);
-    fireEvent.scroll(window);
-    expect(pill()).toHaveAttribute('data-stuck', 'false');
-  });
-
-  it('starts stuck when the page loads already scrolled', () => {
-    setScrollY(300);
-    render(<Harness />);
-    expect(pill()).toHaveAttribute('data-stuck', 'true');
-  });
-
-  it('shows the app name and icon as decorative content', () => {
-    render(<Harness />);
-    const title = screen.getByText('PR Dashboards').parentElement!;
-    expect(title).toHaveAttribute('aria-hidden', 'true');
-    expect(title.querySelector('svg')).not.toBeNull();
   });
 });

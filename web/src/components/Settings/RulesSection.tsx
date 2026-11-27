@@ -119,7 +119,9 @@ export function RulesSection() {
 
   return (
     <section className={styles.section} aria-labelledby="set-rules">
-      <h3 id="set-rules">Status sync rules</h3>
+      <h3 id="set-rules" tabIndex={-1}>
+        Status sync rules
+      </h3>
       {rules.isPending && <p className={styles.muted}>Loading rules</p>}
       {rules.isError && (
         <p className={styles.error} role="alert">

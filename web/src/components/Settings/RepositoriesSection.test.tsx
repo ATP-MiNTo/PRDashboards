@@ -64,7 +64,7 @@ beforeEach(() => {
 /** Renders the section and unfolds it. */
 async function renderOpen() {
   renderWithClient(<RepositoriesSection />);
-  fireEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
+  fireEvent.click(await screen.findByRole('button', { name: /^Repositories setting/ }));
 }
 
 const group = (repoName: string) => within(screen.getByRole('group', { name: repoName }));
@@ -72,13 +72,13 @@ const group = (repoName: string) => within(screen.getByRole('group', { name: rep
 describe('RepositoriesSection', () => {
   it('is folded by default and hides the list and its controls', async () => {
     renderWithClient(<RepositoriesSection />);
-    const fold = await screen.findByRole('button', { name: 'Repositories' });
+    const fold = await screen.findByRole('button', { name: /^Repositories setting/ });
     expect(fold).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: /^acme\/web/ })).toBeNull();
     expect(screen.queryByRole('searchbox')).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Default for new repositories' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Save all' })).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Repositories' })).toContainElement(fold);
+    expect(screen.getByRole('heading', { name: /^Repositories setting/ })).toContainElement(fold);
     fireEvent.click(fold);
     expect(fold).toHaveAttribute('aria-expanded', 'true');
     expect(await screen.findByRole('button', { name: /^acme\/web/ })).toBeInTheDocument();

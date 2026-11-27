@@ -244,6 +244,8 @@ export function DefaultMethod() {
   );
 }
 
+const repoIds = (s: Snapshot) => [...new Set(s.prs.map((p) => p.repo.id))];
+
 export function RepositoriesSection() {
   const repos = useRepos();
   const saveOne = useSaveRepo();
@@ -254,6 +256,8 @@ export function RepositoriesSection() {
   const [failed, setFailed] = useState<string | null>(null);
   const panelId = useId();
   const list = repos.data?.repos;
+  const withPrs = useSnapshot(repoIds).data;
+  const inList = list && withPrs ? list.filter((r) => withPrs.includes(r.id)).length : null;
   const q = query.trim().toLowerCase();
   const shown = useMemo(
     () => (list ?? []).filter((r) => r.nameWithOwner.toLowerCase().includes(q)),
@@ -310,7 +314,32 @@ export function RepositoriesSection() {
           aria-controls={panelId}
           onClick={() => setExpanded(!expanded)}
         >
-          Repositories
+          <span className={styles.foldLabel}>
+            <span className={styles.eyebrow}>Repositories setting</span>
+            {inList !== null && (
+              <span
+                className={styles.count}
+                title={`${inList} of ${list?.length ?? 0} repositories have open pull requests`}
+              >
+                {inList}/{list?.length ?? 0}
+              </span>
+            )}
+          </span>
+          <svg
+            className={styles.chevron}
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="m9 6 6 6-6 6" />
+          </svg>
         </button>
       </h3>
       {expanded && (

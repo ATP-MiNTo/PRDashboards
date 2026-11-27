@@ -26,7 +26,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
   ...api,
 }));
 
-import { SettingsContent } from './SettingsContent';
+import { POLL_SAVE_MS, SettingsContent } from './SettingsContent';
 
 const settings = {
   polling: { githubSec: 60, jiraSec: 300 },
@@ -64,9 +64,8 @@ describe('SettingsContent', () => {
     const page = document.body;
     expect(within(page).queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
     for (const name of [
-      'Repositories',
+      /^Repositories setting/,
       'Delete branch after merge',
-      'Polling intervals',
       'Theme',
       'Status sync rules',
       'Multi-PR tickets',
@@ -75,41 +74,41 @@ describe('SettingsContent', () => {
     ]) {
       expect(await within(page).findByRole('heading', { name })).toBeInTheDocument();
     }
+    expect(within(page).getByRole('region', { name: 'Polling' })).toBeInTheDocument();
   });
 
-  it('orders the sections: repositories, preferences, rules, multi-PR, sessions, theme, activity', async () => {
+  it('orders the sections: repositories, polling, delete branch, rules, multi-PR, sessions, theme, activity', async () => {
     renderWithClient(<SettingsContent />);
     const page = document.body;
     await within(page).findByRole('heading', { name: 'Activity' });
-    await within(page).findByRole('heading', { name: 'Polling intervals' });
+    await within(page).findByRole('region', { name: 'Polling' });
     const names = within(page)
       .getAllByRole('heading', { level: 3 })
-      .map((h) => h.textContent);
+      .map((h) => h.textContent?.replace(/\d+\/\d+$/, ''));
     expect(names).toEqual([
-      'Repositories',
+      'Repositories setting',
       'Delete branch after merge',
-      'Polling intervals',
       'Status sync rules',
       'Multi-PR tickets',
       'Sessions',
       'Theme',
       'Activity',
     ]);
+    const polling = within(page).getByRole('region', { name: 'Polling' });
+    const repos = names.indexOf('Repositories setting');
+    expect(repos).toBe(0);
+    const heading = (n: string) => within(page).getByRole('heading', { name: new RegExp('^' + n) });
+    expect(
+      heading('Repositories setting').compareDocumentPosition(polling) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      polling.compareDocumentPosition(heading('Delete branch after merge')) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
-  it('puts both polling selects on one line with a hidden separator', async () => {
-    renderWithClient(<SettingsContent />);
-    const github = await screen.findByLabelText('GitHub');
-    const jira = screen.getByLabelText('Jira');
-    expect(github.closest('div')).toBe(jira.closest('div'));
-    const line = github.closest('div')!;
-    const sep = within(line).getByText('|');
-    expect(sep).toHaveAttribute('aria-hidden', 'true');
-    expect(github.compareDocumentPosition(sep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sep.compareDocumentPosition(jira) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it('saves the delete-branch default and the polling intervals', async () => {
+  it('saves the delete-branch default', async () => {
     renderWithClient(<SettingsContent />);
     fireEvent.click(await screen.findByRole('checkbox', { name: /Delete the head branch/ }));
     await waitFor(() =>
@@ -118,47 +117,121 @@ describe('SettingsContent', () => {
         deleteBranchAfterMerge: true,
       }),
     );
-    fireEvent.change(screen.getByLabelText('GitHub'), { target: { value: '900' } });
-    await waitFor(() =>
-      expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 900, jiraSec: 300 } }),
-    );
+  });
+
+  describe('polling', () => {
+    const github = () => screen.findByRole('spinbutton', { name: 'GitHub polling seconds' });
+    const jira = () => screen.findByRole('spinbutton', { name: 'Jira polling seconds' });
+
+    // The server keeps what was saved, so the refetch after a save returns it.
+    beforeEach(() => {
+      api.putSettings.mockImplementation((saved: unknown) => {
+        api.getSettings.mockResolvedValue(saved);
+        return Promise.resolve(saved);
+      });
+    });
+
+    it('shows the two intervals in seconds as fields that are stepped, not typed into', async () => {
+      renderWithClient(<SettingsContent />);
+      const gh = await github();
+      expect(gh).toHaveValue('60');
+      expect(gh).toHaveAttribute('readonly');
+      expect(gh).toHaveAttribute('aria-valuemin', '60');
+      expect(gh).toHaveAttribute('aria-valuemax', '3600');
+      expect(gh).toHaveAttribute('aria-valuenow', '60');
+      expect(gh).toHaveAttribute('aria-valuetext', '1 minute');
+      const j = await jira();
+      expect(j).toHaveValue('300');
+      expect(j).toHaveAttribute('aria-valuetext', '5 minutes');
+      expect(screen.getByText('GitHub polling')).toBeInTheDocument();
+      expect(screen.getByText('Jira polling')).toBeInTheDocument();
+    });
+
+    it('steps with the arrow keys and saves once the stepping has paused', async () => {
+      renderWithClient(<SettingsContent />);
+      const gh = await github();
+      fireEvent.keyDown(gh, { key: 'ArrowUp' });
+      fireEvent.keyDown(gh, { key: 'ArrowUp' });
+      expect(gh).toHaveValue('300');
+      expect(api.putSettings).not.toHaveBeenCalled();
+      await waitFor(() =>
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 300, jiraSec: 300 } }),
+      );
+      expect(api.putSettings).toHaveBeenCalledTimes(1);
+      fireEvent.keyDown(gh, { key: 'ArrowDown' });
+      await waitFor(() =>
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 120, jiraSec: 300 } }),
+      );
+    });
+
+    it('steps with the mouse wheel: up is longer, down is shorter', async () => {
+      renderWithClient(<SettingsContent />);
+      const j = await jira();
+      const notPrevented = fireEvent.wheel(j, { deltaY: -100 });
+      expect(notPrevented).toBe(false);
+      expect(j).toHaveValue('900');
+      await waitFor(() =>
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 60, jiraSec: 900 } }),
+      );
+    });
+
+    it('saves both fields in one request when both were stepped', async () => {
+      renderWithClient(<SettingsContent />);
+      fireEvent.keyDown(await github(), { key: 'ArrowUp' });
+      fireEvent.keyDown(await jira(), { key: 'ArrowDown' });
+      await waitFor(() =>
+        expect(lastSaved()).toEqual({ ...settings, polling: { githubSec: 120, jiraSec: 120 } }),
+      );
+      expect(api.putSettings).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops at the ends of the range and ignores other keys', async () => {
+      renderWithClient(<SettingsContent />);
+      const gh = await github();
+      fireEvent.keyDown(gh, { key: 'ArrowDown' });
+      fireEvent.keyDown(gh, { key: 'a' });
+      expect(gh).toHaveValue('60');
+      await new Promise((r) => setTimeout(r, POLL_SAVE_MS + 150));
+      expect(api.putSettings).not.toHaveBeenCalled();
+    });
+
+    it('says so when the save fails', async () => {
+      api.putSettings.mockRejectedValue(new Error('no'));
+      renderWithClient(<SettingsContent />);
+      fireEvent.keyDown(await github(), { key: 'ArrowUp' });
+      await waitFor(() => expect(api.putSettings).toHaveBeenCalled());
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the settings.');
+    });
+
+    it('has the Status sync rules button, which goes to the rules and focuses them', async () => {
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      renderWithClient(<SettingsContent />);
+      const heading = await screen.findByRole('heading', { name: 'Status sync rules' });
+      const button = await screen.findByRole('button', { name: 'Status sync rules' });
+      fireEvent.click(button);
+      expect(heading).toHaveFocus();
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('theme', () => {
     beforeEach(() => document.documentElement.removeAttribute('data-mode'));
 
-    const ready = async (name: string | RegExp) => {
-      const box = await screen.findByRole('checkbox', { name });
+    const auto = async () => {
+      const box = await screen.findByRole('checkbox', {
+        name: /^Auto \(light from 07:00 to 19:00\)/,
+      });
       await waitFor(() => expect(box).toBeEnabled());
       return box as HTMLInputElement;
     };
-    const darkMode = () => ready('Dark mode');
-    const auto = () => ready(/^Auto \(light from 07:00 to 19:00\)/);
     const withTheme = (theme: string) => api.getSettings.mockResolvedValue({ ...settings, theme });
 
-    it('reflects the stored theme in the swap', async () => {
+    it('has only the Auto checkbox: the sun and moon button is in the header', async () => {
       withTheme('dark');
       renderWithClient(<SettingsContent />);
-      const swap = await darkMode();
-      await waitFor(() => expect(swap).toBeChecked());
       expect(await auto()).not.toBeChecked();
-    });
-
-    it('saves an explicit dark from a light start', async () => {
-      withTheme('light');
-      renderWithClient(<SettingsContent />);
-      const swap = await darkMode();
-      await waitFor(() => expect(document.documentElement.dataset.mode).toBe('light'));
-      expect(swap).not.toBeChecked();
-      fireEvent.click(swap);
-      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'dark' }));
-    });
-
-    it('saves an explicit light from a dark start', async () => {
-      withTheme('dark');
-      renderWithClient(<SettingsContent />);
-      fireEvent.click(await darkMode());
-      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'light' }));
+      expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
     });
 
     it('turns Auto on and saves it', async () => {
@@ -168,23 +241,20 @@ describe('SettingsContent', () => {
       await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'auto' }));
     });
 
-    it('turns Auto off by saving the mode in effect', async () => {
+    it('is checked in Auto, and turns Auto off by saving the mode in effect', async () => {
       withTheme('auto');
       renderWithClient(<SettingsContent />);
-      const swap = await darkMode();
       const box = await auto();
       await waitFor(() => expect(box).toBeChecked());
       await waitFor(() => expect(document.documentElement.dataset.mode).toBeTruthy());
-      const shown = swap.checked ? 'dark' : 'light';
-      expect(document.documentElement.dataset.mode).toBe(shown);
+      const shown = document.documentElement.dataset.mode;
       fireEvent.click(box);
       await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: shown }));
     });
 
-    it('disables both controls until the settings load', async () => {
+    it('is disabled until the settings load', async () => {
       api.getSettings.mockReturnValue(new Promise(() => {}));
       renderWithClient(<SettingsContent />);
-      expect(await screen.findByRole('checkbox', { name: 'Dark mode' })).toBeDisabled();
       expect(await screen.findByRole('checkbox', { name: /^Auto/ })).toBeDisabled();
     });
   });

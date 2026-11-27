@@ -73,72 +73,6 @@
   color: var(--accent-fg);
 }
 
-.swap {
-  position: relative;
-  display: inline-grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  color: var(--text);
-  cursor: var(--cursor-hand);
-}
-
-.swap[data-disabled] {
-  opacity: 0.6;
-  cursor: var(--cursor-no);
-}
-
-.swapInput {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-  appearance: none;
-}
-
-.swapOff,
-.swapOn {
-  grid-area: 1 / 1;
-  width: 32px;
-  height: 32px;
-  transition:
-    transform 0.3s,
-    opacity 0.3s;
-}
-
-.swapOn {
-  opacity: 0;
-  transform: rotate(-45deg);
-}
-
-.swapInput:checked ~ .swapOn {
-  opacity: 1;
-  transform: rotate(0);
-}
-
-.swapInput:checked ~ .swapOff {
-  opacity: 0;
-  transform: rotate(45deg);
-}
-
-.swap:has(.swapInput:focus-visible) {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-  border-radius: var(--radius-ctl);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .swapOff,
-  .swapOn {
-    transition: none;
-  }
-}
-
 .repos,
 .rules,
 .log {
@@ -341,37 +275,27 @@
   color: var(--sub);
 }
 
-.pollingLine {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
-
-.sep {
-  color: var(--sub);
-}
-
 .foldHead {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.875rem;
+  font-weight: 400;
 }
 
+/* The Repositories header: an eyebrow label, a count and a chevron that turns when it opens. */
 .body .foldButton {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: space-between;
+  width: 100%;
   min-height: 0;
-  padding: 0;
+  padding: 0.25rem 0;
   border: 0;
+  border-radius: 0;
   background: none;
   color: var(--text);
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .body .foldButton:hover:not(:disabled) {
@@ -379,12 +303,109 @@
   color: var(--text);
 }
 
-.foldButton::before {
-  content: '\25B8';
+.foldLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.foldButton[aria-expanded='true']::before {
-  content: '\25BE';
+.eyebrow {
+  color: var(--eyebrow);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* A small grey count (daisyUI "badge badge-ghost badge-sm"). */
+.count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1rem;
+  padding: 0 0.438rem;
+  border: 1px solid oklch(var(--b2));
+  border-radius: 1.9rem;
+  background: oklch(var(--b2));
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
+}
+
+.chevron {
+  flex: none;
+  transition: transform 0.2s;
+}
+
+.foldButton[aria-expanded='true'] .chevron {
+  transform: rotate(90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
+
+/* Polling: a label and a small number field per line, then the rules button. */
+.prefs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.pollRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pollBox {
+  composes: ui-input from global;
+  display: flex;
+  height: 2rem;
+  line-height: 2rem;
+  align-items: center;
+  gap: 0.25rem;
+  width: 4rem;
+  padding: 0 0.5rem;
+}
+
+.pollBox:focus-within {
+  border-color: oklch(var(--bc) / 0.2);
+  outline: 2px solid oklch(var(--bc) / 0.2);
+  outline-offset: 2px;
+}
+
+.body .pollBox input[type='text'] {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  cursor: ns-resize;
+}
+
+.body .pollBox input[type='text']:focus-visible {
+  outline: none;
+}
+
+.pollUnit {
+  color: var(--sub);
+  font-size: 0.75rem;
 }
 
 .group {
