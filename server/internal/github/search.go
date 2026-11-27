@@ -44,8 +44,10 @@ const (
 	// OpenAuthoredQuery it makes the two searches of TECH_SPEC 10.2, and the dashboard lists the
 	// union.
 	OpenAssignedQuery = "is:pr is:open assignee:@me archived:false"
-	// OpenAuthoredQuery is the search for open pull requests opened by the viewer.
-	OpenAuthoredQuery = "is:pr is:open author:@me archived:false"
+	// OpenAuthoredQuery is the search for open pull requests opened by the viewer and not assigned
+	// to the viewer. The ones that are also assigned come back from OpenAssignedQuery with the
+	// viewer as their author, so GitHub does not send their content twice.
+	OpenAuthoredQuery = "is:pr is:open author:@me -assignee:@me archived:false"
 	// SearchCap is the number of results GitHub's search returns at most.
 	SearchCap = 1000
 
@@ -173,6 +175,8 @@ type SearchResult struct {
 	Blocked    []OrgBlocked
 	Errors     []string
 	Requests   int
+	// Viewer is the login of the token's user, which the search answers carry (`viewer { login }`).
+	Viewer string
 }
 
 // MergedResult maps the id of a merged pull request to when it was merged.
@@ -198,6 +202,9 @@ type searchPage struct {
 			Remaining int       `json:"remaining"`
 			ResetAt   time.Time `json:"resetAt"`
 		} `json:"rateLimit"`
+		Viewer struct {
+			Login string `json:"login"`
+		} `json:"viewer"`
 		Search struct {
 			IssueCount int `json:"issueCount"`
 			PageInfo   struct {
@@ -323,6 +330,9 @@ func (c *Client) searchOpenQuery(ctx context.Context, token, q string) (SearchRe
 	var res SearchResult
 	err := c.paginate(ctx, token, openPRsQuery, q, &res.Requests, &res.RateLimit, func(p *searchPage, _ int, h http.Header) error {
 		res.Total = p.Data.Search.IssueCount
+		if res.Viewer == "" {
+			res.Viewer = p.Data.Viewer.Login
+		}
 		res.Blocked = mergeBlocked(res.Blocked, blockedOf(h, p.Errors))
 		res.Errors = append(res.Errors, otherErrors(p.Errors)...)
 		for _, raw := range p.Data.Search.Nodes {
@@ -361,7 +371,9 @@ func pickError(errs []error) error {
 }
 
 // mergeSearches unions the assigned (a) and authored (b) results in one pass, deduplicating pull
-// requests by node id in O(n) and recording in Roles which search found each.
+// requests by node id in O(n) and recording in Roles which search found each. The authored search
+// leaves out the pull requests assigned to the viewer, so a pull request of the assigned search
+// whose author is the viewer also gets the authored role.
 func mergeSearches(a, b SearchResult) SearchResult {
 	out := SearchResult{
 		PRs:        make([]PR, 0, len(a.PRs)+len(b.PRs)),
@@ -372,6 +384,7 @@ func mergeSearches(a, b SearchResult) SearchResult {
 		Blocked:    mergeBlocked(slices.Clone(a.Blocked), b.Blocked),
 		RateLimit:  mergeRateLimit(a.RateLimit, b.RateLimit),
 	}
+	out.Viewer = cmp.Or(a.Viewer, b.Viewer)
 	at := make(map[string]int, len(a.PRs)+len(b.PRs))
 	for _, src := range []struct {
 		prs  []PR
@@ -386,6 +399,9 @@ func mergeSearches(a, b SearchResult) SearchResult {
 			}
 			at[p.ID] = len(out.PRs)
 			p.Roles = []string{src.role}
+			if src.role == RoleAssigned && out.Viewer != "" && strings.EqualFold(p.Author, out.Viewer) {
+				p.Roles = append(p.Roles, RoleAuthored)
+			}
 			out.PRs = append(out.PRs, p)
 		}
 	}

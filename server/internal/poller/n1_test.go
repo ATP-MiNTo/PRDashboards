@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -28,7 +30,7 @@ func n1Node(i int) map[string]any {
 	return map[string]any{
 		"__typename": "PullRequest", "id": fmt.Sprintf("PR_%d", i), "number": i,
 		"title": fmt.Sprintf("Change %d", i), "url": fmt.Sprintf("https://github.com/acme/web/pull/%d", i),
-		"isDraft": false, "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN", "reviewDecision": "APPROVED",
+		"author": map[string]any{"login": "octocat"}, "isDraft": false, "mergeable": "MERGEABLE", "mergeStateStatus": "CLEAN", "reviewDecision": "APPROVED",
 		"headRefName": fmt.Sprintf("feat/INP-%d-change", i), "headRefOid": fmt.Sprintf("sha%d", i), "baseRefName": "main",
 		"repository": map[string]any{
 			"id": "R_web", "nameWithOwner": "acme/web",
@@ -62,20 +64,27 @@ func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
 		if c, ok := body.Variables["cursor"].(string); ok {
 			_, _ = fmt.Sscanf(c, "C%d", &start)
 		}
-		end := min(start+50, n1PRs)
+		// Every pull request is assigned to the viewer, so the authored search (which leaves out the
+		// assigned ones) finds none.
+		total := n1PRs
+		if body.Variables["q"] == github.OpenAuthoredQuery {
+			total = 0
+		}
+		end := min(start+50, total)
 		nodes := make([]any, 0, 50)
 		for i := start; i < end; i++ {
 			nodes = append(nodes, n1Node(i+1))
 		}
 		cursor := any(nil)
-		if end < n1PRs {
+		if end < total {
 			cursor = fmt.Sprintf("C%d", end)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
 			"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4990, "resetAt": "2099-01-01T00:00:00Z"},
+			"viewer":    map[string]any{"login": "octocat"},
 			"search": map[string]any{
-				"issueCount": n1PRs,
-				"pageInfo":   map[string]any{"hasNextPage": end < n1PRs, "endCursor": cursor},
+				"issueCount": total,
+				"pageInfo":   map[string]any{"hasNextPage": end < total, "endCursor": cursor},
 				"nodes":      nodes,
 			},
 		}})
@@ -137,6 +146,9 @@ func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
 		t.Fatalf("prs %d github %s jira %s", len(snap.Prs), snap.Sources.Github.State, snap.Sources.Jira.State)
 	}
 	for _, row := range snap.Prs {
+		if !slices.Equal(row.Roles, []gen.SnapshotPrRoles{"assigned", "authored"}) {
+			t.Fatalf("row %d roles %v", row.Number, row.Roles)
+		}
 		if len(row.Tickets) != 1 || !row.Tickets[0].Found {
 			t.Fatalf("row %d tickets %+v", row.Number, row.Tickets)
 		}
@@ -144,10 +156,11 @@ func TestRefreshOfManyPullRequestsMakesNoPerRowCalls(t *testing.T) {
 	wantSearches := (n1PRs + jira.ChunkSize - 1) / jira.ChunkSize
 	t.Logf("outbound requests for %d pull requests: GitHub GraphQL %d (assigned pages %d, authored pages %d, merged searches %d), Jira search %d, Jira project %d",
 		n1PRs, graphql.Load(), assigned.Load(), authored.Load(), merged.Load(), search.Load(), projects.Load())
-	// Two open searches (assigned and authored), each 3 pages of 50, and no merged search. Both
-	// return the same 120 pull requests here, so the union must still be 120 rows.
-	if graphql.Load() != 6 || assigned.Load() != 3 || authored.Load() != 3 || merged.Load() != 0 {
-		t.Fatalf("GitHub: %d GraphQL requests (assigned %d, authored %d, merged %d), want 2 searches of 3 pages and no merged search",
+	// Two open searches and no merged search: the assigned one is 3 pages of 50, the authored one
+	// (without the assigned pull requests) is empty, so its content is not fetched twice. The 120
+	// rows are authored by the viewer and so carry both roles.
+	if graphql.Load() != 4 || assigned.Load() != 3 || authored.Load() != 1 || merged.Load() != 0 {
+		t.Fatalf("GitHub: %d GraphQL requests (assigned %d, authored %d, merged %d), want 3 assigned pages, 1 authored page and no merged search",
 			graphql.Load(), assigned.Load(), authored.Load(), merged.Load())
 	}
 	if int(search.Load()) != wantSearches || projects.Load() != 1 || other.Load() != 0 || searchedKeys.Load() != n1PRs {

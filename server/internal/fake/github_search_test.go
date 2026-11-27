@@ -19,10 +19,17 @@ func titles(t *testing.T, query string) map[string]bool {
 
 func TestSearchHonoursAssigneeAndAuthor(t *testing.T) {
 	assigned := titles(t, "is:pr is:open assignee:@me archived:false")
-	authored := titles(t, "is:pr is:open author:@me archived:false")
+	authored := titles(t, "is:pr is:open author:@me -assignee:@me archived:false")
 	const both, authoredOnly, assignedOnly = "INP-102 Single sign-on", "WIP schema cleanup", "INP-101 Add login"
-	if !assigned[both] || !authored[both] {
-		t.Errorf("a pull request that is assigned and authored is in both searches: %v / %v", assigned, authored)
+	if !assigned[both] || authored[both] {
+		t.Errorf("a pull request that is assigned and authored is only in the assigned search: %v / %v", assigned, authored)
+	}
+	if all := titles(t, "is:pr is:open author:@me archived:false"); !all[both] {
+		t.Errorf("without the exclusion the author search finds it too: %v", all)
+	}
+	_, body := searchBody("is:pr is:open assignee:@me archived:false", githubConfig{}, nil, time.Now())
+	if body["data"].(map[string]any)["viewer"].(map[string]string)["login"] != "octocat" {
+		t.Error("the search answer names the viewer")
 	}
 	if assigned[authoredOnly] || !authored[authoredOnly] {
 		t.Errorf("an authored-only pull request is only in the author search: %v / %v", assigned, authored)

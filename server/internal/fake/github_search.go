@@ -48,8 +48,12 @@ func (p fixturePR) viewerOpened() bool { return p.authored }
 // matchesViewer reports whether the search query selects the pull request for the viewer.
 // A query with neither assignee:@me nor author:@me matches everything.
 func (p fixturePR) matchesViewer(query string) bool {
-	assignee, author := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me")
+	notAssigned := strings.Contains(query, "-assignee:@me")
+	assignee := strings.Contains(strings.ReplaceAll(query, "-assignee:@me", ""), "assignee:@me")
+	author := strings.Contains(query, "author:@me")
 	switch {
+	case author && notAssigned:
+		return p.authored && p.unassigned
 	case assignee && author:
 		return !p.unassigned || p.authored
 	case assignee:
@@ -317,6 +321,7 @@ func searchBody(query string, cfg githubConfig, merged []string, now time.Time) 
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4900, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 	}
+	data["viewer"] = map[string]string{"login": "octocat"}
 	nodes := []any{}
 	for _, p := range fixturePRs(now, cfg) {
 		if (sso && p.org == "acme-corp") || !p.matchesViewer(query) {

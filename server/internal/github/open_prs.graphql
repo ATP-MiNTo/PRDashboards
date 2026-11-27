@@ -5,6 +5,9 @@ query OpenPullRequests($q: String!, $cursor: String) {
     remaining
     resetAt
   }
+  viewer {
+    login
+  }
   search(query: $q, type: ISSUE, first: 50, after: $cursor) {
     issueCount
     pageInfo {

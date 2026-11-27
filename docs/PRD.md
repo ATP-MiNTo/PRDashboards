@@ -136,7 +136,7 @@ Matching:
 
 ### 6.1 Performance
 
-- Fetch the full PR list with two paginated GitHub GraphQL search queries (`is:pr is:open assignee:@me` and `is:pr is:open author:@me`), run in parallel and merged by PR, so a PR that is both assigned and authored is one row. The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
+- Fetch the full PR list with two paginated GitHub GraphQL search queries (`is:pr is:open assignee:@me` and `is:pr is:open author:@me -assignee:@me`), run in parallel and merged by PR, so a PR that is both assigned and authored is one row. The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
 - Resolve all Jira tickets with one batched JQL query. No per-PR Jira calls.
 - Cache Jira transition lists per ticket and fetch them only when needed.
 - Respect GitHub and Atlassian rate limits. Back off on 403 and 429 responses.

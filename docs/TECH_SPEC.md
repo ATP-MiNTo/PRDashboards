@@ -572,7 +572,9 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
 1. Two paginated GraphQL searches, 50 per page, run concurrently and merged by PR id (a PR that is
    assigned to me and opened by me appears once):
    `search(query: "is:pr is:open assignee:@me archived:false", type: ISSUE, first: 50, after: $c)` and
-   the same with `author:@me`.
+   the same with `author:@me -assignee:@me`, so a PR that is both assigned and opened by me is
+   fetched once, by the first search. The query also selects `viewer { login }`, and a PR of the
+   assigned search whose author is that login gets the authored role too.
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
    mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate
