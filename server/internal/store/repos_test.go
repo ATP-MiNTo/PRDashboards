@@ -256,7 +256,7 @@ func TestRepoPrefsNewReposFollowTheDefaultAndUpdatesReplaceOrKeepThem(t *testing
 	}
 }
 
-func TestMigrationSixRebuildsReposAndKeepsEverythingAroundIt(t *testing.T) {
+func TestMigration0007RebuildsReposAndKeepsEverythingAroundIt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data.db")
 	db := rawDB(t, path)
 	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL) STRICT`); err != nil {

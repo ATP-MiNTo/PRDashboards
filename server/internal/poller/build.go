@@ -262,7 +262,7 @@ func fillRoles(s *gen.Snapshot) bool {
 // fillApprovals gives every pull request of a stored snapshot the tally of its stored reviews
 // against need(repoID), which is the repository's setting now (0, nothing required, when unknown).
 // It does not look at what the snapshot holds, because 0 is a real value of Need: a snapshot stored
-// before approvals existed, or before the setting changed (migration 0006 turned the old default of
+// before approvals existed, or before the setting changed (migration 0007 turned the old default of
 // 1 into 0), gets the same fresh tally as any other. It reports whether it changed anything. The
 // next refresh replaces them.
 func fillApprovals(s *gen.Snapshot, need func(repoID string) int) bool {
