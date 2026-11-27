@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useSaveSettings, useSettings } from '@/api/queries';
+import { reducedMotion } from '@/lib/storage';
 import { daisyTheme, msUntilSwitch, resolveMode, type Mode, type ThemeSetting } from './theme';
+import { applyMode } from './transition';
 
 /** Applies the stored theme to the document and follows the clock while it is Auto. */
 export function useTheme(): {
@@ -18,13 +20,11 @@ export function useTheme(): {
 
   useEffect(() => {
     if (theme === undefined) return;
-    const root = document.documentElement;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const apply = () => {
       const now = new Date();
       const m = resolveMode(theme, now);
-      root.dataset.mode = m;
-      root.dataset.theme = daisyTheme(m);
+      applyMode(document, { mode: m, theme: daisyTheme(m) }, reducedMotion());
       setResolved(m);
       if (theme === 'auto') timer = setTimeout(apply, msUntilSwitch(now) + 1000);
     };
