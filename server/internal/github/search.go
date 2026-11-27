@@ -298,15 +298,15 @@ type rawCheck struct {
 
 // SearchOpen runs the open pull request searches, assigned to the token's user, opened by the
 // token's user and review requested from the token's user, concurrently (three requests in
-// flight), and merges them. Each search is paginated,
-// 50 per page, following the cursor until the last page or the 1,000 result cap. Pull requests
-// of organizations that blocked the token are left out and listed in Blocked.
+// flight), and merges them. Each search is paginated, 50 per page, following the cursor until the
+// last page or the 1,000 result cap. Pull requests of organizations that blocked the token are
+// left out and listed in Blocked.
 //
 // A pull request found by several searches appears once, in the position of the first one that
-// found it (assigned, then authored, then review requested).
-// Total is the larger of the unique pull requests returned and the biggest count GitHub reported
-// for either search, so it is never below what the dashboard shows. Capped is set when either
-// search is capped. If a search fails on its first page, SearchOpen returns that error.
+// found it (assigned, then authored, then review requested). Total is the larger of the unique
+// pull requests returned and the biggest count GitHub reported for any search, so it is never
+// below what the dashboard shows. Capped is set when any search is capped. If a search fails on
+// its first page, SearchOpen returns that error.
 func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, error) {
 	var res [3]SearchResult
 	var errs [3]error

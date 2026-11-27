@@ -171,7 +171,7 @@ func basePRs(now time.Time) []fixturePR {
 		{
 			repo: "acme/web", org: "acme", number: 102, additions: 96, deletions: 12, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 90 * time.Minute, rollup: "SUCCESS", requested: true,
-			authored: true, // assigned and opened by the viewer: both searches find it
+			authored: true, // assigned and opened by the viewer: the assignee and author searches find it
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme/web", 1002)+"/job/1", ago(30*time.Minute), ago(28*time.Minute)),
 				checkRun("lint", "GitHub Actions", "COMPLETED", "NEUTRAL", run("acme/web", 1002)+"/job/2", ago(30*time.Minute), ago(29*time.Minute)),
