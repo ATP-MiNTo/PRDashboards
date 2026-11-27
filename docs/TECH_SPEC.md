@@ -285,7 +285,7 @@ Resolution for each PR (pure function in `linking`):
    order and without duplicates.
 2. Manual links in `ticket_links` are added. Keys the user removed are hidden.
 3. Keys are kept only if the Jira project exists on the connected site (project keys are cached
-   from one `GET /rest/api/3/project/search` per Jira refresh), so a branch like `UTF-8` is not
+   from one `GET /rest/api/3/project/search`, cached 10 minutes per site), so a branch like `UTF-8` is not
    linked by mistake.
 4. No key: the ticket cell offers a picker that lists Jira tickets assigned to the user
    (`assignee = currentUser() AND statusCategory != Done`, one JQL, cached for the Jira interval).
