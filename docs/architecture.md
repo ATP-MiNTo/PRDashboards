@@ -158,12 +158,14 @@ sequenceDiagram
 | GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
 | Poller and snapshot | [features/poller.md](features/poller.md) | Built |
 | Command Table | [features/command-table.md](features/command-table.md) | Built |
+| Toolbar, show by role, hidden pull requests, pager and footer | [features/toolbar-pager-footer.md](features/toolbar-pager-footer.md) | Built |
 | Ticket linking | [features/ticket-linking.md](features/ticket-linking.md) | Built |
 | Stacked PRs | [features/stacked-prs.md](features/stacked-prs.md) | Built |
 | Merge method | [features/merge-method.md](features/merge-method.md) | Built |
 | Merge and transition | [features/merge-and-transition.md](features/merge-and-transition.md) | Built |
 | Status sync rules and Multi-PR tickets | [features/status-sync-rules.md](features/status-sync-rules.md) | Built |
-| Settings drawer | [features/settings.md](features/settings.md) | Built |
+| Sidebar shell and floating burger | [features/sidebar-shell.md](features/sidebar-shell.md) | Built |
+| Settings | [features/settings.md](features/settings.md) | Built |
 | Theme | [features/theme.md](features/theme.md) | Built |
 | Installable app (PWA) | [features/installable-app.md](features/installable-app.md) | Built |
 

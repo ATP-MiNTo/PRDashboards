@@ -157,6 +157,7 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 			SquashAllowed: pr.Repo.SquashAllowed, MergeAllowed: pr.Repo.MergeAllowed, RebaseAllowed: pr.Repo.RebaseAllowed,
 		},
 		IsDraft:          pr.Draft,
+		Roles:            rolesOf(pr.Roles),
 		Mergeable:        gen.SnapshotPrMergeable(mergeable(pr.Mergeable)),
 		MergeStateStatus: pr.MergeStateStatus,
 		HeadRef:          pr.HeadRef, HeadSha: pr.HeadSHA, BaseRef: pr.BaseRef,
@@ -188,6 +189,30 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 	}
 	row.TicketLookup = lookupState(len(row.Tickets), l.res.Unverified, in.Jira.State)
 	return row
+}
+
+// rolesOf maps the roles the search recorded. A pull request without any (a refresh that predates
+// roles) counts for both, so the dashboard still lists it under every Show state.
+func rolesOf(roles []string) []gen.SnapshotPrRoles {
+	out := make([]gen.SnapshotPrRoles, 0, 2)
+	for _, r := range []string{github.RoleAssigned, github.RoleAuthored} {
+		if len(roles) == 0 || slices.Contains(roles, r) {
+			out = append(out, gen.SnapshotPrRoles(r))
+		}
+	}
+	return out
+}
+
+// fillRoles gives every pull request of a snapshot stored before roles existed both roles. It
+// reports whether it changed anything.
+func fillRoles(s *gen.Snapshot) bool {
+	changed := false
+	for i := range s.Prs {
+		if len(s.Prs[i].Roles) == 0 {
+			s.Prs[i].Roles, changed = rolesOf(nil), true
+		}
+	}
+	return changed
 }
 
 func mergeable(s string) string {

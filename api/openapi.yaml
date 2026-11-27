@@ -1057,6 +1057,7 @@ components:
         - removedKeys
         - ticketLookup
         - mergeMethod
+        - roles
       properties:
         id:
           type: string
@@ -1066,6 +1067,14 @@ components:
           type: string
         repo:
           $ref: '#/components/schemas/SnapshotRepo'
+        roles:
+          description: Why the pull request is listed. Both can be present, and the list is never empty.
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [assigned, authored]
         isDraft:
           type: boolean
         mergeable:

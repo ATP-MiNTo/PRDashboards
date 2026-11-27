@@ -13,9 +13,10 @@ Differences from the spec:
 
 - `GET /events` streams server-sent events ([poller.md](poller.md)). The web app manifest and
   service worker are described in [installable-app.md](installable-app.md).
-- The dashboard has a shared side panel ([settings.md](settings.md)) used by the Account and Settings buttons of the top bar.
+- The dashboard has a left sidebar with the Settings content, toggled by a floating burger ([sidebar-shell.md](sidebar-shell.md)), and a right-hand side panel for the Account button of the top bar ([settings.md](settings.md)).
 - The Next export has pages `/`, `/accounts/`, `/auth/launch/`, `/setup/`, `/auth/done/` and `/oauth/finish/`.
 - TanStack Query 5 carries all server state in the UI (`web/src/api/queries.ts`).
+- Tailwind CSS 3.4 and daisyUI 4.12 are build-time dev dependencies of the web app. Preflight is off and daisyUI's root styles are off, so the existing CSS Modules and `globals.css` render unchanged. Components built later use Tailwind utilities and daisyUI classes. Only the `winter` (light) and `night` (dark) themes are generated ([theme.md](theme.md)).
 
 ## Data model
 
@@ -53,6 +54,9 @@ Web:
 - [web/src/lib/launch.ts](../../web/src/lib/launch.ts): `parseLaunchToken` and `runLaunch` (pure logic, no DOM).
 - [web/src/api/client.ts](../../web/src/api/client.ts): typed fetch client over the generated [schema.d.ts](../../web/src/api/schema.d.ts).
 - [web/next.config.ts](../../web/next.config.ts): `output: 'export'`, `trailingSlash: true`.
+- [web/tailwind.config.ts](../../web/tailwind.config.ts): content globs for `web/src`, `corePlugins.preflight: false`, the daisyUI plugin with `themes: ['winter', 'night']`, `base: false` and `logs: false`.
+- [web/postcss.config.mjs](../../web/postcss.config.mjs): Tailwind and Autoprefixer.
+- [web/src/app/tailwind.css](../../web/src/app/tailwind.css): the `@tailwind` directives, imported by `layout.tsx` before `globals.css`. The build emits them as a static CSS file under `_next/static/`.
 
 Scripts and CI:
 
@@ -111,7 +115,7 @@ None.
   on purpose: a write deadline would cut off the long-lived SSE stream (`/events`). The hub sets a
   deadline per write instead. Handlers that must not hang rely on the request context and the outbound client
   timeouts instead.
-- The web app has no inline script beyond what Next emits, no external fonts or CDNs, and no
+- The web app has no inline script beyond what Next emits, no external fonts or CDNs (Tailwind and daisyUI are compiled into the static CSS at build time), no inline `<style>` blocks or `style` attributes (`csp-hashes.mjs` fails the build on either, because the CSP allows only `style-src 'self'`), and no
   `dangerouslySetInnerHTML` (ESLint enforces it).
 - Generated code (`server/internal/api/gen`, `web/src/api/schema.d.ts`) is committed and never
   edited by hand. `pnpm gen` regenerates it, and CI fails when the result differs.

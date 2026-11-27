@@ -7,7 +7,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Decides how each pull request is merged (squash, merge commit or rebase) from the repo's ordered
 branch rules, the repo default and what the repo allows, shows the result in the Method column and
 lets the person change it for one merge. Repo defaults and branch rules are edited in the
-[settings drawer](settings.md).
+[Settings sidebar](settings.md).
 
 Differences from the spec:
 

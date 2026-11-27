@@ -4,7 +4,6 @@ import { useRevokeAll, useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { useTheme } from '@/theme/useTheme';
 import { DARK_FROM_HOUR, LIGHT_FROM_HOUR } from '@/theme/theme';
-import { SidePanel } from '../SidePanel/SidePanel';
 import { ActivitySection } from './ActivitySection';
 import { MultiPrSection } from './MultiPrSection';
 import { RepositoriesSection } from './RepositoriesSection';
@@ -131,18 +130,17 @@ function SessionsSection() {
   );
 }
 
-export function SettingsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** The Settings sections, shown in the left sidebar. */
+export function SettingsContent() {
   return (
-    <SidePanel open={open} onClose={onClose} title="Settings" closeLabel="Close settings">
-      <div className={styles.body}>
-        <RepositoriesSection />
-        <Preferences />
-        <RulesSection />
-        <MultiPrSection />
-        <SessionsSection />
-        <ThemeSection />
-        <ActivitySection />
-      </div>
-    </SidePanel>
+    <div className={styles.body}>
+      <RepositoriesSection />
+      <Preferences />
+      <RulesSection />
+      <MultiPrSection />
+      <SessionsSection />
+      <ThemeSection />
+      <ActivitySection />
+    </div>
   );
 }

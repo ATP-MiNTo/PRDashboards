@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SyncRule } from '@/api/client';
 import { newRule } from '@/lib/rules';
@@ -128,6 +128,7 @@ describe('RulesSection', () => {
     renderWithClient(<RulesSection />);
     await screen.findByRole('checkbox', { name: 'Enable First' });
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await optionsLoaded();
     const form = screen.getByRole('form', { name: 'New rule' });
     const save = within(form).getByRole('button', { name: 'Save rule' });
     expect(save).toBeDisabled();
@@ -156,6 +157,7 @@ describe('RulesSection', () => {
     renderWithClient(<RulesSection />);
     await screen.findByRole('checkbox', { name: 'Enable First' });
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await optionsLoaded();
     const form = screen.getByRole('form', { name: 'New rule' });
     fireEvent.change(within(form).getByLabelText('When'), { target: { value: 'commit_stale' } });
     choose(within(form), 'Move the ticket to', 'Blocked');
@@ -170,6 +172,7 @@ describe('RulesSection', () => {
   it('edits a rule in place', async () => {
     renderWithClient(<RulesSection />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Second' }));
+    await optionsLoaded();
     const form = screen.getByRole('form', { name: 'Edit rule' });
     choose(within(form), 'Move the ticket to', 'Closed');
     fireEvent.click(within(form).getByRole('button', { name: 'Preview' }));
@@ -188,6 +191,7 @@ describe('RulesSection', () => {
     renderWithClient(<RulesSection />);
     fireEvent.click(await screen.findByRole('checkbox', { name: 'Enable Off' }));
     const form = await screen.findByRole('form', { name: 'Edit rule' });
+    await optionsLoaded();
     expect(within(form).getByLabelText('Enabled')).toBeChecked();
     expect(api.putRules).not.toHaveBeenCalled();
   });
@@ -199,12 +203,40 @@ describe('RulesSection', () => {
   });
 });
 
+// Waits for the Jira options request that opening the form starts, and for its result to render.
+const optionsLoaded = async () => {
+  await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalled());
+  await act(async () => {
+    await api.getJiraOptions.mock.results[0]?.value?.catch(() => {});
+    // TanStack Query hands the result to its observers on a zero-delay timer; wait for it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+};
+
+describe('Jira options', () => {
+  it('are not requested until the rule form opens', async () => {
+    renderWithClient(<RulesSection />);
+    await screen.findByRole('checkbox', { name: 'Enable First' });
+    expect(api.getJiraOptions).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalledTimes(1));
+  });
+
+  it('are requested when the Exclude statuses list opens', async () => {
+    renderWithClient(<RulesSection />);
+    const box = await screen.findByRole('combobox', { name: 'Exclude statuses' });
+    expect(api.getJiraOptions).not.toHaveBeenCalled();
+    fireEvent.click(box);
+    await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('RuleForm choices', () => {
   const openForm = async () => {
     renderWithClient(<RulesSection />);
     await screen.findByRole('checkbox', { name: 'Enable First' });
-    await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await optionsLoaded();
     return within(screen.getByRole('form', { name: 'New rule' }));
   };
 
@@ -266,6 +298,7 @@ describe('RuleForm choices', () => {
     });
     renderWithClient(<RulesSection />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit First' }));
+    await optionsLoaded();
     const form = within(screen.getByRole('form', { name: 'Edit rule' }));
     choose(form, 'Jira project', 'Any project');
     choose(form, 'Current status', 'Any status');
@@ -285,6 +318,7 @@ describe('RuleForm choices', () => {
     });
     renderWithClient(<RulesSection />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit First' }));
+    await optionsLoaded();
     const form = within(screen.getByRole('form', { name: 'Edit rule' }));
     expect(form.getByRole('combobox', { name: 'Move the ticket to' })).toHaveTextContent('Legacy');
     expect(form.getByRole('combobox', { name: 'Jira project' })).toHaveTextContent('OLD');
@@ -304,6 +338,7 @@ describe('RuleForm choices', () => {
     });
     renderWithClient(<RulesSection />);
     fireEvent.click(await screen.findByRole('button', { name: 'Edit First' }));
+    await optionsLoaded();
     const form = within(screen.getByRole('form', { name: 'Edit rule' }));
     const target = form.getByRole('combobox', { name: 'Move the ticket to' });
     expect(target).toHaveTextContent('Re-open');
@@ -329,8 +364,8 @@ describe('RuleForm choices', () => {
     api.getJiraOptions.mockRejectedValue(new Error('409'));
     renderWithClient(<RulesSection />);
     await screen.findByRole('checkbox', { name: 'Enable First' });
-    await waitFor(() => expect(api.getJiraOptions).toHaveBeenCalled());
     fireEvent.click(screen.getByRole('button', { name: 'Add rule' }));
+    await optionsLoaded();
     const form = within(screen.getByRole('form', { name: 'New rule' }));
     choose(form, 'Move the ticket to', 'In Review');
     expect(form.getByRole('combobox', { name: 'Move the ticket to' })).toHaveTextContent(
@@ -360,6 +395,7 @@ describe('Exclude statuses', () => {
   const open = async () => {
     const box = await trigger();
     fireEvent.click(box);
+    await optionsLoaded();
     return box;
   };
 

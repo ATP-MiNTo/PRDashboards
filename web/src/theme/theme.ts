@@ -1,6 +1,8 @@
 export type ThemeSetting = 'light' | 'dark' | 'auto';
 export type Mode = 'light' | 'dark';
 
+export type DaisyTheme = 'winter' | 'night';
+
 export const LIGHT_FROM_HOUR = 7;
 export const DARK_FROM_HOUR = 19;
 
@@ -8,6 +10,11 @@ export const DARK_FROM_HOUR = 19;
 export function autoMode(now: Date): Mode {
   const h = now.getHours();
   return h >= LIGHT_FROM_HOUR && h < DARK_FROM_HOUR ? 'light' : 'dark';
+}
+
+/** The daisyUI theme that goes with a mode: winter is light, night is dark. */
+export function daisyTheme(mode: Mode): DaisyTheme {
+  return mode === 'dark' ? 'night' : 'winter';
 }
 
 export function resolveMode(setting: ThemeSetting, now: Date): Mode {

@@ -1,0 +1,76 @@
+# Toolbar, show by role, hidden pull requests, pager and footer
+
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) section 11. Related: [command-table.md](command-table.md), [poller.md](poller.md), [sidebar-shell.md](sidebar-shell.md), [stacked-prs.md](stacked-prs.md).
+
+## Purpose
+
+How the pull request list is viewed, all in the browser over the snapshot the table already has: sorting, showing by role, hiding pull requests you do not want to see, paging, and the page footer with the GitHub button. Part of the v2 UI migration; the PRD and spec do not describe these controls.
+
+- The toolbar sits under the stat strip, in the same row as the status filter chips (the chips stay): "Sort", a select, a square button that reverses the direction, a divider, the "Show" switch, the "Hidden PRs" switch and, at the right end, a legend. The row wraps on narrow screens (the divider is hidden there).
+- Each row has a "Hide" checkbox. The "Hidden PRs" switch picks what the list shows.
+- The legend lists the cues of the rows: "Assigned", "Opened by me" and "Stack", each with a coloured dot.
+- The pager is under the table.
+- The footer ends the page.
+
+## Data model
+
+No server data and no new API. Browser storage, all in `localStorage`, every read and write in `try/catch` (blocked storage means defaults and choices that last for the visit):
+
+| Key | Value | Written when |
+| --- | --- | --- |
+| `prd-hidden` | JSON array of PR ids | a Hide box is toggled |
+| `prd-show` | `everything`, `assigned` or `authored` | the Show switch changes |
+| `prd-hidef` | `visible`, `all` or `hidden` | the switch changes |
+| `prd-pagesize` | `10`, `15` or `20` | the page size changes |
+
+Anything else stored under these keys is ignored. Sort, direction, filter and page are component state and start as "Recently updated", natural direction, "All" and page 1.
+
+Hidden ids that are no longer in the snapshot are ignored when read (`pruneHidden`), so the Hidden count and the lists never include them. Nothing is written while rendering; the stale ids leave storage with the next toggle, which writes the pruned set. While the snapshot has no pull requests (still loading) nothing is pruned.
+
+## Code map
+
+- [web/src/lib/sort.ts](../../web/src/lib/sort.ts): `SORT_OPTIONS`, `sortGroups`, `naturalDir`, `effectiveDir`. Pure.
+- [web/src/lib/show.ts](../../web/src/lib/show.ts): `ShowMode`, `rolesOf`, `roleKind`, `inShow`, `showCounts`. Pure. `groupsOf` in [snapshot.ts](../../web/src/lib/snapshot.ts) takes the mode and drops the other pull requests before grouping.
+- [web/src/lib/view.ts](../../web/src/lib/view.ts): `applyHidden`, `shownIn`, `pruneHidden`, `paginate`, `pageRange`, `pageItems`, page sizes. Pure.
+- [web/src/lib/storage.ts](../../web/src/lib/storage.ts): `readStored`, `writeStored`, `readStringList` (never throw) and `reducedMotion`.
+- [web/src/components/Toolbar/useListPrefs.ts](../../web/src/components/Toolbar/useListPrefs.ts): the view state (filter, sort, direction, show, hidden set, mode, page size, page). Every setter that changes what is listed sets the page to 1.
+- [web/src/components/Toolbar/Toolbar.tsx](../../web/src/components/Toolbar/Toolbar.tsx): the sort controls, the "Show" and "Hidden PRs" switches with their hints, and the legend.
+- [web/src/components/Toolbar/RollSwitch.tsx](../../web/src/components/Toolbar/RollSwitch.tsx): the reusable rolling switch (`name`, `options`, `value`, `onChange`, `count`). Used for "Show" and "Hidden PRs".
+- [web/src/components/Toolbar/Hint.tsx](../../web/src/components/Toolbar/Hint.tsx): a label with a popover that opens on hover and on keyboard focus.
+- [web/src/components/Toolbar/Pager.tsx](../../web/src/components/Toolbar/Pager.tsx): "Showing X to Y of N", page size select and page buttons.
+- [web/src/components/Toolbar/Footer.tsx](../../web/src/components/Toolbar/Footer.tsx): the footer, the GitHub button and `fabPlacement`.
+- [Toolbar.module.css](../../web/src/components/Toolbar/Toolbar.module.css), [Footer.module.css](../../web/src/components/Toolbar/Footer.module.css): styles on the theme tokens.
+- [web/src/components/CommandTable/Table.tsx](../../web/src/components/CommandTable/Table.tsx) and [Row.tsx](../../web/src/components/CommandTable/Row.tsx): the pipeline (group, sort, hide, page), the Hide checkbox and the fade-out. [CommandTable.tsx](../../web/src/components/CommandTable/CommandTable.tsx) wires the hook, the toolbar and the footer.
+
+## Key flows
+
+1. `Table` selects groups from the snapshot: `groupsOf` (filter and stacks), `sortGroups`, `applyHidden`. `paginate` then cuts the result into pages and the current page is shown. Structural sharing keeps the selected groups equal when nothing in them changed.
+2. Sort: the options are Recently updated (last commit time, newest first; a missing time sorts last), Title, Repository (then PR number), PR number, and Ready to merge first (ready, then blocked, then draft). Title and Repository start ascending, PR number ascending, the other two descending. The arrow button flips the direction (`aria-pressed` says whether it is flipped) and the arrow turns with a short swing. A stack is one unit: it sorts by its best member in the current direction and its members keep stack order. Equal keys keep the snapshot order.
+3. Hide: the Hide checkbox ("Hide #123") toggles the id in the set and saves it. If the row would leave the list in the current mode (hiding in Visible, showing in Hidden), the row first fades out (the `ghost` class, about 0.5 s, `GHOST_MS`) and the change is applied when it ends; the box shows its new state at once. Under `prefers-reduced-motion` the change is applied at once. In All mode hidden rows are dimmed (a 0.3 s opacity transition, so a row shown again fades back in). In a stack, only the hidden members leave; the stack keeps the rest.
+4. The "Show" switch sits before "Hidden PRs" and cycles Everything (default), Assigned to me and Opened by me over `SnapshotPr.roles`. A PR assigned to and opened by the user is in both of the last two. The badge counts the whole snapshot for the current state (ignoring the status filter and hidden PRs). The label "Show" is a Hint that explains each state and opens on hover and keyboard focus like the other one. The state is saved as `prd-show`, and the page goes back to the first page when it changes. A PR without roles (an older snapshot) counts as both. In a stack only the members the state lists stay in the group.
+5. The "Hidden PRs" switch cycles Visible, All, Hidden. The button shows the current label and a badge with how many pull requests that state shows (ignoring the status filter). The label rolls upward when it changes (off under reduced motion), and a polite live region announces "Hidden PRs: All". The label "Hidden PRs" opens a hint with the three states on hover and on focus (it is focusable), has `aria-describedby` pointing at the popover (`role="tooltip"`) while it is open, and closes on Escape, blur or when the pointer leaves.
+6. Paging: a page is closed once it holds the page size or more pull requests, so a stack is never split and a page can run over its size. The pager renders whenever there is at least one pull request (so the size can be changed back); the page buttons (previous, numbers with gaps for long lists, next) only when there is more than one page. The page is clamped when the list shrinks.
+7. Footer: a thin footer, right aligned: "Made with 💚 by ATP-MiNTo", a separator and an empty 28px slot. The GitHub button is a fixed 44px round link to `https://github.com/ATP-MiNTo/PRDashboards` (`target="_blank"`, `rel="noopener noreferrer"`, `aria-label="GitHub repository"`). A scroll, resize and size listener schedules one `requestAnimationFrame` per frame; `fabPlacement` returns either the bottom right corner or, once the footer is fully visible, the slot. The result goes to the button as the custom properties `--fab-x`, `--fab-y` and `--fab-size` with `style.setProperty` in an effect, and the `snapped` class turns the circle and shadow off; the CSS transitions position and size. While the page scrolls and the button floats it fades out, and returns 400 ms after the last scroll event. Below 640px wide it shows only when snapped. The transition is off under reduced motion.
+
+## Outside calls
+
+None. Nothing here calls the server, GitHub or Jira, on mount or on a timer. The GitHub button is a plain link that the user follows.
+
+## Rules and invariants
+
+- No `style` attribute, no `<style>` block and no `style` prop in rendered markup (CSP `style-src 'self'`); dynamic state is a class, or a custom property set through the CSSOM after mount. A test checks the server-rendered footer for `style=`.
+- Every control has an accessible name: "Sort", "Reverse sort order", "Hide #N", "Show, now X, N" and "Hidden PRs, now X, N" for the switches, a "Legend" list, "Pull requests per page", "Previous page", "Next page", "Page N" (`aria-current="page"` on the active one), "GitHub repository". Controls are at least 24px high; focus uses the global focus ring.
+- Pure logic stays in `lib/sort.ts` and `lib/view.ts`: no network, no storage, no clock.
+- Hiding is a view preference only; it never changes the snapshot, the stats strip or what the server does. A hidden PR still counts in "Open" and in the other stats.
+- Animations stop under `prefers-reduced-motion: reduce`.
+
+## Tests
+
+- [web/src/lib/sort.test.ts](../../web/src/lib/sort.test.ts): each sort, reversal, ties, stacks kept together and ranked by best member, direction helpers.
+- [web/src/lib/show.test.ts](../../web/src/lib/show.test.ts): the filtering table (each mode against each role set), counts, the missing-roles fallback, `groupsOf` with a mode and stacks.
+- [web/src/lib/view.test.ts](../../web/src/lib/view.test.ts): paging (stacks not split, page size changes), ranges, page items, hidden modes, pruning, stored value checks.
+- [RollSwitch.test.tsx](../../web/src/components/Toolbar/RollSwitch.test.tsx): cycling, name and count, announcement, rolling label, reduced motion.
+- [Hint.test.tsx](../../web/src/components/Toolbar/Hint.test.tsx): opens on focus and hover, closes on Escape, blur and leave, `aria-describedby`.
+- [Pager.test.tsx](../../web/src/components/Toolbar/Pager.test.tsx): names, `aria-current`, single page, order of select and buttons.
+- [Footer.test.tsx](../../web/src/components/Toolbar/Footer.test.tsx): link attributes, no style attribute in the markup, `fabPlacement`, snapping on scroll, hiding while scrolling.
+- [ListControls.test.tsx](../../web/src/components/CommandTable/ListControls.test.tsx): the Show switch (order, counts, saved state, page reset, hint on focus, missing roles), role classes and the legend, sort and reverse in the table, hide and unhide with persistence, pruning, saved mode and page size, fade-out, page reset, stacks across pages, the hint in place, the footer.

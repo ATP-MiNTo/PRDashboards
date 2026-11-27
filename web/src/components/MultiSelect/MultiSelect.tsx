@@ -16,6 +16,8 @@ export interface MultiSelectProps {
   max?: number;
   /** The hint inside the empty search box. */
   placeholder?: string;
+  /** Called whenever the popover opens, for callers that load the options on demand. */
+  onOpen?: () => void;
 }
 
 const summary = (values: string[]) =>
@@ -34,6 +36,7 @@ export function MultiSelect({
   disabled = false,
   max,
   placeholder = 'Search',
+  onOpen,
 }: MultiSelectProps) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -55,6 +58,7 @@ export function MultiSelect({
     setQuery('');
     setActive(0);
     setOpen(true);
+    onOpen?.();
   };
 
   useEffect(() => {

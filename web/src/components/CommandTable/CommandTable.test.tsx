@@ -96,6 +96,7 @@ beforeEach(() => {
   });
   vi.stubGlobal('EventSource', FakeEventSource);
   document.documentElement.removeAttribute('data-mode');
+  document.documentElement.removeAttribute('data-theme');
 });
 
 describe('CommandTable', () => {
@@ -255,6 +256,7 @@ describe('CommandTable', () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
     await waitFor(() => expect(document.documentElement.dataset.mode).toBe('dark'));
+    expect(document.documentElement.dataset.theme).toBe('night');
     expect(screen.queryByRole('group', { name: 'Theme' })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Accounts' })).toBeNull();
@@ -315,16 +317,24 @@ describe('CommandTable', () => {
     expect(screen.queryByRole('group', { name: 'Merge #1' })).toBeNull();
   });
 
-  it('opens the settings drawer from the top bar', async () => {
+  it('opens the settings sidebar from the burger and closes it with Escape', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
+    const burger = screen.getByRole('button', { name: 'Settings sidebar' });
+    expect(burger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(burger);
+    expect(burger).toHaveAttribute('aria-expanded', 'true');
+    const dialog = screen.getByRole('dialog', { name: 'Settings' });
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Repositories' }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(burger).toHaveFocus();
   });
 
-  it('opens the account panel from the Account button, one panel at a time', async () => {
+  it('opens the account panel from the Account button', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');
     const account = screen.getByRole('button', { name: 'Account' });
@@ -342,8 +352,7 @@ describe('CommandTable', () => {
     fireEvent.click(screen.getByTestId('side-panel-scrim'));
     expect(screen.queryByRole('dialog')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Connected accounts' })).toBeNull();
   });

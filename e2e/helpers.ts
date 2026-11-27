@@ -129,3 +129,14 @@ export async function syncUntil(page: Page, text: string) {
     ).toBeVisible({ timeout: 3000 });
   }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
 }
+
+/** Opens the Settings sidebar with the burger (it is already open on a wide screen until folded) and returns it. */
+export async function openSettings(page: Page) {
+  const burger = page.getByRole("button", { name: "Settings sidebar" });
+  if ((await burger.getAttribute("aria-expanded")) !== "true") {
+    await burger.click();
+  }
+  const sidebar = page.getByRole("complementary", { name: "Settings" });
+  await sidebar.waitFor();
+  return sidebar;
+}

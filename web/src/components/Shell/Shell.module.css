@@ -1,0 +1,186 @@
+/* Left sidebar and floating burger. Colours come from the theme tokens in globals.css. */
+
+.column {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  flex: none;
+  align-self: flex-start;
+  width: 24rem;
+  max-width: 40vw;
+  height: 100dvh;
+  padding-block: 12px;
+}
+
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 16, 24, 0.5);
+}
+
+.sidebar {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 18px 18px 0;
+  color: var(--text);
+  box-shadow: 0 18px 40px -20px var(--shadow);
+}
+
+.layer .sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(24rem, 92vw);
+  border-radius: 0 18px 18px 0;
+}
+
+.sidebar:focus {
+  outline: none;
+}
+
+/* The blur sits on a sibling layer: backdrop-filter on the sidebar itself would become the
+   containing block of the fixed popovers inside it. */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(12px);
+}
+
+.sidebarHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebarHead h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.sidebarBody {
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.collapse,
+.burger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.collapse:hover,
+.burger:hover {
+  background: var(--hover);
+}
+
+.burgerWrap {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 0;
+  padding-left: 12px;
+  pointer-events: none;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  height: 40px;
+  margin-top: 4px;
+  padding-inline: 6px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--tb-fg);
+  pointer-events: auto;
+  transition:
+    background-color 0.2s,
+    box-shadow 0.2s,
+    border-color 0.2s;
+}
+
+.stuck {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 26px -14px var(--shadow);
+}
+
+.pillTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width 0.4s ease,
+    opacity 0.3s ease,
+    margin 0.4s ease;
+}
+
+.stuck .pillTitle {
+  max-width: 14rem;
+  margin: 0 10px 0 4px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .layer .sidebar {
+    animation: side-in 180ms ease-out;
+  }
+
+  .scrim {
+    animation: side-fade 180ms ease-out;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill,
+  .pillTitle {
+    transition: none;
+  }
+}
+
+@keyframes side-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes side-fade {
+  from {
+    opacity: 0;
+  }
+}

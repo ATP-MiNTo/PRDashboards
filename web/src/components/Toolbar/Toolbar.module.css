@@ -1,0 +1,292 @@
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.toolbar {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eyebrow,
+.hintLabel {
+  color: var(--sub);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  color: var(--sub);
+  font-size: 12px;
+  list-style: none;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot_assigned {
+  background: var(--role-assigned);
+}
+
+.dot_authored {
+  background: var(--role-authored);
+}
+
+.dot_stack {
+  background: var(--stack);
+}
+
+.divider {
+  align-self: stretch;
+  width: 1px;
+  margin-block: 4px;
+  background: var(--tb-line);
+}
+
+.select {
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--tb-line);
+  border-radius: 6px;
+  background: var(--tb-ctl);
+  color: var(--tb-fg);
+  font: inherit;
+}
+
+.square,
+.pageButton,
+.roll {
+  border: 1px solid var(--tb-line);
+  border-radius: 6px;
+  background: var(--tb-ctl);
+  color: var(--tb-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.square {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.arrow {
+  transition: transform 0.5s cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.arrowUp {
+  transform: rotate(180deg);
+}
+
+.roll {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 10rem;
+  min-height: 28px;
+  padding: 2px 6px 2px 10px;
+}
+
+.rollWin {
+  position: relative;
+  display: block;
+  height: 20px;
+  overflow: hidden;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.rollIn,
+.rollStill {
+  display: block;
+}
+
+.rollIn {
+  animation: rollIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rollOut {
+  position: absolute;
+  inset: 0 auto auto 0;
+  animation: rollOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes rollIn {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes rollOut {
+  to {
+    transform: translateY(-100%);
+  }
+}
+
+.badge {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--tb-fg);
+  color: var(--tb-bg);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  text-align: center;
+}
+
+.hintWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.hintLabel {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  cursor: help;
+}
+
+.hintPop {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 15rem;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 28px -12px var(--shadow);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.hintNote {
+  color: var(--sub);
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.showing {
+  color: var(--sub);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagerRight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pageButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pageButton:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.current {
+  background: var(--tb-fg);
+  color: var(--tb-bg);
+}
+
+.gap {
+  min-width: 16px;
+  color: var(--sub);
+  text-align: center;
+}
+
+.square:hover,
+.roll:hover,
+.pageButton:hover:not(:disabled):not(.current) {
+  background: var(--hover);
+}
+
+@media (max-width: 640px) {
+  .divider {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    transition: none;
+  }
+
+  .rollIn,
+  .rollOut {
+    animation: none;
+  }
+
+  .rollOut {
+    display: none;
+  }
+}

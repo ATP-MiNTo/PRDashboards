@@ -1,5 +1,14 @@
 .page {
+  display: flex;
   min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .muted {
@@ -32,8 +41,20 @@
 
 .brand {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  /* Room for the floating burger, which sits over the start of the bar. */
+  padding-left: 48px;
+  transition: opacity 0.2s;
+}
+
+.brandAway {
+  opacity: 0;
+}
+
+.brandIcon {
+  flex: none;
+  align-self: center;
 }
 
 .brand b {
@@ -102,6 +123,10 @@
   .spin::before {
     animation: none;
   }
+
+  .brand {
+    transition: none;
+  }
 }
 
 .chips {
@@ -136,11 +161,20 @@
 
 .wrap {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
   max-width: 1680px;
   margin-inline: auto;
-  padding: 16px 16px 40px;
+  padding: 16px 16px 8px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
 }
 
 .banner {
@@ -212,12 +246,12 @@
 
 .table {
   width: 100%;
-  min-width: 1100px;
+  min-width: 860px;
   border-collapse: collapse;
 }
 
 .table th {
-  padding: 8px 12px;
+  padding: 8px 8px;
   border-bottom: 1px solid var(--line);
   background: var(--surface2);
   font-size: 12px;
@@ -225,13 +259,87 @@
 }
 
 .table td {
-  padding: 10px 12px;
+  padding: 10px 8px;
   border-top: 1px solid var(--line);
   vertical-align: top;
 }
 
 .row:hover {
   background: var(--hover);
+}
+
+.row td {
+  transition: opacity 0.3s;
+}
+
+.role_assigned {
+  background: var(--role-assigned-bg);
+}
+
+.role_assigned:hover {
+  background: var(--role-assigned-hover);
+}
+
+.role_authored {
+  background: var(--role-authored-bg);
+}
+
+.role_authored:hover {
+  background: var(--role-authored-hover);
+}
+
+.role_both {
+  background: linear-gradient(to right, var(--role-assigned-bg) 50%, var(--role-authored-bg) 50%);
+}
+
+.role_both:hover {
+  background: linear-gradient(
+    to right,
+    var(--role-assigned-hover) 50%,
+    var(--role-authored-hover) 50%
+  );
+}
+
+.role_assigned td:first-child {
+  box-shadow: inset 4px 0 0 var(--role-assigned);
+}
+
+.role_authored td:first-child {
+  box-shadow: inset 4px 0 0 var(--role-authored);
+}
+
+.role_both td:first-child {
+  background: linear-gradient(to bottom, var(--role-assigned) 50%, var(--role-authored) 50%) left /
+    4px 100% no-repeat;
+}
+
+.dim td {
+  opacity: 0.45;
+}
+
+.ghost td {
+  animation: ghostOut 0.5s ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes ghostOut {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+.hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.hide input {
+  margin: 0;
 }
 
 .stackGroup {
@@ -350,8 +458,9 @@
 
 .check {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 0 6px;
   font-size: 12px;
 }
 

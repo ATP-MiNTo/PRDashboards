@@ -6,6 +6,67 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.3.1] - 2026-11-26
+
+### Fixed
+
+- Dropdown and multi-select lists no longer close when the page scrolls right after they open. They now
+  follow their button and close only when the button leaves the screen. This fixes lists that vanished
+  under a slow browser, which made the merge e2e specs time out.
+
+## [2.3.0] - 2026-11-26
+
+### Added
+
+- Every pull request in the snapshot says why it is listed (`roles`: `assigned`, `authored`, or both). The server
+  takes it from which of the two existing GitHub searches returned the PR, with no new GitHub call. A snapshot
+  stored by an older version loads with both roles.
+- A "Show" switch in the toolbar, before "Hidden PRs": Everything, Assigned to me and Opened by me, each with a
+  count and a hint that opens on hover and keyboard focus. The choice is kept in this browser.
+- Rows are tinted by role: cyan for assigned, pink for opened by you, split in two when both. Stacks keep their
+  purple cue. A legend at the right end of the toolbar names the colours.
+
+## [2.2.0] - 2026-11-26
+
+### Added
+
+- A toolbar under the stat strip, next to the status filters: a Sort select (Recently updated, Title,
+  Repository, PR number, Ready to merge first) with a button that reverses the direction, and a
+  "Hidden PRs" switch. A stack is one unit when sorting: it sorts by its best member and keeps its order.
+- A Hide checkbox on every row. The switch cycles Visible, All (hidden rows dimmed) and Hidden (only the
+  hidden ones), shows a count, rolls its label when it changes, and has a hint that opens on hover and on
+  keyboard focus. Hidden pull requests and the mode are kept in this browser only.
+- Paging at the bottom of the table: "Showing X to Y of N", a page size of 10, 15 or 20, and page
+  buttons. A stack is never split across pages.
+- A footer with a credit line, and a floating GitHub button that moves into the footer when it scrolls into view.
+
+### Changed
+
+- The sidebar is 24rem wide instead of 28rem and the table cells are tighter, so the table no longer scrolls
+  sideways at 1280px or 1440px with the sidebar open.
+- The page ends at the footer: the extra space under the table is gone.
+
+## [2.1.0] - 2026-11-26
+
+### Changed
+
+- Settings moved from a panel on the right to a left sidebar. On screens 1024px wide or more it is a column
+  that is open by default, remembers whether you folded it, and folds itself after 30 seconds without the
+  pointer on it. On narrow screens it is an overlay that closes with Escape or a click on the scrim.
+- The Settings button is gone from the top bar. A floating burger button at the top left, which stays on
+  screen while you scroll, opens and closes the sidebar. After scrolling it becomes a frosted pill that also
+  shows the app name.
+- The app name in the top bar is followed by the repo and branch icon.
+
+## [2.0.0] - 2026-11-26
+
+### Added
+
+- v2 starts here. The web app builds with Tailwind CSS 3.4 and daisyUI 4.12 so later v2 screens can use
+  daisyUI components. Existing screens look the same: Tailwind's preflight and daisyUI's root styles are off.
+- The theme setting also sets `data-theme` on the page (`winter` for light, `night` for dark) next to
+  `data-mode`.
+
 ## [1.3.0] - 2026-11-25
 
 ### Added

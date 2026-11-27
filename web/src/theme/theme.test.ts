@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoMode, isThemeSetting, msUntilSwitch, resolveMode } from './theme';
+import { autoMode, daisyTheme, isThemeSetting, msUntilSwitch, resolveMode } from './theme';
 
 const at = (h: number, m = 0) => new Date(2026, 10, 24, h, m, 0, 0);
 
@@ -26,6 +26,11 @@ describe('theme', () => {
     expect(msUntilSwitch(at(18, 30))).toBe(30 * 60_000);
     expect(msUntilSwitch(at(6, 0))).toBe(60 * 60_000);
     expect(msUntilSwitch(at(23, 0))).toBe(8 * 60 * 60_000);
+  });
+
+  it('maps light to winter and dark to night', () => {
+    expect(daisyTheme('light')).toBe('winter');
+    expect(daisyTheme('dark')).toBe('night');
   });
 
   it('validates a stored value', () => {
