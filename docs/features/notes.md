@@ -14,7 +14,7 @@ No server data. `localStorage` key `prd-notes`: a JSON object from pull request 
 
 - [web/src/lib/notes.ts](../../web/src/lib/notes.ts): the pure helpers `parseNotes`, `pruneNotes`, `withNote`, `notePreview` and the constants `NOTES_KEY`, `NOTE_PREVIEW` (60), `NOTE_MAX`.
 - [web/src/components/Toolbar/useListPrefs.ts](../../web/src/components/Toolbar/useListPrefs.ts): holds `notes` (pruned against the ids of the snapshot when read) and `setNote(id, text)`, which writes `prd-notes`.
-- [NoteButton.tsx](../../web/src/components/CommandTable/NoteButton.tsx): the square ghost button (32px) with a pencil icon, inside a [Tip](../../web/src/components/Tip/Tip.tsx). [NoteDialog.tsx](../../web/src/components/CommandTable/NoteDialog.tsx): the editor in the shared [Modal](../../web/src/components/Modal/Modal.tsx). [Notes.module.css](../../web/src/components/CommandTable/Notes.module.css).
+- [NoteButton.tsx](../../web/src/components/CommandTable/NoteButton.tsx): the square ghost button (32px) with a document-plus icon (a filled document when the pull request has a note), inside a [Tip](../../web/src/components/Tip/Tip.tsx). [NoteDialog.tsx](../../web/src/components/CommandTable/NoteDialog.tsx): the editor in the shared [Modal](../../web/src/components/Modal/Modal.tsx). [Notes.module.css](../../web/src/components/CommandTable/Notes.module.css).
 - [Card.tsx](../../web/src/components/CommandTable/Card.tsx) places the button in the first cell of the controls row, before the Hide checkbox, and the "Note" badge in the meta line. [List.tsx](../../web/src/components/CommandTable/List.tsx) passes `notes[id]` and `setNote`.
 
 ## Key flows
