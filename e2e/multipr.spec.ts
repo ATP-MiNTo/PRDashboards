@@ -56,10 +56,15 @@ test("moves INP-105 only after the third approval", async ({
   // The popover closes on any scroll, so let the sidebar finish scrolling before opening it.
   await target.scrollIntoViewIfNeeded();
   await page.evaluate(
-    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
   );
   await target.click();
-  await page.getByRole("option", { name: "Ready to Merge", exact: true }).click();
+  await page
+    .getByRole("option", { name: "Ready to Merge", exact: true })
+    .click();
   await form.getByRole("button", { name: "Preview" }).click();
   await expect(form.getByRole("region", { name: "Preview" })).toBeVisible();
   // The approved fixture pull requests already match, and they must stay where they are.
@@ -68,9 +73,10 @@ test("moves INP-105 only after the third approval", async ({
     .check();
   await form.getByRole("button", { name: "Save rule" }).click();
   await expect(form).toBeHidden();
-  await expect(
-    drawer.getByRole("button", { name: /: All$/ }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(drawer.getByRole("button", { name: /: All$/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await drawer.getByRole("button", { name: "Collapse sidebar" }).click();
 
   await approve(page, request, [34]);
@@ -95,7 +101,7 @@ test("moves INP-105 only after the third approval", async ({
   expect(jira.statuses["INP-105"]).toBe("Ready to Merge");
   expect(jira.jira.transitions - before.transitions).toBe(1);
   expect(jira.jira.moves - before.moves).toBe(1);
-  await expect(page.getByText(/Waiting on/)).toHaveCount(0);
+  await expect(page.getByText(/Waiting on \d+ of \d+ PRs/)).toHaveCount(0);
 
   const log = (await openSettings(page)).getByRole("list", {
     name: "Activity",

@@ -10,10 +10,11 @@ import {
 } from "./helpers";
 
 // Review actions: approve, request changes and mark ready, with the approvals required per
-// repository. No screen has these buttons yet, so the spec calls the same endpoints the cards
-// will, from the page, with the session cookie and the CSRF header, and checks what the fake
-// GitHub received and how the snapshot changed. The fake adds three pull requests in acme/review
-// (config review): #31 has one approval, #32 is a draft and #33 was opened by the viewer.
+// repository. The first tests call the endpoints from the page, with the session cookie and the CSRF
+// header, and check what the fake GitHub received and how the snapshot changed. The last ones use
+// the controls of the cards (the Action menu and the Ready button). The fake adds three pull
+// requests in acme/review (config review): #31 has one approval, #32 is a draft and #33 was opened
+// by the viewer.
 
 type GitHubState = {
   merges: number;
@@ -369,4 +370,111 @@ test("the write endpoints keep the merge's guards", async ({ page }) => {
   const unknown = await call(page, "POST", "/api/prs/PR_nope/approve", body);
   expect(unknown.status).toBe(404);
   expect(unknown.body).toMatchObject({ code: "not_found" });
+});
+
+const cardOf = (page: Page, title: string) =>
+  page.locator("article[data-pr]").filter({ hasText: title });
+
+// The app keeps the snapshot of the previous test (its own review included), so refresh from the
+// reset fake until the card offers the Action menu again.
+const withAction = async (page: Page, title: string, number: number) => {
+  const card = cardOf(page, title);
+  const action = card.getByRole("button", {
+    name: `Review action for #${number}`,
+  });
+  await expect(async () => {
+    if (!(await action.isVisible())) {
+      expect((await call(page, "POST", "/api/sync")).status).toBe(202);
+    }
+    await expect(action).toBeVisible({ timeout: 3000 });
+  }).toPass({ intervals: [500, 1500], timeout: 15_000 });
+  return card;
+};
+
+test("approves from the Action menu of a card with the head the card showed", async ({
+  page,
+  request,
+}) => {
+  const card = await withAction(page, "REV-31 Needs two approvals", 31);
+  await card.getByRole("button", { name: "Review action for #31" }).click();
+  await page.getByRole("menuitem", { name: "Approve", exact: true }).click();
+
+  await expect(page.getByText("You approved #31")).toBeVisible();
+  expect((await fakeState<GitHubState>(request, "github")).reviews).toEqual([
+    { pr: idOf(31), event: "APPROVE", sha: headOf(31), body: "" },
+  ]);
+  // The refresh that follows shows the viewer's approval: the menu gives way to the state.
+  await expect(
+    card.getByRole("button", { name: "Review action for #31" }),
+  ).toHaveCount(0);
+  await expect(
+    card.getByText(/^Approve( \d\/\d)?\. You approved\./),
+  ).toBeVisible();
+});
+
+test("requests changes from the card, with a required comment", async ({
+  page,
+  request,
+}) => {
+  const card = await withAction(page, "REV-31 Needs two approvals", 31);
+  await card.getByRole("button", { name: "Review action for #31" }).click();
+  await page.getByRole("menuitem", { name: "Request change" }).click();
+
+  const dialog = page.getByRole("dialog", {
+    name: "Request changes on acme/review #31",
+  });
+  await dialog.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Write a comment first",
+  );
+  expect(
+    (await fakeState<GitHubState>(request, "github")).reviews ?? [],
+  ).toEqual([]);
+
+  await dialog.getByRole("textbox", { name: /Comment/ }).fill("rename it");
+  await dialog.getByRole("button", { name: "Request changes" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("You requested changes on #31")).toBeVisible();
+  expect((await fakeState<GitHubState>(request, "github")).reviews).toEqual([
+    {
+      pr: idOf(31),
+      event: "REQUEST_CHANGES",
+      sha: headOf(31),
+      body: "rename it",
+    },
+  ]);
+  await expect(
+    card.getByText(/^Change( \d\/\d)?\. You requested changes\./),
+  ).toBeVisible();
+});
+
+test("shows the state, not the menu, on a pull request the viewer opened", async ({
+  page,
+}) => {
+  const card = cardOf(page, "REV-33 My own change");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button", { name: /Review action/ })).toHaveCount(
+    0,
+  );
+  await expect(
+    card.getByText("You opened this pull request, so you cannot review it."),
+  ).toHaveCount(1);
+});
+
+test("marks a draft ready from its card", async ({ page, request }) => {
+  const card = cardOf(page, "REV-32 Draft to finish");
+  await expect(
+    card.getByRole("button", { name: "Merge", exact: true }),
+  ).toHaveCount(0);
+  await card.getByRole("button", { name: "Ready", exact: true }).click();
+
+  await expect(page.getByText("#32 is no longer a draft")).toBeVisible();
+  expect((await fakeState<GitHubState>(request, "github")).ready).toEqual([
+    idOf(32),
+  ]);
+  // The checks restart after leaving draft, so Merge stays off and says why.
+  await expect(
+    card.getByRole("button", { name: "Merge", exact: true }),
+  ).toHaveAccessibleDescription("Checks restart after leaving draft.");
+  await pollSnapshot(page, 32, (p) => p.isDraft).toBe(false);
 });
