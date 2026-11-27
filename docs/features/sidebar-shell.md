@@ -46,7 +46,7 @@ None from the shell. The accounts block reads `GET /api/accounts`, which reads t
 - The blur is on a `::before` layer of the sidebar, not on the sidebar: `backdrop-filter` on an ancestor would become the containing block of the fixed popovers in the Dropdown.
 - The burger ([header.md](header.md)) and the collapse chevron are buttons with accessible names ("Settings sidebar", "Collapse sidebar") and `aria-expanded`; both have `aria-controls`.
 - The sidebar column is 20rem wide, and the overlay is at most 20rem or 92vw. The table is sized to fit beside it at 1280px ([command-table.md](command-table.md)).
-- The Accounts dialog is not part of the sidebar; the sidebar only opens it. Sessions, Delete branch, Exclude statuses, Multi-PR and Activity are not in the sidebar any more ([settings.md](settings.md)).
+- The Accounts dialog is not part of the sidebar; the sidebar only opens it. Sessions, Exclude statuses, the per-rule Multi-PR mode and Activity are not in the sidebar any more (the Repositories block keeps the global Delete branch and Multi-PR defaults) ([settings.md](settings.md)).
 
 ## Tests
 

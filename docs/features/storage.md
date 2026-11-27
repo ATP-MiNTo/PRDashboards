@@ -45,7 +45,7 @@ nonce on every write. The magic differs from `secrets.enc`, so neither file open
 nonce, then the AES-256-GCM ciphertext of a JSON map. The whole header is the additional data.
 Argon2id with time 3, 64 MiB, 4 threads, 32-byte key. A fresh salt and nonce on every write.
 
-SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md); [migration 0004](../../server/internal/store/migrations/0004_approvals.sql) adds `repos.approvals_required` (1 to 10, default 1), see [review-actions.md](review-actions.md); [migration 0005](../../server/internal/store/migrations/0005_repo_prefs.sql) adds `repos.method_inherit` (the repository follows the default method; new repositories start with it) and `repos.delete_branch` (`default`, `yes` or `no`), see [merge-method.md](merge-method.md) and [settings.md](settings.md)):
+SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md); [migration 0004](../../server/internal/store/migrations/0004_approvals.sql) adds `repos.approvals_required` (1 to 10, default 1), see [review-actions.md](review-actions.md); [migration 0005](../../server/internal/store/migrations/0005_repo_prefs.sql) adds `repos.method_inherit` (the repository follows the default method; new repositories start with it) and `repos.delete_branch` (`default`, `yes` or `no`), see [merge-method.md](merge-method.md) and [settings.md](settings.md); [migration 0006](../../server/internal/store/migrations/0006_rule_mode_default.sql) lets `sync_rules.mode` be `default` (a rule that follows `multiPrTickets`) by rebuilding `sync_rules` and `rule_firings` with their rows, see [status-sync-rules.md](status-sync-rules.md)):
 `schema_migrations`, `settings`, `repos`, `repo_branch_rules`, `prs`, `ticket_links`, `sync_rules`,
 `rule_firings`, `activity`, `pending_retries`, `snapshot`, `sessions` (hashed id, created, last
 issued, expires) and `oauth_states` (hashed state, provider, session key, PKCE verifier, expiry).
@@ -53,7 +53,7 @@ All tables are `STRICT`. Times are Unix seconds.
 
 Settings (`GET/PUT /api/settings`, schema `Settings` in [api/openapi.yaml](../../api/openapi.yaml)):
 `polling {githubSec, jiraSec}` (each a multiple of 15 from 30 to 3600; the five values older versions offered are still valid), `theme`,
-`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `jiraSiteId` (nullable), `excludedStatuses`
+`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `multiPrTickets` (`all` or `any`, default `all`, also for installs that never wrote it), `jiraSiteId` (nullable), `excludedStatuses`
 (array of up to 50 status names, default `["Done"]`, also for installs that never wrote it). Stored as typed JSON
 values per key in one transaction.
 
