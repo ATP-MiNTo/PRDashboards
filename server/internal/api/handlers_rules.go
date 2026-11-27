@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/poller"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
@@ -131,6 +132,32 @@ func (h *handlers) PreviewRule(ctx context.Context, req gen.PreviewRuleRequestOb
 	if err != nil {
 		return nil, err
 	}
+	return gen.PreviewRule200JSONResponse(toGenPreview(pv)), nil
+}
+
+func (h *handlers) PreviewRules(ctx context.Context, req gen.PreviewRulesRequestObject) (gen.PreviewRulesResponseObject, error) {
+	if req.Body == nil {
+		return nil, problem(http.StatusBadRequest, "invalid_body", "")
+	}
+	rs := make([]rules.Rule, len(req.Body.Rules))
+	for i, g := range req.Body.Rules {
+		rs[i] = toEngine(fromGenRule(g))
+		if msg := rules.Validate(rs[i]); msg != "" {
+			return nil, problem(http.StatusUnprocessableEntity, codeInvalidRule, msg)
+		}
+	}
+	pvs, err := h.cfg.Poller.PreviewAll(ctx, rs)
+	if err != nil {
+		return nil, err
+	}
+	out := gen.RulePreviews{Previews: make([]gen.RulePreview, len(pvs))}
+	for i, pv := range pvs {
+		out.Previews[i] = toGenPreview(pv)
+	}
+	return gen.PreviewRules200JSONResponse(out), nil
+}
+
+func toGenPreview(pv poller.RulePreview) gen.RulePreview {
 	out := gen.RulePreview{Moves: make([]gen.RuleMove, len(pv.Moves)), Waiting: make([]gen.RuleWaiting, len(pv.Waiting))}
 	for i, m := range pv.Moves {
 		out.Moves[i] = gen.RuleMove{TicketKey: m.Ticket, Status: m.Status, AlreadyInTarget: m.InTarget}
@@ -142,5 +169,5 @@ func (h *handlers) PreviewRule(ctx context.Context, req gen.PreviewRuleRequestOb
 		}
 		out.Waiting[i] = gen.RuleWaiting{TicketKey: w.Ticket, Total: w.Total, WaitingOn: refs}
 	}
-	return gen.PreviewRule200JSONResponse(out), nil
+	return out
 }

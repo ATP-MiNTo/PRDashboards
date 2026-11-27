@@ -12,7 +12,7 @@ type When = 'now' | 'merged';
 
 /**
  * The Preview panel: "Right now" is what the enabled rules, as they stand in the dialog, would move
- * with the cached data (one preview request per rule, answered from the database), and "If merged"
+ * with the cached data (one batch request for all rules, answered from the database), and "If merged"
  * is what the saved merged rules do once the pull requests merge (from the merge plans of the
  * snapshot). Tickets no rule moves are listed under "Won't move".
  */

@@ -32,6 +32,7 @@ type stubPoller struct {
 
 	reevaluations int
 	previewed     []rules.Rule
+	batches       int
 	baselined     []rules.Rule
 	preview       poller.RulePreview
 	baseline      []store.Firing
@@ -77,6 +78,18 @@ func (s *stubPoller) Preview(_ context.Context, r rules.Rule) (poller.RulePrevie
 	defer s.mu.Unlock()
 	s.previewed = append(s.previewed, r)
 	return s.preview, nil
+}
+
+func (s *stubPoller) PreviewAll(_ context.Context, rs []rules.Rule) ([]poller.RulePreview, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.previewed = append(s.previewed, rs...)
+	s.batches++
+	out := make([]poller.RulePreview, len(rs))
+	for i := range rs {
+		out[i] = s.preview
+	}
+	return out, nil
 }
 
 func (s *stubPoller) Baseline(_ context.Context, rs []rules.Rule) ([]store.Firing, error) {

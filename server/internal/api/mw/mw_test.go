@@ -237,3 +237,37 @@ func TestProtectedSurface(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimitPreviewsHaveTheirOwnBucket(t *testing.T) {
+	clock := testutil.NewClock()
+	h := mw.RateLimit(clock.Now)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	send := func(path string) int {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, path, nil))
+		return w.Code
+	}
+	for i := range 120 {
+		path := "/api/rules/preview"
+		if i%2 == 1 {
+			path = "/api/rules/previews"
+		}
+		if c := send(path); c != http.StatusNoContent {
+			t.Fatalf("preview %d: status %d", i, c)
+		}
+	}
+	if c := send("/api/rules/previews"); c != http.StatusTooManyRequests {
+		t.Fatalf("121st preview: status %d", c)
+	}
+	// The write budget is untouched by the previews, and they do not spend it.
+	for i := range 30 {
+		if c := send("/api/anything"); c != http.StatusNoContent {
+			t.Fatalf("write %d: status %d", i, c)
+		}
+	}
+	if c := send("/api/anything"); c != http.StatusTooManyRequests {
+		t.Fatalf("31st write: status %d", c)
+	}
+	if c := send("/api/rules/preview"); c != http.StatusTooManyRequests {
+		t.Fatalf("preview while the preview bucket is empty: status %d", c)
+	}
+}

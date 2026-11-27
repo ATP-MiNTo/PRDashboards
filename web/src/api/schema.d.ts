@@ -400,6 +400,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/rules/previews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The tickets each of several rules would move now
+         * @description Evaluates the rules, in order, against the cached snapshot as if none had ever fired. The cached tickets and the settings are read once for the whole batch. No GitHub or Jira call, and nothing is stored. Like /api/rules/preview it has a bucket of its own (120 per minute per session) and does not spend the write bucket.
+         */
+        post: operations["previewRules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/prs/{id}/merge": {
         parameters: {
             query?: never;
@@ -907,6 +927,13 @@ export interface components {
         };
         RulePreviewRequest: {
             rule: components["schemas"]["SyncRule"];
+        };
+        RulePreviewsRequest: {
+            rules: components["schemas"]["SyncRule"][];
+        };
+        RulePreviews: {
+            /** @description One preview per rule of the request, in the same order. */
+            previews: components["schemas"]["RulePreview"][];
         };
         PrRef: {
             prId: string;
@@ -1724,6 +1751,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RulePreview"];
+                };
+            };
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    previewRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RulePreviewsRequest"];
+            };
+        };
+        responses: {
+            /** @description One preview per rule, in the order of the request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RulePreviews"];
                 };
             };
             422: components["responses"]["Unprocessable"];

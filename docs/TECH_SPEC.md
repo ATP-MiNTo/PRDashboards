@@ -547,6 +547,7 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
+| `POST /api/rules/previews` | The same for up to 100 rules in one call (`{rules}` answers `{previews}` in order). Both preview endpoints use their own rate bucket (120 per minute per session), not the write bucket |
 | `GET /api/jira/options` | Jira status names (one call, cached 10 minutes) and project keys (from memory) for the rule form |
 | `GET /api/activity` | Activity log, paginated |
 | `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |

@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   getJiraOptions: vi.fn(),
   putRules: vi.fn(),
   previewRule: vi.fn(),
+  previewRules: vi.fn(),
   revokeAllSessions: vi.fn(),
   retryTransition: vi.fn(),
   dismissRetry: vi.fn(),

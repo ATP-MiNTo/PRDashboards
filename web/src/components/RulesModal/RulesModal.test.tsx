@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getRules: vi.fn(),
   putRules: vi.fn(),
   previewRule: vi.fn(),
+  previewRules: vi.fn(),
   getSnapshot: vi.fn(),
   getActivity: vi.fn(),
   getRetries: vi.fn(),
@@ -831,7 +832,9 @@ describe('the preview', () => {
       ],
       waiting: [],
     };
-    api.previewRule.mockImplementation((r: SyncRule) => Promise.resolve(previews[r.id]));
+    api.previewRules.mockImplementation((rs: SyncRule[]) =>
+      Promise.resolve({ previews: rs.map((r) => previews[r.id]) }),
+    );
   });
 
   const run = async () => {
@@ -840,11 +843,12 @@ describe('the preview', () => {
     return screen.findByRole('region', { name: 'Preview of all rules' });
   };
 
-  it('asks for each enabled rule, once, and lists what would move now', async () => {
+  it('asks once for all enabled rules, and lists what would move now', async () => {
     const panel = await run();
     expect(await within(panel).findByText('INP-1')).toBeInTheDocument();
-    expect(api.previewRule).toHaveBeenCalledTimes(2);
-    expect(api.previewRule.mock.calls.map((c) => c[0].id)).toEqual(['a', 'b']);
+    expect(api.previewRules).toHaveBeenCalledTimes(1);
+    expect(api.previewRule).not.toHaveBeenCalled();
+    expect(api.previewRules.mock.calls[0]?.[0].map((r: SyncRule) => r.id)).toEqual(['a', 'b']);
     const row = within(panel).getByText('INP-1').closest('tr') as HTMLElement;
     expect(within(row).getByText('The pull request is approved')).toBeInTheDocument();
     expect(within(row).getByText('In Review')).toBeInTheDocument();
@@ -909,7 +913,9 @@ describe('the preview', () => {
   });
 
   it('says when nothing would move, right now or if merged', async () => {
-    api.previewRule.mockResolvedValue({ moves: [], waiting: [] });
+    api.previewRules.mockImplementation((rs: SyncRule[]) =>
+      Promise.resolve({ previews: rs.map(() => ({ moves: [], waiting: [] })) }),
+    );
     const panel = await run();
     expect(await within(panel).findByText('No ticket would move right now.')).toBeInTheDocument();
     fireEvent.click(within(panel).getByRole('button', { name: 'If merged' }));
@@ -921,11 +927,11 @@ describe('the preview', () => {
   it('shows the rules as they stand in the dialog, and says that "If merged" is for the saved ones', async () => {
     const panel = await run();
     await within(panel).findByText('INP-1');
-    const calls = api.previewRule.mock.calls.length;
+    const calls = api.previewRules.mock.calls.length;
     const first = await expand('First');
     pick(within(first), 'Then move it to', 'Closed');
-    await waitFor(() => expect(api.previewRule.mock.calls.length).toBe(calls + 2));
-    expect(api.previewRule.mock.calls.at(-2)?.[0]).toMatchObject({ id: 'a', target: 'Closed' });
+    await waitFor(() => expect(api.previewRules.mock.calls.length).toBe(calls + 1));
+    expect(api.previewRules.mock.calls.at(-1)?.[0][0]).toMatchObject({ id: 'a', target: 'Closed' });
     fireEvent.click(within(panel).getByRole('button', { name: 'If merged' }));
     expect(within(panel).getByText(/Save your changes to include them/)).toBeInTheDocument();
   });
@@ -933,25 +939,25 @@ describe('the preview', () => {
   it('does not ask again for a rename, and leaves out a rule with a problem', async () => {
     const panel = await run();
     await within(panel).findByText('INP-1');
-    const calls = api.previewRule.mock.calls.length;
+    const calls = api.previewRules.mock.calls.length;
     fireEvent.change(within(card(1)).getByLabelText('Rule name'), { target: { value: 'Other' } });
     await new Promise((r) => setTimeout(r, 400));
-    expect(api.previewRule.mock.calls.length).toBe(calls);
+    expect(api.previewRules.mock.calls.length).toBe(calls);
     const first = await expand('Other');
     pick(within(first), 'Then move it to', 'Closed');
-    await waitFor(() => expect(api.previewRule.mock.calls.length).toBe(calls + 2));
+    await waitFor(() => expect(api.previewRules.mock.calls.length).toBe(calls + 1));
     const second = await expand('Second');
     fireEvent.change(within(second).getByLabelText('Add In repositories'), {
       target: { value: 'a b' },
     });
     fireEvent.keyDown(within(second).getByLabelText('Add In repositories'), { key: 'Enter' });
-    const afterBad = api.previewRule.mock.calls.length;
-    await waitFor(() => expect(api.previewRule.mock.calls.length).toBe(afterBad + 1));
-    expect(api.previewRule.mock.calls.at(-1)?.[0].id).toBe('a');
+    const afterBad = api.previewRules.mock.calls.length;
+    await waitFor(() => expect(api.previewRules.mock.calls.length).toBe(afterBad + 1));
+    expect(api.previewRules.mock.calls.at(-1)?.[0].map((r: SyncRule) => r.id)).toEqual(['a']);
   });
 
   it('says so when it cannot preview, and when no rule is on', async () => {
-    api.previewRule.mockRejectedValue(new Error('no'));
+    api.previewRules.mockRejectedValue(new Error('no'));
     const panel = await run();
     expect(await within(panel).findByText('Could not preview the rules.')).toBeInTheDocument();
     api.getRules.mockResolvedValue({ rules: [rule('c', { name: 'Third', enabled: false })] });
@@ -961,7 +967,7 @@ describe('the preview', () => {
     api.getRules.mockResolvedValue({ rules: [rule('c', { name: 'Third', enabled: false })] });
     const panel = await run();
     expect(within(panel).getByText('No ticket would move right now.')).toBeInTheDocument();
-    expect(api.previewRule).not.toHaveBeenCalled();
+    expect(api.previewRules).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
     expect(screen.queryByRole('region', { name: 'Preview of all rules' })).toBeNull();
   });

@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeQueryClient } from '@/app/providers';
-import { ApiError, type RepoSettings } from '@/api/client';
+import { ApiError, type RepoSettings, type SyncRule } from '@/api/client';
 
 const api = vi.hoisted(() => ({
   approvePr: vi.fn(),
@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   putRepo: vi.fn(),
   getSnapshot: vi.fn(),
   getRepos: vi.fn(),
+  previewRules: vi.fn(),
 }));
 
 vi.mock('@/api/client', async (importOriginal) => ({
@@ -24,6 +25,7 @@ import {
   keys,
   useApprove,
   useMarkReady,
+  usePreviewRules,
   useRequestChanges,
   useSaveApprovals,
 } from './queries';
@@ -121,5 +123,25 @@ describe('approvals setting', () => {
     await act(() => result.current.mutateAsync({ repo, approvalsRequired: 2 }));
     expect(api.putRepo).toHaveBeenCalledWith('R1', approvalsUpdate(repo, 2));
     expect(invalidated(spy)).toEqual([JSON.stringify(keys.repos), JSON.stringify(keys.snapshot)]);
+  });
+});
+
+describe('rule previews', () => {
+  const rule = (id: string) => ({ id }) as SyncRule;
+
+  it('asks once for all rules and pairs each answer with its rule', async () => {
+    const { wrapper } = setup();
+    const a = { moves: [{ ticketKey: 'INP-1', status: 'To Do', alreadyInTarget: false }], waiting: [] };
+    const b = { moves: [], waiting: [] };
+    api.previewRules.mockResolvedValue({ previews: [a, b] });
+    const { result } = renderHook(() => usePreviewRules(), { wrapper });
+    const rules = [rule('a'), rule('b')];
+    const out = await act(() => result.current.mutateAsync(rules));
+    expect(api.previewRules).toHaveBeenCalledTimes(1);
+    expect(api.previewRules).toHaveBeenCalledWith(rules);
+    expect(out).toEqual([
+      { rule: rules[0], preview: a },
+      { rule: rules[1], preview: b },
+    ]);
   });
 });

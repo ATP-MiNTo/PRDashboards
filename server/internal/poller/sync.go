@@ -364,22 +364,37 @@ func (p *Poller) cachedTickets(ctx context.Context) ([]rules.Ticket, error) {
 
 // Preview evaluates one rule against the cached data as if it had never fired. It makes no call.
 func (p *Poller) Preview(ctx context.Context, r rules.Rule) (RulePreview, error) {
-	tickets, err := p.cachedTickets(ctx)
+	out, err := p.PreviewAll(ctx, []rules.Rule{r})
 	if err != nil {
 		return RulePreview{}, err
+	}
+	return out[0], nil
+}
+
+// PreviewAll evaluates each rule on its own, in order, against the cached data as if none had ever
+// fired. The cached tickets and the settings are read once for the whole batch. It makes no call.
+func (p *Poller) PreviewAll(ctx context.Context, rs []rules.Rule) ([]RulePreview, error) {
+	tickets, err := p.cachedTickets(ctx)
+	if err != nil {
+		return nil, err
 	}
 	set, err := p.cfg.Store.GetSettings(ctx)
 	if err != nil {
-		return RulePreview{}, err
+		return nil, err
 	}
-	pv := rules.PreviewRule(r, p.cfg.Clock(), tickets, set.ExcludedStatuses)
+	now := p.cfg.Clock()
 	status := make(map[string]string, len(tickets))
 	for _, t := range tickets {
 		status[t.Key] = t.Status
 	}
-	out := RulePreview{Moves: make([]PreviewMove, len(pv.Moves)), Waiting: pv.Waiting}
-	for i, m := range pv.Moves {
-		out.Moves[i] = PreviewMove{Ticket: m.Ticket, Status: status[m.Ticket], InTarget: m.InTarget}
+	out := make([]RulePreview, len(rs))
+	for i, r := range rs {
+		pv := rules.PreviewRule(r, now, tickets, set.ExcludedStatuses)
+		moves := make([]PreviewMove, len(pv.Moves))
+		for j, m := range pv.Moves {
+			moves[j] = PreviewMove{Ticket: m.Ticket, Status: status[m.Ticket], InTarget: m.InTarget}
+		}
+		out[i] = RulePreview{Moves: moves, Waiting: pv.Waiting}
 	}
 	return out, nil
 }

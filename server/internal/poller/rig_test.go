@@ -26,6 +26,22 @@ type countingStore struct {
 	refreshes    int
 	snapshotOnly int
 	syncWrites   int
+	syncReads    int
+	settingReads int
+}
+
+func (s *countingStore) SyncState(ctx context.Context, since time.Time, justMerged []string) (store.SyncState, error) {
+	s.mu.Lock()
+	s.syncReads++
+	s.mu.Unlock()
+	return s.Store.SyncState(ctx, since, justMerged)
+}
+
+func (s *countingStore) GetSettings(ctx context.Context) (store.Settings, error) {
+	s.mu.Lock()
+	s.settingReads++
+	s.mu.Unlock()
+	return s.Store.GetSettings(ctx)
 }
 
 func (s *countingStore) SaveRefresh(ctx context.Context, r store.Refresh) error {
