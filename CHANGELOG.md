@@ -6,6 +6,22 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.1] - 2026-11-27
+
+### Changed
+
+- Rule previews are one request (`POST /api/rules/previews`) for all rules, and both preview endpoints have their own
+  rate limit of 120 per minute, so editing rules no longer uses up the budget of Merge and Approve.
+- A refresh that changes nothing keeps the snapshot version, writes no snapshot and sends no snapshot event. The sync
+  times, the API usage and the refresh count reach the browser on the sync status.
+- `GET /api/snapshot` serves the stored gzip when the browser accepts it.
+- After a merge or a review the refresh skips GitHub while it is in backoff and asks Jira only for the tickets the merge
+  moved. The Sync button still overrides the backoff.
+- The authored search leaves out pull requests assigned to you, so GitHub no longer returns the same pull request twice.
+- The Jira project list is cached for 10 minutes. Expired transitions and idle rate limit buckets are dropped.
+- Merged and closed pull requests, activity and spent rule firings older than 90 days are pruned, and a new index
+  serves the merged pull request lookup of the status sync rules.
+
 ## [2.4.0] - 2026-11-27
 
 ### Changed

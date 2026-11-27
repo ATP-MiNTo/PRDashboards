@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"io"
 	"log/slog"
 	"net/http"
@@ -16,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
