@@ -84,7 +84,7 @@ func TestMigrationsAreRecordedOnceAndReopenIsIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 	var n int
-	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 5 {
+	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 6 {
 		t.Fatalf("migrations recorded %d, %v", n, err)
 	}
 }
@@ -296,12 +296,12 @@ func TestOAuthStateSingleUse(t *testing.T) {
 	ctx := context.Background()
 	s, _, clock := open(t)
 	now := clock.Now()
-	st := store.OAuthState{Hash: sha256.Sum256([]byte("s")), Provider: "github", SessionKey: "k", Verifier: "v", ExpiresAt: now.Add(10 * time.Minute)}
+	st := store.OAuthState{Hash: sha256.Sum256([]byte("s")), Provider: "github", SessionKey: "k", ExpiresAt: now.Add(10 * time.Minute)}
 	if err := s.InsertOAuthState(ctx, st, now); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.ConsumeOAuthState(ctx, st.Hash)
-	if err != nil || got.Provider != "github" || got.SessionKey != "k" || got.Verifier != "v" || !got.ExpiresAt.Equal(st.ExpiresAt) {
+	if err != nil || got.Provider != "github" || got.SessionKey != "k" || !got.ExpiresAt.Equal(st.ExpiresAt) {
 		t.Fatalf("%+v %v", got, err)
 	}
 	if _, err := s.ConsumeOAuthState(ctx, st.Hash); !errors.Is(err, store.ErrNotFound) {
@@ -316,7 +316,7 @@ func TestOAuthStateInsertPurgesExpired(t *testing.T) {
 	ctx := context.Background()
 	s, _, clock := open(t)
 	now := clock.Now()
-	old := store.OAuthState{Hash: sha256.Sum256([]byte("old")), Provider: "github", SessionKey: "k", Verifier: "v", ExpiresAt: now.Add(time.Minute)}
+	old := store.OAuthState{Hash: sha256.Sum256([]byte("old")), Provider: "github", SessionKey: "k", ExpiresAt: now.Add(time.Minute)}
 	_ = s.InsertOAuthState(ctx, old, now)
 	later := now.Add(time.Hour)
 	fresh := store.OAuthState{Hash: sha256.Sum256([]byte("new")), Provider: "atlassian", SessionKey: "k", ExpiresAt: later.Add(time.Minute)}

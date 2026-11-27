@@ -59,7 +59,7 @@ func TestOAuthStart(t *testing.T) {
 		t.Fatalf("%s", u)
 	}
 	u, _ = oauthStart(t, g, l, "atlassian")
-	if u.Host != "atlassian.example" || u.Query().Get("audience") != "api.atlassian.com" || u.Query().Get("code_challenge") != "" {
+	if u.Host != "atlassian.example" || u.Query().Get("audience") != "api.atlassian.com" || u.Query().Get("code_challenge_method") != "S256" {
 		t.Fatalf("%s", u)
 	}
 	w := g.do(http.MethodGet, "/oauth/github/start", "", cookie(l.cookie))

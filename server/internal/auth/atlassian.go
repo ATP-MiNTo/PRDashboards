@@ -16,12 +16,13 @@ type atlassianTokenResponse struct {
 	Error        string `json:"error"`
 }
 
-func (o *OAuth) completeAtlassian(ctx context.Context, cred ClientCredentials, code string) error {
+func (o *OAuth) completeAtlassian(ctx context.Context, cred ClientCredentials, code, verifier string) error {
 	status, body, err := o.postJSON(ctx, o.cfg.Endpoints.AtlassianToken, map[string]string{
 		"grant_type":    "authorization_code",
 		"client_id":     cred.ClientID,
 		"client_secret": cred.ClientSecret,
 		"code":          code,
+		"code_verifier": verifier,
 		"redirect_uri":  o.CallbackURL(Atlassian),
 	})
 	if err != nil {
