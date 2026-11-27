@@ -70,9 +70,8 @@
   border-radius: 50%;
 }
 
-/* Assigned and opened by me share the green; review requested is the red. */
-.dot_assigned,
-.dot_authored {
+/* Mine (assigned or opened by me) is the green; review requested is the red. */
+.dot_mine {
   background: var(--rc-a);
 }
 

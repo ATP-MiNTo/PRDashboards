@@ -18,12 +18,11 @@ const SHOW_OPTIONS: RollOption<ShowMode>[] = [
   { id: 'review', label: 'To review', tone: 'red' },
 ];
 
-const LEGEND = [
-  { id: 'assigned', label: 'Assigned' },
-  { id: 'authored', label: 'Opened by me' },
+const LEGEND: { id: string; label: string; hint?: string }[] = [
+  { id: 'mine', label: 'Mine', hint: 'Assigned to you or opened by you' },
   { id: 'reviewer', label: 'Review requested' },
   { id: 'stack', label: 'Stack' },
-] as const;
+];
 
 /** Said at the end of both hints, as in the design. */
 const SWITCH_NOTE = 'Click the button to switch to the next state.';
@@ -157,7 +156,7 @@ export function Toolbar({
       </div>
       <ul className={styles.legend} aria-label="Legend">
         {LEGEND.map((l) => (
-          <li key={l.id} className={styles.legendItem}>
+          <li key={l.id} className={styles.legendItem} title={l.hint}>
             <span className={`${styles.legendDot} ${styles[`dot_${l.id}`]}`} aria-hidden="true" />
             {l.label}
           </li>

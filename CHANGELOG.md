@@ -21,6 +21,7 @@ entry for that version. There is no "Unreleased" section.
 - The permission error names the token and the repository, and says that a fine-grained token works for one owner only.
 - The toasts show at the top right, below the header.
 - The Blocked tile only has its number in red.
+- The legend has one green entry, Mine, instead of Assigned and Opened by me.
 
 ## [2.4.2] - 2026-11-27
 

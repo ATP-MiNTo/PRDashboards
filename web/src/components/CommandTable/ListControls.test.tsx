@@ -288,7 +288,7 @@ describe('role cues', () => {
     expect(document.querySelector('article [style]')).toBeNull();
   });
 
-  it('shows a legend with Assigned, Opened by me, Review requested and Stack at the end of the toolbar', async () => {
+  it('shows a legend with Mine, Review requested and Stack at the end of the toolbar', async () => {
     load(mixed());
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned one');
@@ -297,7 +297,7 @@ describe('role cues', () => {
       within(legend)
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Assigned', 'Opened by me', 'Review requested', 'Stack']);
+    ).toEqual(['Mine', 'Review requested', 'Stack']);
     expect(legend.parentElement!.lastElementChild).toBe(legend);
     expect(legend.querySelector('[style]')).toBeNull();
   });

@@ -96,17 +96,20 @@ describe('Toolbar', () => {
       within(legend)
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Assigned', 'Opened by me', 'Review requested', 'Stack']);
+    ).toEqual(['Mine', 'Review requested', 'Stack']);
   });
 
-  it('gives Assigned and Opened by me the same green dot and Review requested the red one', () => {
+  it('gives Mine the green dot and a hint, and Review requested the red dot', () => {
     setup();
     const dot = (name: string) =>
       within(screen.getByRole('list', { name: 'Legend' }))
         .getByText(name)
         .querySelector('span')!.className;
-    expect(dot('Assigned')).toMatch(/dot_assigned/);
-    expect(dot('Opened by me')).toMatch(/dot_authored/);
+    expect(dot('Mine')).toMatch(/dot_mine/);
+    expect(screen.getByText('Mine', { selector: 'li' })).toHaveAttribute(
+      'title',
+      'Assigned to you or opened by you',
+    );
     expect(dot('Review requested')).toMatch(/dot_reviewer/);
   });
 
