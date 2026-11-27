@@ -120,11 +120,62 @@ describe('sidebar on a wide screen', () => {
       expect(burger()).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('waits while focus is inside the sidebar', () => {
+    it('waits while keyboard focus is inside the sidebar', () => {
       render(<Harness />);
-      screen.getByRole('button', { name: 'Inside' }).focus();
+      const inside = screen.getByRole('button', { name: 'Inside' });
+      fireEvent.keyDown(inside, { key: 'Tab' });
+      inside.focus();
       advance(120_000);
       expect(burger()).toHaveAttribute('aria-expanded', 'true');
+      // Focus moves out with the keyboard: it counts again.
+      screen.getByRole('button', { name: 'Outside' }).focus();
+      advance(AUTO_COLLAPSE_MS);
+      expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('folds although a button the pointer clicked in the sidebar still has the focus', () => {
+      render(<Harness />);
+      const inside = screen.getByRole('button', { name: 'Inside' });
+      fireEvent.mouseMove(inside);
+      fireEvent.pointerDown(inside);
+      inside.focus();
+      // The pointer stays in the sidebar: nothing folds.
+      advance(120_000);
+      expect(burger()).toHaveAttribute('aria-expanded', 'true');
+      // It leaves; the clicked button keeps the focus, and the sidebar still folds after 30 seconds.
+      fireEvent.mouseMove(screen.getByRole('button', { name: 'Outside' }));
+      expect(inside).toHaveFocus();
+      advance(AUTO_COLLAPSE_MS - 1);
+      expect(burger()).toHaveAttribute('aria-expanded', 'true');
+      advance(1);
+      expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('folds when the pointer moves after a key press left the focus in the sidebar', () => {
+      render(<Harness />);
+      const inside = screen.getByRole('button', { name: 'Inside' });
+      fireEvent.keyDown(inside, { key: 'Escape' });
+      inside.focus();
+      fireEvent.mouseMove(screen.getByRole('button', { name: 'Outside' }));
+      advance(AUTO_COLLAPSE_MS);
+      expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('stays open while a dialog is open, and folds 30 seconds after it closed', () => {
+      render(<Harness />);
+      const inside = screen.getByRole('button', { name: 'Inside' });
+      fireEvent.pointerDown(inside);
+      inside.focus();
+      fireEvent.mouseMove(screen.getByRole('button', { name: 'Outside' }));
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      document.body.append(dialog);
+      advance(5 * AUTO_COLLAPSE_MS);
+      expect(burger()).toHaveAttribute('aria-expanded', 'true');
+      dialog.remove();
+      advance(AUTO_COLLAPSE_MS);
+      expect(burger()).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('waits while any dialog is open over the page', () => {
