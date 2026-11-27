@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,5 +182,93 @@ func TestSetUserLinksIsOneReplacement(t *testing.T) {
 	}
 	if n := count(t, path, `SELECT count(*) FROM ticket_links WHERE pr_id = 'P1' AND ticket_key = 'INP-1' AND removed = 0`); n != 0 {
 		t.Fatalf("an unhidden key is re-added by the next refresh, not by SetUserLinks: %d rows", n)
+	}
+}
+
+func TestSaveRefreshPrunesOldMergedClosedPullRequestsActivityAndFirings(t *testing.T) {
+	s, path, clock := open(t)
+	ctx := context.Background()
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	now := clock.Now().Unix()
+	old, recent := now-100*86400, now-10*86400
+	db := rawDB(t, path)
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO prs (id, repo_id, number, title, head_branch, base_branch, head_sha, state, merged_at, last_seen_at)
+		  VALUES ('OLDM', 'R1', 10, 't', 'h', 'b', 's', 'merged', ?, ?), ('OLDM_OPEN', 'R1', 11, 't', 'h', 'b', 's', 'merged', ?, ?),
+		         ('NEWM', 'R1', 12, 't', 'h', 'b', 's', 'merged', ?, ?), ('OLDC', 'R1', 13, 't', 'h', 'b', 's', 'closed', NULL, ?),
+		         ('NEWC', 'R1', 14, 't', 'h', 'b', 's', 'closed', NULL, ?)`,
+			[]any{old, old, old, old, recent, recent, old, recent}},
+		{`INSERT INTO ticket_links (pr_id, ticket_key, source) VALUES ('OLDM', 'K-1', 'branch'), ('OLDM_OPEN', 'INP-1', 'branch'), ('NEWM', 'K-2', 'branch')`, nil},
+		{`INSERT INTO activity (created_at, kind, triggered_by, result) VALUES (?, 'x', 'm', 'ok'), (?, 'x', 'm', 'ok')`, []any{old, recent}},
+		{`INSERT INTO sync_rules (id, position, name, trigger, target_status) VALUES ('r', 0, 'r', 'merged', 'Done')`, nil},
+		{`INSERT INTO rule_firings (rule_id, ticket_key, fingerprint, fired_at) VALUES ('r', 'K-1', 'f', ?), ('r', 'INP-1', 'f', ?), ('r', 'K-2', 'f', ?), ('r', 'GONE-1', 'f', ?)`, []any{old, old, old, recent}},
+	} {
+		if _, err := db.Exec(q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SaveRefresh(ctx, baseRefresh(clock.Now())); err != nil {
+		t.Fatal(err)
+	}
+	ids := func(q string) string {
+		rows, err := db.Query(q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rows.Close() }()
+		var out []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, id)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := ids(`SELECT id FROM prs WHERE state <> 'open' ORDER BY id`); got != "NEWC,NEWM,OLDM_OPEN" {
+		t.Fatalf("old merged and closed pull requests go, unless a ticket still has an open one: %s", got)
+	}
+	if got := ids(`SELECT ticket_key FROM ticket_links WHERE removed = 0 AND pr_id LIKE 'OLD%' OR pr_id = 'NEWM' ORDER BY 1`); got != "INP-1,K-2" {
+		t.Fatalf("links of pruned pull requests cascade: %s", got)
+	}
+	if n := count(t, path, `SELECT count(*) FROM activity`); n != 1 {
+		t.Fatalf("activity %d", n)
+	}
+	if got := ids(`SELECT ticket_key FROM rule_firings ORDER BY 1`); got != "GONE-1,INP-1,K-2" {
+		t.Fatalf("only old firings of tickets no pull request links to are dropped: %s", got)
+	}
+}
+
+func TestSyncStateReadsMergedPullRequestsThroughTheStateIndex(t *testing.T) {
+	_, path, _ := open(t)
+	rows, err := rawDB(t, path).Query(`EXPLAIN QUERY PLAN
+		SELECT p.id, p.number, r.name_with_owner, p.base_branch, l.ticket_key
+		FROM prs p JOIN repos r ON r.id = p.repo_id JOIN ticket_links l ON l.pr_id = p.id AND l.removed = 0
+		WHERE (p.state = 'merged' AND (p.merged_at >= ? OR l.ticket_key IN
+		         (SELECT o.ticket_key FROM ticket_links o JOIN prs op ON op.id = o.pr_id WHERE op.state = 'open' AND o.removed = 0)))
+		   OR p.id IN (SELECT value FROM json_each(?))
+		ORDER BY p.id, l.position, l.ticket_key`, 0, "[]")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	t.Log(strings.Join(plan, "\n"))
+	if !strings.Contains(strings.Join(plan, "\n"), "prs_state_") {
+		t.Fatalf("no state index in the plan:\n%s", strings.Join(plan, "\n"))
 	}
 }

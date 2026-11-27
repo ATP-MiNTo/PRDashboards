@@ -85,6 +85,10 @@ func ids[T any](rows []T, id func(T) string) []string {
 	return out
 }
 
+// Retention is how long merged and closed pull requests, the activity log and spent rule firings
+// are kept. SaveRefresh drops what is older.
+const Retention = 90 * 24 * time.Hour
+
 const snapshotUpsert = `INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
 	ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data, updated_at = excluded.updated_at`
 
@@ -149,8 +153,33 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 				return err
 			}
 		}
-		return writeSync(ctx, tx, r.Now, r.Sync)
+		if err := writeSync(ctx, tx, r.Now, r.Sync); err != nil {
+			return err
+		}
+		return prune(ctx, tx, r.Now.Add(-Retention))
 	})
+}
+
+// prune drops, with one set-based statement per table, what is older than cutoff: merged and closed
+// pull requests (their ticket links go with them) unless one of their tickets still has an open
+// pull request, which a rule over several pull requests needs; activity rows; and rule firings of
+// tickets that no pull request links to any more, since only those can never fire again.
+func prune(ctx context.Context, tx *sql.Tx, cutoff time.Time) error {
+	at := unix(cutoff)
+	for _, q := range []string{
+		`DELETE FROM prs
+		 WHERE (state = 'merged' AND merged_at < ?1 OR state = 'closed' AND last_seen_at < ?1)
+		   AND NOT EXISTS (SELECT 1 FROM ticket_links l JOIN ticket_links o ON o.ticket_key = l.ticket_key AND o.removed = 0
+		                   JOIN prs op ON op.id = o.pr_id AND op.state = 'open'
+		                   WHERE l.pr_id = prs.id AND l.removed = 0)`,
+		`DELETE FROM activity WHERE created_at < ?1`,
+		`DELETE FROM rule_firings WHERE fired_at < ?1 AND ticket_key NOT IN (SELECT ticket_key FROM ticket_links)`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, at); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newIDs(ctx context.Context, tx *sql.Tx, idsJSON string) ([]string, error) {

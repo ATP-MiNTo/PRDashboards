@@ -11,7 +11,7 @@ per change, so a manual move in Jira is not undone until something new happens.
 
 Differences from the spec:
 
-- Merged pull requests count for `merged` rules and for the set of a mode All rule only inside a 30 day window (`mergedWindow`). A merged pull request is ignored by every other trigger, and a closed one never counts.
+- Merged pull requests count for `merged` rules and for the set of a mode All rule only inside a 30 day window (`mergedWindow`). A merged pull request is ignored by every other trigger, and a closed one never counts. Merged and closed pull requests older than 90 days are pruned from the database in the refresh transaction, except those of a ticket that still has an open pull request ([storage.md](storage.md)), so they do not change a rule; `SyncState` reads the merged ones through the index `prs_state_merged`.
 - `ready_for_review` uses `prs.ready_sha`, the head SHA when the PR last became ready. A push keeps it, going back to draft clears it.
 - A rule whose target status has no transition from the ticket's current status is recorded once as `skipped` and not retried. A failed lookup of the transitions records nothing, so the next refresh retries.
 - A transition with required fields is not sent. It is recorded as `needs_input` and shown in the Activity list, because nobody is there to fill the fields.
