@@ -2,6 +2,7 @@ package mw_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/mw"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/logging"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
@@ -47,6 +49,19 @@ func TestRecover(t *testing.T) {
 	}
 	if !strings.Contains(logs.String(), "secret-detail") {
 		t.Fatal("panic not logged")
+	}
+}
+
+func TestRecoverRedactsTokensInThePanicValue(t *testing.T) {
+	const tok = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+	for name, v := range map[string]any{"string": "failed with " + tok, "error": fmt.Errorf("failed with %s", tok)} {
+		var logs bytes.Buffer
+		log := slog.New(logging.NewRedactingHandler(slog.NewJSONHandler(&logs, nil)))
+		h := mw.Recover(log)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic(v) }))
+		h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+		if strings.Contains(logs.String(), tok) || !strings.Contains(logs.String(), "failed with [redacted]") {
+			t.Errorf("%s: %s", name, logs.String())
+		}
 	}
 }
 

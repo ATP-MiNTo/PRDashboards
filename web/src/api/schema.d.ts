@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Session info and CSRF token */
+        /**
+         * Session info and CSRF token
+         * @description Requires the Sec-Fetch-Site header to be same-origin; an absent header is rejected.
+         */
         get: operations["getSession"];
         put?: never;
         /** Exchange a one-time launch token for a session cookie */
@@ -1168,6 +1171,7 @@ export interface operations {
                     "application/json": components["schemas"]["Session"];
                 };
             };
+            403: components["responses"]["Forbidden"];
         };
     };
     createSession: {

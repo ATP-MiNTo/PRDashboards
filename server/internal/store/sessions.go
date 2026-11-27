@@ -81,7 +81,6 @@ type OAuthState struct {
 	Hash       [sha256.Size]byte
 	Provider   string
 	SessionKey string
-	Verifier   string
 	ExpiresAt  time.Time
 }
 
@@ -92,8 +91,8 @@ func (s *Store) InsertOAuthState(ctx context.Context, v OAuthState, now time.Tim
 			return err
 		}
 		_, err := tx.ExecContext(ctx,
-			`INSERT INTO oauth_states (state_hash, provider, session_key, verifier, expires_at) VALUES (?, ?, ?, ?, ?)`,
-			v.Hash[:], v.Provider, v.SessionKey, v.Verifier, unix(v.ExpiresAt))
+			`INSERT INTO oauth_states (state_hash, provider, session_key, expires_at) VALUES (?, ?, ?, ?)`,
+			v.Hash[:], v.Provider, v.SessionKey, unix(v.ExpiresAt))
 		return err
 	})
 }
@@ -104,8 +103,8 @@ func (s *Store) ConsumeOAuthState(ctx context.Context, hash [sha256.Size]byte) (
 	v := OAuthState{Hash: hash}
 	var exp int64
 	err := s.w.QueryRowContext(ctx,
-		`DELETE FROM oauth_states WHERE state_hash = ? RETURNING provider, session_key, verifier, expires_at`,
-		hash[:]).Scan(&v.Provider, &v.SessionKey, &v.Verifier, &exp)
+		`DELETE FROM oauth_states WHERE state_hash = ? RETURNING provider, session_key, expires_at`,
+		hash[:]).Scan(&v.Provider, &v.SessionKey, &exp)
 	if errors.Is(err, sql.ErrNoRows) {
 		return OAuthState{}, ErrNotFound
 	}

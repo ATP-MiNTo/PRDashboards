@@ -27,22 +27,46 @@ describe('links', () => {
     expect(orgSsoUrl('')).toBeNull();
   });
 
-  it('accepts https links only, and shows the host of external ones', () => {
-    expect(safeLink(null)).toBeNull();
-    expect(safeLink('not a url')).toBeNull();
-    expect(safeLink('http://ci.example.com/1')).toBeNull();
-    expect(safeLink('javascript:alert(1)')).toBeNull();
-    expect(safeLink('https://user:pw@ci.example.com/1')).toBeNull();
-    expect(safeLink('https://ci.example.com/job/1?x=1')).toEqual({
-      href: 'https://ci.example.com/job/1?x=1',
-      host: 'ci.example.com',
-    });
-    expect(safeLink('https://github.com/acme/web/actions/runs/1?check=1#x')).toEqual({
+  it('accepts https links on the host of their kind only', () => {
+    for (const kind of ['github', 'jira'] as const) {
+      expect(safeLink(null, kind)).toBeNull();
+      expect(safeLink('not a url', kind)).toBeNull();
+      expect(safeLink('javascript:alert(1)', kind)).toBeNull();
+      expect(safeLink('http://github.com/a/b', kind)).toBeNull();
+      expect(safeLink('http://acme.atlassian.net/browse/A-1', kind)).toBeNull();
+      expect(safeLink('https://ci.example.com/job/1?x=1', kind)).toBeNull();
+    }
+  });
+
+  it('rebuilds a github link from its path', () => {
+    expect(safeLink('https://github.com/acme/web/actions/runs/1?check=1#x', 'github')).toEqual({
       href: 'https://github.com/acme/web/actions/runs/1',
       host: null,
     });
-    expect(safeLink('https://github.com/a/%2e%2e/b')?.href).toBe('https://github.com/b');
-    expect(safeLink('https://github.com/a b/%')).toBeNull();
+    expect(safeLink('https://github.com/a/%2e%2e/b', 'github')?.href).toBe('https://github.com/b');
+    expect(safeLink('https://github.com/a b/%', 'github')).toBeNull();
+    expect(safeLink('https://user:pw@github.com/a/b', 'github')).toBeNull();
+    expect(safeLink('https://github.com:8443/a/b', 'github')).toBeNull();
+    expect(safeLink('https://api.github.com/a/b', 'github')).toBeNull();
+    expect(safeLink('https://github.com.evil.example/a/b', 'github')).toBeNull();
+    expect(safeLink('https://acme.atlassian.net/browse/A-1', 'github')).toBeNull();
+  });
+
+  it('accepts a jira link on an atlassian.net site and shows its host', () => {
+    expect(safeLink('https://acme.atlassian.net/browse/A-1', 'jira')).toEqual({
+      href: 'https://acme.atlassian.net/browse/A-1',
+      host: 'acme.atlassian.net',
+    });
+    expect(safeLink('https://ACME.atlassian.net/browse/A-1', 'jira')?.host).toBe(
+      'acme.atlassian.net',
+    );
+    expect(safeLink('https://atlassian.net/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://acme.atlassian.net.evil.example/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://evilatlassian.net/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://acme.atlassian.net@evil.example/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://user:pw@acme.atlassian.net/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://acme.atlassian.net:8443/browse/A-1', 'jira')).toBeNull();
+    expect(safeLink('https://github.com/acme/web', 'jira')).toBeNull();
   });
 });
 

@@ -309,6 +309,7 @@ func TestRunServesAndCleansUp(t *testing.T) {
 
 	base := fmt.Sprintf("http://127.0.0.1:%d", port)
 	req, _ := http.NewRequest(http.MethodGet, base+"/api/session", nil)
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	resp, err := testClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -601,6 +602,7 @@ func httpDo(t *testing.T, method, url string, body string, cookie string, csrf s
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}

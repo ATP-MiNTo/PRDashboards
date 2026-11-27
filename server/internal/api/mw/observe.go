@@ -1,6 +1,7 @@
 package mw
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -60,7 +61,7 @@ func Recover(log *slog.Logger) func(http.Handler) http.Handler {
 				if v == http.ErrAbortHandler { //nolint:errorlint // sentinel compared by identity
 					panic(v)
 				}
-				log.ErrorContext(r.Context(), "panic in handler", "panic", v)
+				log.ErrorContext(r.Context(), "panic in handler", "panic", fmt.Sprint(v))
 				WriteProblem(w, http.StatusInternalServerError, CodeInternal, "")
 			}()
 			next.ServeHTTP(w, r)

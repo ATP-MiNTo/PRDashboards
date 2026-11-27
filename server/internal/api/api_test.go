@@ -249,10 +249,14 @@ func TestSecFetchSite(t *testing.T) {
 		wantProblem(t, g.do(http.MethodGet, "/api/session", "", cookie(l.cookie), header("Sec-Fetch-Site", site)),
 			http.StatusForbidden, "cross_site")
 	}
-	for name, opt := range map[string]reqOpt{"same-origin": header("Sec-Fetch-Site", "same-origin"), "absent": noHeader("Sec-Fetch-Site")} {
-		if w := g.do(http.MethodGet, "/api/session", "", cookie(l.cookie), opt); w.Code != http.StatusOK {
-			t.Errorf("%s: status %d", name, w.Code)
-		}
+	if w := g.do(http.MethodGet, "/api/session", "", cookie(l.cookie), header("Sec-Fetch-Site", "same-origin")); w.Code != http.StatusOK {
+		t.Errorf("same-origin: status %d", w.Code)
+	}
+	wantProblem(t, g.do(http.MethodGet, "/api/session", "", cookie(l.cookie), noHeader("Sec-Fetch-Site")),
+		http.StatusForbidden, "cross_site")
+	wantProblem(t, g.do(http.MethodGet, "/api/session", "", noHeader("Sec-Fetch-Site")), http.StatusForbidden, "cross_site")
+	if w := g.do(http.MethodGet, "/api/nothing", "", cookie(l.cookie), noHeader("Sec-Fetch-Site")); w.Code != http.StatusNotFound {
+		t.Errorf("other routes keep accepting an absent header: %d", w.Code)
 	}
 	if w := g.do(http.MethodGet, "/", "", header("Sec-Fetch-Site", "none")); w.Code != http.StatusOK {
 		t.Errorf("static page navigation blocked: %d", w.Code)
@@ -319,6 +323,17 @@ func TestContentType(t *testing.T) {
 	}
 }
 
+func TestGetWithBodyRejected(t *testing.T) {
+	g := newRig(t, webFS())
+	l := g.login()
+	wantProblem(t, g.do(http.MethodGet, "/api/session", "{}", cookie(l.cookie)), http.StatusBadRequest, "invalid_request")
+	big := strings.Repeat("a", 10*mw.MaxBodyBytes)
+	wantProblem(t, g.do(http.MethodGet, "/api/session", big, cookie(l.cookie)), http.StatusBadRequest, "invalid_request")
+	wantProblem(t, g.do(http.MethodGet, "/api/session", big, cookie(l.cookie), func(r *http.Request) { r.ContentLength = -1 }),
+		http.StatusBadRequest, "invalid_request")
+	wantProblem(t, g.do(http.MethodHead, "/api/session", "{}", cookie(l.cookie)), http.StatusBadRequest, "invalid_request")
+}
+
 func TestBodyTooLarge(t *testing.T) {
 	g := newRig(t, webFS())
 	big := `{"launchToken":"` + strings.Repeat("a", mw.MaxBodyBytes) + `"}`
@@ -376,7 +391,7 @@ func TestLaunchFlow(t *testing.T) {
 		t.Fatalf("status %d body %q", w.Code, w.Body)
 	}
 	line := w.Header().Get("Set-Cookie")
-	for _, want := range []string{"prd_session=", "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=2592000"} {
+	for _, want := range []string{"prd_session=", "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=1209600"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("Set-Cookie %q lacks %q", line, want)
 		}
@@ -400,7 +415,7 @@ func TestLaunchFlow(t *testing.T) {
 	if err := json.Unmarshal(s.Body.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.CsrfToken == "" || got.Version != "9.9.9" || !got.ExpiresAt.Equal(g.clock.Now().Add(auth.SessionTTL)) {
+	if got.CsrfToken == "" || got.Version != "9.9.9" || !got.ExpiresAt.Equal(g.clock.Now().Add(auth.MaxSessionAge)) {
 		t.Fatalf("unexpected session body %+v", got)
 	}
 	if s.Header().Get("Set-Cookie") != "" {
@@ -418,7 +433,7 @@ func TestSessionSlides(t *testing.T) {
 	g.clock.Advance(24 * time.Hour)
 	w := g.do(http.MethodGet, "/api/session", "", cookie(l.cookie))
 	cs := w.Result().Cookies()
-	if len(cs) != 1 || cs[0].Value != l.cookie || cs[0].MaxAge != 30*24*3600 || !cs[0].HttpOnly {
+	if len(cs) != 1 || cs[0].Value != l.cookie || cs[0].MaxAge != 14*24*3600-25*3600 || !cs[0].HttpOnly {
 		t.Fatalf("expected reissued cookie, got %v", cs)
 	}
 }
@@ -458,6 +473,19 @@ func TestRateLimitUnauthenticatedSharesBucket(t *testing.T) {
 	wantProblem(t, g.do(http.MethodPost, "/api/nothing", "{}", cookie("forged.cookie")), http.StatusTooManyRequests, "rate_limited")
 }
 
+func TestSuccessfulLaunchesDoNotSpendTheCreateBucket(t *testing.T) {
+	g := newRig(t, webFS())
+	for range 25 {
+		if w := g.do(http.MethodPost, "/api/session", tokenBody(g.launcher.Current())); w.Code != http.StatusNoContent {
+			t.Fatalf("status %d", w.Code)
+		}
+	}
+	for range 10 {
+		wantProblem(t, g.do(http.MethodPost, "/api/session", tokenBody("bad")), http.StatusUnauthorized, "invalid_launch_token")
+	}
+	wantProblem(t, g.do(http.MethodPost, "/api/session", tokenBody("bad")), http.StatusTooManyRequests, "rate_limited")
+}
+
 func TestRateLimitSessionCreation(t *testing.T) {
 	g := newRig(t, webFS())
 	for range 10 {
@@ -468,6 +496,7 @@ func TestRateLimitSessionCreation(t *testing.T) {
 	if got := w.Header().Get("Retry-After"); got != "6" {
 		t.Fatalf("Retry-After %q, want 6", got)
 	}
+	wantProblem(t, g.do(http.MethodPost, "/api/session", tokenBody("bad")), http.StatusTooManyRequests, "rate_limited")
 	g.clock.Advance(6 * time.Second)
 	if w := g.do(http.MethodPost, "/api/session", tokenBody(g.launcher.Current())); w.Code != http.StatusNoContent {
 		t.Fatalf("status %d after refill", w.Code)

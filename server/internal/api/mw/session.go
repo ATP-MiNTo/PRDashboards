@@ -13,6 +13,10 @@ func isSessionCreate(r *http.Request) bool {
 	return r.Method == http.MethodPost && r.URL.Path == "/api/session"
 }
 
+func isSessionRead(r *http.Request) bool {
+	return r.Method == http.MethodGet && r.URL.Path == "/api/session"
+}
+
 // Identify attaches the session of a valid cookie to the request context and slides its
 // lifetime. It never rejects: later middleware decide whether a session is required.
 func Identify(sessions *auth.Sessions) func(http.Handler) http.Handler {

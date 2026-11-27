@@ -81,6 +81,16 @@ type OAuth struct {
 	// refresh is in flight at a time and the rotated refresh token is stored before anyone
 	// uses the new access token.
 	tokenMu sync.Mutex
+
+	// verifiers holds the PKCE verifier of each pending authorization in memory only, keyed by
+	// the hash of its state and spent once.
+	verifierMu sync.Mutex
+	verifiers  map[[sha256.Size]byte]pendingVerifier
+}
+
+type pendingVerifier struct {
+	value   string
+	expires time.Time
 }
 
 // NewOAuth returns the OAuth service.
@@ -88,7 +98,28 @@ func NewOAuth(cfg Config) *OAuth {
 	if cfg.Endpoints == (Endpoints{}) {
 		cfg.Endpoints = DefaultEndpoints()
 	}
-	return &OAuth{cfg: cfg}
+	return &OAuth{cfg: cfg, verifiers: make(map[[sha256.Size]byte]pendingVerifier)}
+}
+
+// putVerifier remembers a verifier until expires and drops the ones already expired.
+func (o *OAuth) putVerifier(key [sha256.Size]byte, value string, now, expires time.Time) {
+	o.verifierMu.Lock()
+	defer o.verifierMu.Unlock()
+	for k, v := range o.verifiers {
+		if !now.Before(v.expires) {
+			delete(o.verifiers, k)
+		}
+	}
+	o.verifiers[key] = pendingVerifier{value: value, expires: expires}
+}
+
+// takeVerifier returns and forgets the verifier stored under key, when it is still valid.
+func (o *OAuth) takeVerifier(key [sha256.Size]byte, now time.Time) (string, bool) {
+	o.verifierMu.Lock()
+	defer o.verifierMu.Unlock()
+	v, ok := o.verifiers[key]
+	delete(o.verifiers, key)
+	return v.value, ok && now.Before(v.expires)
 }
 
 // CallbackURL is the redirect URI to register with the provider.
@@ -141,7 +172,8 @@ func (o *OAuth) random(n int) (string, error) {
 
 // Start begins an authorization for the session and returns the provider URL to redirect to. The
 // state is 256 random bits, stored only as a hash, bound to the session and valid for 10 minutes.
-// GitHub also gets a PKCE S256 challenge. A GitHub App takes its permissions from its settings,
+// Both providers get a PKCE S256 challenge; the verifier stays in memory and is never written to
+// the database. A GitHub App takes its permissions from its settings,
 // so no scope is sent.
 func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (string, error) {
 	cred, err := o.client(p)
@@ -160,15 +192,16 @@ func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (strin
 	q.Set("client_id", cred.ClientID)
 	q.Set("redirect_uri", o.CallbackURL(p))
 	q.Set("state", state)
+	verifier, err := o.random(32)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	q.Set("code_challenge", b64.EncodeToString(sum[:]))
+	q.Set("code_challenge_method", "S256")
 	var base string
 	switch p {
 	case GitHub:
-		if row.Verifier, err = o.random(32); err != nil {
-			return "", err
-		}
-		sum := sha256.Sum256([]byte(row.Verifier))
-		q.Set("code_challenge", b64.EncodeToString(sum[:]))
-		q.Set("code_challenge_method", "S256")
 		base = o.cfg.Endpoints.GitHubAuthorize
 	case Atlassian:
 		q.Set("audience", "api.atlassian.com")
@@ -180,6 +213,7 @@ func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (strin
 	if err := o.cfg.States.InsertOAuthState(ctx, row, now); err != nil {
 		return "", fmt.Errorf("store oauth state: %w", err)
 	}
+	o.putVerifier(row.Hash, verifier, now, row.ExpiresAt)
 	return base + "?" + strings.ReplaceAll(q.Encode(), "+", "%20"), nil
 }
 
@@ -187,14 +221,16 @@ func (o *OAuth) Start(ctx context.Context, p Provider, sessionKey string) (strin
 // belong to the same provider and session and be unexpired. Then the code is exchanged and the
 // tokens are stored.
 func (o *OAuth) Complete(ctx context.Context, p Provider, code, state, sessionKey string) error {
-	row, err := o.cfg.States.ConsumeOAuthState(ctx, sha256.Sum256([]byte(state)))
+	hash := sha256.Sum256([]byte(state))
+	row, err := o.cfg.States.ConsumeOAuthState(ctx, hash)
+	verifier, haveVerifier := o.takeVerifier(hash, o.cfg.Clock())
 	if errors.Is(err, store.ErrNotFound) {
 		return ErrInvalidState
 	}
 	if err != nil {
 		return err
 	}
-	if row.Provider != string(p) || !o.cfg.Clock().Before(row.ExpiresAt) ||
+	if !haveVerifier || row.Provider != string(p) || !o.cfg.Clock().Before(row.ExpiresAt) ||
 		subtle.ConstantTimeCompare([]byte(row.SessionKey), []byte(sessionKey)) != 1 {
 		return ErrInvalidState
 	}
@@ -206,9 +242,9 @@ func (o *OAuth) Complete(ctx context.Context, p Provider, code, state, sessionKe
 		return err
 	}
 	if p == GitHub {
-		return o.completeGitHub(ctx, cred, code, row.Verifier)
+		return o.completeGitHub(ctx, cred, code, verifier)
 	}
-	return o.completeAtlassian(ctx, cred, code)
+	return o.completeAtlassian(ctx, cred, code, verifier)
 }
 
 // Disconnect removes the stored tokens of p. The client credentials stay.

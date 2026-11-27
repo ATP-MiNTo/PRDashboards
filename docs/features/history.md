@@ -32,7 +32,7 @@ None from the view. Retry posts to the server's own API.
 
 ## Rules and invariants
 
-- Links are built from validated parts: `githubPrUrl` for the pull request and `safeLink` for Jira (https only, no credentials). No `dangerouslySetInnerHTML`, no `style` attribute.
+- Links are built from validated parts: `githubPrUrl` for the pull request and `safeLink(url, 'jira')` for Jira (https on `*.atlassian.net` only, no credentials). No `dangerouslySetInnerHTML`, no `style` attribute.
 - The 0.9s fade is off under `prefers-reduced-motion`. The clock hand animation is in [header.md](header.md).
 - One source of truth: the old `RecentMerges` and `MergeSteps` components are gone.
 

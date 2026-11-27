@@ -242,10 +242,14 @@ func TestStartGitHubBuildsPKCEAuthorizeURL(t *testing.T) {
 		!row.ExpiresAt.Equal(r.clock.Now().Add(10*time.Minute)) {
 		t.Fatalf("row %+v", row)
 	}
-	sum := sha256.Sum256([]byte(row.Verifier))
-	if len(row.Verifier) != 43 || q.Get("code_challenge") != base64.RawURLEncoding.EncodeToString(sum[:]) {
-		t.Fatalf("challenge %q does not match the stored verifier", q.Get("code_challenge"))
+	if len(q.Get("code_challenge")) != 43 {
+		t.Fatalf("challenge %q", q.Get("code_challenge"))
 	}
+}
+
+func challengeOf(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
 func TestStartAtlassianURL(t *testing.T) {
@@ -262,11 +266,8 @@ func TestStartAtlassianURL(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, q.Get(k), v)
 		}
 	}
-	if q.Get("code_challenge") != "" {
-		t.Error("atlassian flow must not send a PKCE challenge")
-	}
-	if r.rec.rows[0].Verifier != "" {
-		t.Error("atlassian state has a verifier")
+	if len(q.Get("code_challenge")) != 43 || q.Get("code_challenge_method") != "S256" {
+		t.Errorf("atlassian flow must send a PKCE S256 challenge: %v", q)
 	}
 }
 
@@ -296,13 +297,13 @@ func TestStatesAreDistinct(t *testing.T) {
 
 func TestCompleteGitHubSendsVerifierAndStoresToken(t *testing.T) {
 	r := newOAuthRig(t)
-	_, state := r.start(t, auth.GitHub, "sess-1")
+	u, state := r.start(t, auth.GitHub, "sess-1")
 	if err := r.o.Complete(ctx, auth.GitHub, "the-code", state, "sess-1"); err != nil {
 		t.Fatal(err)
 	}
 	form := r.prov.githubTokenForm.Load().(url.Values)
 	if form.Get("code") != "the-code" || form.Get("client_id") != "cid-github" || form.Get("client_secret") != "csecret-github" ||
-		form.Get("redirect_uri") != "http://127.0.0.1:4317/oauth/github/callback" || form.Get("code_verifier") != r.rec.rows[0].Verifier {
+		form.Get("redirect_uri") != "http://127.0.0.1:4317/oauth/github/callback" || challengeOf(form.Get("code_verifier")) != u.Query().Get("code_challenge") {
 		t.Fatalf("form %v", form)
 	}
 	var tok auth.GitHubToken
@@ -354,6 +355,35 @@ func TestStateRejections(t *testing.T) {
 		if _, err := r.sec.Get(secrets.GitHubToken); err == nil {
 			t.Errorf("%s: token stored", tc.name)
 		}
+	}
+}
+
+func TestVerifierIsMemoryOnlyAndLostOnRestart(t *testing.T) {
+	r := newOAuthRig(t)
+	for _, p := range []auth.Provider{auth.GitHub, auth.Atlassian} {
+		_, state := r.start(t, p, "s")
+		restarted := auth.NewOAuth(auth.Config{
+			Secrets: r.sec, States: r.rec, Clock: r.clock.Now, Rand: &testutil.Rand{}, Port: 4317,
+		})
+		if err := restarted.Complete(ctx, p, "code", state, "s"); !errors.Is(err, auth.ErrInvalidState) {
+			t.Errorf("%s: a state without its in-memory verifier completed: %v", p, err)
+		}
+	}
+	if r.prov.githubTokenForm.Load() != nil || len(r.prov.atlassianBodies) != 0 {
+		t.Error("the provider was called")
+	}
+}
+
+func TestExpiredVerifiersAreSweptOnStart(t *testing.T) {
+	r := newOAuthRig(t)
+	_, old := r.start(t, auth.GitHub, "s")
+	r.clock.Advance(auth.StateTTL + time.Second)
+	_, fresh := r.start(t, auth.GitHub, "s")
+	if err := r.o.Complete(ctx, auth.GitHub, "c", old, "s"); !errors.Is(err, auth.ErrInvalidState) {
+		t.Fatalf("expired: %v", err)
+	}
+	if err := r.o.Complete(ctx, auth.GitHub, "c", fresh, "s"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -412,11 +442,14 @@ func TestCompleteExchangeFailures(t *testing.T) {
 
 func TestCompleteAtlassianStoresTokensAndValidSites(t *testing.T) {
 	r := newOAuthRig(t)
-	_, state := r.start(t, auth.Atlassian, "s")
+	u, state := r.start(t, auth.Atlassian, "s")
 	if err := r.o.Complete(ctx, auth.Atlassian, "the-code", state, "s"); err != nil {
 		t.Fatal(err)
 	}
 	body := <-r.prov.atlassianBodies
+	if challengeOf(body["code_verifier"]) != u.Query().Get("code_challenge") {
+		t.Fatalf("code_verifier %q does not match the challenge", body["code_verifier"])
+	}
 	if body["grant_type"] != "authorization_code" || body["code"] != "the-code" || body["client_id"] != "cid-atlassian" ||
 		body["client_secret"] != "csecret-atlassian" || body["redirect_uri"] != "http://127.0.0.1:4317/oauth/atlassian/callback" {
 		t.Fatalf("body %v", body)

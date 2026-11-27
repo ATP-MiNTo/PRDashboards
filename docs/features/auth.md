@@ -93,8 +93,8 @@ E2e:
 1. Setup: `/setup` calls `PUT /api/setup/{provider}`. The credentials go to the secrets store and
    are never returned. `GET /api/setup` returns `configured` and the callback URL only.
 2. Start: the "Connect" link goes to `/oauth/{provider}/start`. `OAuth.Start` creates a 256-bit
-   state (and a PKCE verifier for GitHub), stores the state hashed with the session key and a
-   10-minute expiry, and redirects `302` to the provider's authorize URL. Without client
+   state and a PKCE verifier (S256, both providers), stores the state hashed with the session key and a
+   10-minute expiry, keeps the verifier in memory only (keyed by the hash of the state, swept when it expires), and redirects `302` to the provider's authorize URL. Without client
    credentials it redirects `303` to `/auth/done/?provider=..&result=not_configured`.
 3. The person authorizes at the provider, which redirects to
    `http://127.0.0.1:4317/oauth/{provider}/callback?code=..&state=..` (or `error=access_denied`).
@@ -106,12 +106,13 @@ E2e:
    `history.replaceState` to drop the query, then `POST /api/oauth/complete`. A denied flow skips
    the POST. The page navigates to `/auth/done/?provider=..&result=ok|denied|invalid_state|signed_out|error`.
 6. `OAuth.Complete`: `ConsumeOAuthState` (one `DELETE ... RETURNING`, must match the provider and
-   the calling session and be unexpired). Then the code exchange:
+   the calling session and be unexpired; the in-memory verifier is taken at the same time and a state
+   without one, for example after a restart, is `invalid_oauth_state`). Then the code exchange:
    - GitHub: `POST` to the token endpoint with the verifier, then `Viewer` to learn the login,
      stored under `tokenMu` as `github.token` with method `app`, the refresh token and
      `expiresAt = now + expires_in`. Without `expires_in` and `refresh_token` (expiry turned off in
      the App) the token never expires. The authorize URL has no `scope`.
-   - Atlassian: token exchange, then `accessible-resources`. Sites that are not `https://*.atlassian.net`
+   - Atlassian: token exchange with the `code_verifier`, then `accessible-resources`. Sites that are not `https://*.atlassian.net`
      are dropped. With one site it is selected, with several the person picks in the panel, which
      saves `jiraSiteId` through `PUT /api/settings`.
 7. PAT: `PUT /api/github/pat` calls `Viewer` with the token. A classic token needs `repo` and
@@ -165,8 +166,8 @@ minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlass
   foreign state gives `invalid_oauth_state` and no exchange.
 - `/oauth/{provider}/start` is protected, so a page on another site cannot start a flow for the
   person.
-- Tokens, client secrets, codes and verifiers are never logged, stored in SQLite (except the
-  pending verifier), returned by the API or sent to the browser. `GET /api/accounts` returns
+- Tokens, client secrets, codes and verifiers are never logged, stored in SQLite (the PKCE
+  verifier lives in memory only), returned by the API or sent to the browser. `GET /api/accounts` returns
   logins, methods, warnings and site names only.
 - Every refresh of the Atlassian token and of a GitHub App token runs under `tokenMu`, and the
   rotated refresh token is stored before the new access token is used. Two parallel callers never
@@ -185,7 +186,7 @@ minimum, hosts `github.com`, `api.github.com`, `auth.atlassian.com`, `api.atlass
   The fake GitHub authorize endpoint rejects a request that carries `scope`, its token endpoint returns
   `refresh_token` and `expires_in` and supports `grant_type=refresh_token` with rotation (an unknown or
   used refresh token gets `bad_refresh_token`), and its user tokens carry no `X-OAuth-Scopes` header
-  (fake PATs still do). Atlassian config: `deny`, `tamperState`,
+  (fake PATs still do). Both fakes require a PKCE S256 challenge on authorize and the matching `code_verifier` on the code exchange. Atlassian config: `deny`, `tamperState`,
   `expiresIn`, `refreshFail`, `sites` (1 or 2). Fake PATs: `ghp_classic_ok`, `ghp_classic_no_org`,
   `github_pat_finegrained`.
 

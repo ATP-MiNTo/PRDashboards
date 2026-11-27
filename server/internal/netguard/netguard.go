@@ -55,9 +55,12 @@ type Guard struct {
 	extra map[string]Provider // exact host:port allowed over plain http, filled by the e2e build only
 }
 
-// New returns a guard over a transport with TLS 1.2 as the minimum version and a 10 s dial timeout.
+// New returns a guard over a transport with TLS 1.2 as the minimum version, a 10 s dial timeout
+// and no proxy: the proxy environment variables are ignored, so provider calls and the tokens in
+// them never leave through an environment-configured proxy.
 func New() *Guard {
 	t := http.DefaultTransport.(*http.Transport).Clone() //nolint:forcetypeassert // the default is always a *Transport
+	t.Proxy = nil
 	t.DialContext = (&net.Dialer{Timeout: DialTimeout, KeepAlive: 30 * time.Second}).DialContext
 	t.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	return newGuard(t)

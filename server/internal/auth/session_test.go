@@ -42,11 +42,11 @@ func TestSessionCookieAttributes(t *testing.T) {
 	created, _ := s.Create(ctx)
 	c := created.Cookie()
 	if c.Name != "prd_session" || c.Path != "/" || !c.HttpOnly || c.Secure ||
-		c.SameSite != http.SameSiteStrictMode || c.MaxAge != 30*24*3600 {
+		c.SameSite != http.SameSiteStrictMode || c.MaxAge != 14*24*3600 {
 		t.Fatalf("cookie %+v", c)
 	}
 	line := c.String()
-	for _, want := range []string{"prd_session=", "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=2592000"} {
+	for _, want := range []string{"prd_session=", "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=1209600"} {
 		if !strings.Contains(line, want) {
 			t.Fatalf("%q missing from %q", want, line)
 		}
@@ -83,11 +83,11 @@ func TestSessionRejectsForgeries(t *testing.T) {
 func TestSessionExpiry(t *testing.T) {
 	s, clock := newSessions(t)
 	created, _ := s.Create(ctx)
-	clock.Advance(auth.SessionTTL - time.Second)
+	clock.Advance(auth.MaxSessionAge - time.Second)
 	if _, ok := s.Authenticate(created.Value); !ok {
 		t.Fatal("rejected before expiry")
 	}
-	clock.Advance(auth.SessionTTL)
+	clock.Advance(time.Second)
 	if _, ok := s.Authenticate(created.Value); ok {
 		t.Fatal("accepted after expiry")
 	}
@@ -106,8 +106,11 @@ func TestSessionSlidingReissue(t *testing.T) {
 	if !ok || !got.Reissue {
 		t.Fatalf("expected reissue, got %+v ok=%v", got, ok)
 	}
-	if want := clock.Now().Add(auth.SessionTTL); !got.Expires.Equal(want) {
-		t.Fatalf("expires %v, want %v", got.Expires, want)
+	if want := created.Expires; !got.Expires.Equal(want) {
+		t.Fatalf("expires %v, want the absolute limit %v", got.Expires, want)
+	}
+	if want := int((auth.MaxSessionAge - auth.ReissueAfter) / time.Second); got.Cookie().MaxAge != want {
+		t.Fatalf("cookie max age %d, want the remaining %d", got.Cookie().MaxAge, want)
 	}
 	if got.Value != created.Value {
 		t.Fatal("cookie value changed on reissue")
@@ -116,16 +119,44 @@ func TestSessionSlidingReissue(t *testing.T) {
 	if again.Reissue {
 		t.Fatal("reissued twice in a row")
 	}
-	clock.Advance(auth.SessionTTL - time.Hour)
+	clock.Advance(auth.MaxSessionAge - auth.ReissueAfter - time.Hour)
 	if _, ok := s.Authenticate(created.Value); !ok {
-		t.Fatal("session did not slide")
+		t.Fatal("session rejected before the absolute limit")
+	}
+}
+
+func TestSessionAbsoluteLifetimeIgnoresActivity(t *testing.T) {
+	s, clock := newSessions(t)
+	created, _ := s.Create(ctx)
+	for clock.Now().Before(created.Expires.Add(-2 * auth.ReissueAfter)) {
+		clock.Advance(auth.ReissueAfter + time.Minute)
+		if _, ok := s.Authenticate(created.Value); !ok {
+			t.Fatalf("rejected at %v", clock.Now())
+		}
+	}
+	clock.Advance(created.Expires.Sub(clock.Now()))
+	if _, ok := s.Authenticate(created.Value); ok {
+		t.Fatal("active session outlived the absolute limit")
+	}
+}
+
+func TestSessionCookieMaxAgeNeverPassesTheAbsoluteLimit(t *testing.T) {
+	s, clock := newSessions(t)
+	created, _ := s.Create(ctx)
+	clock.Advance(auth.MaxSessionAge - time.Hour - time.Minute)
+	got, ok := s.Authenticate(created.Value)
+	if !ok || !got.Reissue {
+		t.Fatalf("expected a reissue, got %+v ok=%v", got, ok)
+	}
+	if got.Cookie().MaxAge != int(time.Hour/time.Second)+60 {
+		t.Fatalf("max age %d", got.Cookie().MaxAge)
 	}
 }
 
 func TestSessionPurgesExpired(t *testing.T) {
 	s, clock := newSessions(t)
 	old, _ := s.Create(ctx)
-	clock.Advance(auth.SessionTTL + time.Hour)
+	clock.Advance(auth.MaxSessionAge + time.Hour)
 	if _, err := s.Create(ctx); err != nil {
 		t.Fatal(err)
 	}

@@ -23,10 +23,11 @@ Differences from the spec:
 ## Data model
 
 - `prd_session` cookie: `base64url(sessionID) + "." + base64url(HMAC-SHA256(key, sessionID))`.
-  Session id is 32 random bytes. `HttpOnly`, `SameSite=Strict`, `Path=/`, `Max-Age` 30 days.
+  Session id is 32 random bytes. `HttpOnly`, `SameSite=Strict`, `Path=/`, `Max-Age` is the sliding lifetime of 30 days, cut to the time left of the absolute lifetime.
 - Session record (SQLite `sessions` table, cached in memory): key is `sha256(sessionID)`, value is
   `created`, `lastIssued`, `expires`. The cookie is sent again when `lastIssued` is older than 24 h, and `expires` slides to
-  30 days from the last issue.
+  30 days from the last issue, never past `created` + 14 days. A session is rejected and deleted 14 days after its creation however often it is used
+  (`auth.MaxSessionAge`). `Load` drops rows older than that and clamps the others.
 - CSRF token: `base64url(HMAC-SHA256(key, "csrf:" + sessionID))`. Returned by `GET /api/session`,
   sent back as `X-PRD-CSRF` on every non-GET request.
 - Launch token: 32 random bytes, base64url. Valid for 2 minutes, single use. The newest token is
@@ -39,13 +40,14 @@ Differences from the spec:
 | --- | --- | --- |
 | 421 | `misdirected_host` | Host not `127.0.0.1:<port>` or `localhost:<port>` |
 | 405 | `cors_not_allowed` | any `OPTIONS` request |
-| 403 | `cross_site` | `Sec-Fetch-Site` present and not `same-origin` on `/api/*` |
+| 403 | `cross_site` | `Sec-Fetch-Site` present and not `same-origin` on `/api/*`; also absent on `GET /api/session`, which returns the CSRF token |
 | 403 | `bad_origin` | non-GET `/api/*` with an `Origin` outside the allowlist |
 | 429 | `rate_limited` | token bucket empty (`Retry-After` in seconds) |
 | 401 | `unauthenticated` | no valid session cookie on `/api/*` |
 | 403 | `bad_csrf` | `X-PRD-CSRF` missing or wrong on a non-GET |
 | 415 | `unsupported_media_type` | write with a body whose type is not `application/json` |
 | 413 | `body_too_large` | body over 64 KiB |
+| 400 | `invalid_request` | a `GET` or `HEAD` that carries a body |
 | 400 | `invalid_body` | not one JSON value, or fails the OpenAPI schema (unknown fields included) |
 | 400 | `invalid_request` | a GET that fails the OpenAPI schema |
 | 404 | `not_found` | unknown `/api/*` path, after authentication |
@@ -66,7 +68,7 @@ Server:
 
 - [server/internal/api/mw/problem.go](../../server/internal/api/mw/problem.go): problem writer, problem codes, `Protected` (includes `/oauth/{provider}/start`, excludes the callback), `Chain`.
 - [server/internal/api/mw/guards.go](../../server/internal/api/mw/guards.go): `HostAllowlist`, `NoCORS`, `SameOrigin` (Sec-Fetch-Site and Origin).
-- [server/internal/api/mw/ratelimit.go](../../server/internal/api/mw/ratelimit.go): token buckets, 30 per minute per session and 10 per minute for session creation.
+- [server/internal/api/mw/ratelimit.go](../../server/internal/api/mw/ratelimit.go): token buckets, 30 per minute per session and 10 failed launches per minute for session creation.
 - [server/internal/api/mw/session.go](../../server/internal/api/mw/session.go): `Identify`, `RequireSession`, `RequireCSRF`.
 - [server/internal/api/mw/body.go](../../server/internal/api/mw/body.go): content type, size, single JSON value, OpenAPI request validation (`kin-openapi`, with the spec embedded by the generator).
 - [server/internal/api/mw/headers.go](../../server/internal/api/mw/headers.go): `CSP`, `LoadScriptHashes`, `SecurityHeaders`.
@@ -91,8 +93,11 @@ Web:
    valid session goes into the request context and the cookie is sent again when older than 24 h.
    It never rejects.
 3. `RateLimit` applies to non-GET `/api/*`. The key is the session, or one shared bucket without a
-   session. `POST /api/session` uses its own bucket.
-4. `Validate` reads the body (64 KiB cap), requires a single JSON value, then runs
+   session. `POST /api/session` uses its own bucket of 10, which only failed launches spend: the
+   middleware refuses while the bucket is empty and the handler spends a token when `Consume`
+   rejects the token (`mw.ChargeLaunchFailure`). Successful launches cost nothing.
+4. `Validate` rejects a `GET` or `HEAD` with a body (`400 invalid_request`), reads write bodies and the
+   body it hands to the schema check through a 64 KiB `MaxBytesReader`, requires a single JSON value, then runs
    `openapi3filter.ValidateRequest`. Paths missing from the spec pass to the router, which answers
    `404 not_found`. A write without a body skips the content type and JSON checks, and the schema
    still rejects it when the body is required.
@@ -117,8 +122,8 @@ None.
   otherwise, because the generated strict handler does not reject unknown fields itself.
 - Tokens, cookies, CSRF values, codes and states never reach logs. The redacting handler drops
   attributes named `authorization`, `cookie`, `set-cookie`, `x-prd-csrf`, `token`, `launch_token`,
-  `session`, `code`, `state`, `secret` and `password` (case-insensitive), and replaces any 43
-  character base64url value under another key. The request log has method, path without the query,
+  `session`, `code`, `state`, `secret` and `password` (case-insensitive), and, under any other key, in the message, in string values and in the text of errors (and of the panic value), replaces GitHub tokens (`ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_`, `github_pat_`), JWT-shaped strings (`eyJ...` three dot-separated base64url segments) and any run of exactly 43
+  base64url characters. 64-character hex digests and SHAs are kept. The request log has method, path without the query,
   status and duration only. Bodies are never logged. The launch URL is printed to stderr with
   `--no-browser` and is never passed to `slog`.
 - Launch tokens are compared with `subtle.ConstantTimeCompare` against every live token, without
@@ -129,6 +134,10 @@ None.
 - `Cache-Control: no-store` is set on `/api/*` and `/events`.
 - Static pages must not use inline styles or inline event handlers. `style-src 'self'` blocks them,
   and `csp-hashes.mjs` fails the web build when it finds a `<style>` block or a `style` attribute.
+- Outbound calls ignore `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`: the `netguard` transport has no proxy, so provider calls and their tokens never go through an environment-configured proxy.
+- On Windows, startup also refuses a data dir or secret file whose DACL grants access to anyone but the current user, SYSTEM and Administrators (`checkPathACL` in `server/cmd/prdash/acl_windows.go`; the message names the `icacls` command to run). Other platforms keep the mode checks.
+- Links from providers shown in the UI go through `safeLink(raw, kind)`: `github` accepts only `https://github.com`, `jira` only `https` hosts ending in `.atlassian.net`, both without credentials or a port.
+- `scripts/start.sh` and `start.cmd` refuse a `VERSION` that is not `MAJOR.MINOR.PATCH` before it reaches the linker flags.
 - `go.mod` pins every dependency to an exact version. `oapi-codegen` is a `tool` directive.
 - `SameSite=Strict` is why the OAuth callback cannot carry the cookie. It redirects to a static
   page that completes the flow with a protected `POST` ([auth.md](auth.md)). Do not add a session
@@ -142,8 +151,8 @@ None.
 - [server/internal/api/static_test.go](../../server/internal/api/static_test.go): static serving.
 - [server/internal/api/mw/mw_test.go](../../server/internal/api/mw/mw_test.go): chain order, panic recovery, access log, CSP and `csp.json` loading, rate limit rounding, validator pass-through.
 - [server/internal/auth/launch_test.go](../../server/internal/auth/launch_test.go) and [session_test.go](../../server/internal/auth/session_test.go): single use, expiry, previous token, rotation, JSON launch file, forged cookies, key in the secrets store, legacy key import, revoke all.
-- [server/internal/logging/redact_test.go](../../server/internal/logging/redact_test.go): redaction of every listed key, groups and `With`.
-- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): data dir modes, private file refusal, lock contention, bind address.
+- [server/internal/logging/redact_test.go](../../server/internal/logging/redact_test.go): redaction of every listed key, groups and `With`, tokens inside text and error values, and the strings that must stay as they are.
+- [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): data dir modes, private file refusal, lock contention, bind address. [acl_test.go](../../server/cmd/prdash/acl_test.go) tests the DACL decision, and `acl_windows_test.go` (Windows only) the real check.
 - [server/internal/api/mw/mw_test.go](../../server/internal/api/mw/mw_test.go) `TestProtectedSurface` and [oauth_api_test.go](../../server/internal/api/oauth_api_test.go): the cookie-less callback, start protection and the complete step.
 - [e2e/github.spec.ts](../../e2e/github.spec.ts): the cross-site callback in a real browser.
 - [server/internal/api/review_api_test.go](../../server/internal/api/review_api_test.go) `TestReviewEndpointsAreGuardedLikeTheMerge` (session, CSRF, Origin, Sec-Fetch-Site, Host, content type, size, one JSON value) and [e2e/review.spec.ts](../../e2e/review.spec.ts).

@@ -60,7 +60,7 @@ Web:
 
 Scripts and CI:
 
-- [scripts/start.sh](../../scripts/start.sh), [start.command](../../scripts/start.command), [start.cmd](../../scripts/start.cmd): check tools, rebuild when the source hash changed, run `bin/prdash`. Extra arguments go to the binary.
+- [scripts/start.sh](../../scripts/start.sh), [start.command](../../scripts/start.command), [start.cmd](../../scripts/start.cmd): check `VERSION` (plain `MAJOR.MINOR.PATCH`), check tools, rebuild when the source hash changed, run `bin/prdash`. Extra arguments go to the binary.
 - [scripts/e2e.mjs](../../scripts/e2e.mjs): `pnpm e2e`, builds the web export and the e2e binary, runs Playwright.
 - [scripts/check-docs.mjs](../../scripts/check-docs.mjs), [scripts/check-version.mjs](../../scripts/check-version.mjs), [scripts/check-coverage.sh](../../scripts/check-coverage.sh).
 - [.github/workflows/ci.yml](../../.github/workflows/ci.yml): jobs `go`, `web`, `e2e`, `contract`, `docs`.
@@ -128,4 +128,4 @@ None.
 - [server/internal/api/static_test.go](../../server/internal/api/static_test.go): static serving, redirect, 404 page, empty embed fallback.
 - [server/internal/api/api_test.go](../../server/internal/api/api_test.go): launch flow end to end.
 - [web/src/lib/launch.test.ts](../../web/src/lib/launch.test.ts), [web/src/app/accounts/page.test.tsx](../../web/src/app/accounts/page.test.tsx), [web/src/app/auth/launch/page.test.tsx](../../web/src/app/auth/launch/page.test.tsx), [web/src/api/client.test.ts](../../web/src/api/client.test.ts).
-- [scripts/check-docs.test.mjs](../../scripts/check-docs.test.mjs) and [scripts/check-version.test.mjs](../../scripts/check-version.test.mjs) (`pnpm test:scripts`).
+- [scripts/check-docs.test.mjs](../../scripts/check-docs.test.mjs) and [scripts/check-version.test.mjs](../../scripts/check-version.test.mjs) and [scripts/start.test.mjs](../../scripts/start.test.mjs) (`pnpm test:scripts`).

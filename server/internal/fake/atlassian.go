@@ -40,12 +40,14 @@ type atlassianState struct {
 	Moves []string `json:"moves"`
 }
 
+type atlCode struct{ challenge, redirect string }
+
 type atlassian struct {
 	mu     sync.Mutex
 	st     atlassianState
 	n      int
 	calls  jiraCalls
-	codes  safeMap[string]
+	codes  safeMap[atlCode]
 	access safeMap[bool]
 }
 
@@ -92,7 +94,7 @@ func (a *atlassian) routes() http.Handler {
 func (a *atlassian) authorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if q.Get("client_id") != AtlassianClient.ClientID || q.Get("audience") != "api.atlassian.com" || q.Get("response_type") != "code" ||
-		q.Get("prompt") != "consent" || !strings.Contains(q.Get("scope"), "offline_access") || q.Get("state") == "" {
+		q.Get("prompt") != "consent" || q.Get("code_challenge_method") != "S256" || q.Get("code_challenge") == "" || !strings.Contains(q.Get("scope"), "offline_access") || q.Get("state") == "" {
 		http.Error(w, "invalid authorize request", http.StatusBadRequest)
 		return
 	}
@@ -102,7 +104,7 @@ func (a *atlassian) authorize(w http.ResponseWriter, r *http.Request) {
 	a.mu.Unlock()
 	authorizeRedirect(w, r, cfg, func() string {
 		code := randomHex(10)
-		a.codes.put(code, q.Get("redirect_uri"))
+		a.codes.put(code, atlCode{challenge: q.Get("code_challenge"), redirect: q.Get("redirect_uri")})
 		return code
 	}, func(target string) {
 		a.mu.Lock()
@@ -123,8 +125,8 @@ func (a *atlassian) token(w http.ResponseWriter, r *http.Request) {
 	}
 	switch body["grant_type"] {
 	case "authorization_code":
-		redirect, ok := a.codes.take(body["code"])
-		if !ok || redirect != body["redirect_uri"] {
+		c, ok := a.codes.take(body["code"])
+		if !ok || c.redirect != body["redirect_uri"] || body["code_verifier"] == "" || s256(body["code_verifier"]) != c.challenge {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
 			return
 		}

@@ -34,7 +34,8 @@ func NoCORS() func(http.Handler) http.Handler {
 }
 
 // SameOrigin requires Sec-Fetch-Site to be same-origin (or absent) on the protected surface, and
-// the Origin header to be allowlisted on writes.
+// the Origin header to be allowlisted on writes. GET /api/session, which returns the CSRF token,
+// also rejects an absent header.
 func SameOrigin(origins ...string) func(http.Handler) http.Handler {
 	allowed := toSet(origins)
 	return func(next http.Handler) http.Handler {
@@ -43,7 +44,8 @@ func SameOrigin(origins ...string) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" {
+			site := r.Header.Get("Sec-Fetch-Site")
+			if (site == "" && isSessionRead(r)) || (site != "" && site != "same-origin") {
 				WriteProblem(w, http.StatusForbidden, CodeCrossSite, "")
 				return
 			}

@@ -31,6 +31,7 @@ paths:
     get:
       operationId: getSession
       summary: Session info and CSRF token
+      description: Requires the Sec-Fetch-Site header to be same-origin; an absent header is rejected.
       responses:
         '200':
           description: The current session.
@@ -38,6 +39,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Session'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /api/sessions/revoke-all:
     post:
       operationId: revokeAllSessions

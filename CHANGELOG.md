@@ -6,6 +6,22 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.1] - 2026-11-27
+
+### Security
+
+- `GET /api/session` now requires `Sec-Fetch-Site: same-origin`; a request without the header is refused.
+- A session ends 14 days after it was created, however often it is used. The cookie lifetime never passes that limit.
+- `GET` and `HEAD` requests that carry a body are refused, and every body read is capped at 64 KiB.
+- Only failed launch attempts use the session-creation rate limit, so signing in is never blocked by earlier successes.
+- Atlassian sign-in uses PKCE (S256) like GitHub. The PKCE verifier is no longer written to the database; it stays in memory and a migration drops the column.
+- Logs redact GitHub tokens, JWTs and 43-character tokens inside messages, strings, error texts and panic values.
+- Outbound calls ignore the proxy environment variables.
+- On Windows, startup refuses a data dir or secret file that other accounts can access.
+- Links from Jira are shown only for `https` hosts ending in `.atlassian.net`, and GitHub links only for github.com.
+- `scripts/start.sh` and `start.cmd` refuse a `VERSION` that is not `MAJOR.MINOR.PATCH`.
+- Updated `postcss` to 8.5.32.
+
 ## [2.4.0] - 2026-11-27
 
 ### Changed

@@ -48,7 +48,7 @@ Argon2id with time 3, 64 MiB, 4 threads, 32-byte key. A fresh salt and nonce on 
 SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md); [migration 0004](../../server/internal/store/migrations/0004_approvals.sql) adds `repos.approvals_required` (1 to 10, default 1), see [review-actions.md](review-actions.md); [migration 0005](../../server/internal/store/migrations/0005_repo_prefs.sql) adds `repos.method_inherit` (the repository follows the default method; new repositories start with it) and `repos.delete_branch` (`default`, `yes` or `no`), see [merge-method.md](merge-method.md) and [settings.md](settings.md)):
 `schema_migrations`, `settings`, `repos`, `repo_branch_rules`, `prs`, `ticket_links`, `sync_rules`,
 `rule_firings`, `activity`, `pending_retries`, `snapshot`, `sessions` (hashed id, created, last
-issued, expires) and `oauth_states` (hashed state, provider, session key, PKCE verifier, expiry).
+issued, expires) and `oauth_states` (hashed state, provider, session key, expiry; [migration 0006](../../server/internal/store/migrations/0006_drop_oauth_verifier.sql) dropped the verifier column).
 All tables are `STRICT`. Times are Unix seconds.
 
 Settings (`GET/PUT /api/settings`, schema `Settings` in [api/openapi.yaml](../../api/openapi.yaml)):
@@ -99,7 +99,7 @@ Server:
 4. `LoadOrCreateKey`: use the `session.key` item. When a legacy `<data-dir>/session.key` file
    exists and the item does not, import it, then delete the file. When both exist the stored key
    wins and the file is deleted.
-5. `Sessions.Load` reads unexpired sessions into the cache. `Create`, the sliding re-issue and
+5. `Sessions.Load` reads unexpired sessions into the cache, skipping those created more than 14 days ago. `Create`, the sliding re-issue and
    `Delete` write through to SQLite. A failed write is logged and the cache stays authoritative
    for the running process.
 6. `POST /api/sessions/revoke-all`: clear the cache, `DELETE FROM sessions`, answer `204` with an
@@ -116,8 +116,9 @@ None. The keychain is a local call to the OS.
   transaction never overlaps another and never upgrades from a read lock. Reads use a second pool
   opened with `query_only(1)`. Multi-row changes happen inside one `Write` call.
 - Pragmas on every connection: `journal_mode(WAL)`, `foreign_keys(1)`, `busy_timeout(5000)`.
-- Secrets never go to SQLite, logs or API responses. The only secret-like value in SQLite is the
-  short-lived PKCE verifier of a pending flow, deleted when the state is consumed or expires.
+- Secrets never go to SQLite, logs or API responses. The PKCE verifier of a pending flow is
+  never written to SQLite: `auth.OAuth` keeps it in a mutex-guarded map keyed by the hash of the state,
+  spent once and swept after 10 minutes, so a restart cancels pending flows.
 - Session ids and OAuth states are stored as SHA-256 hashes. `ConsumeOAuthState` is one
   `DELETE ... RETURNING`, so a state works once, and only for its session and provider.
 - `vault.enc` and `secrets.enc` are written to a temporary file in the same directory, synced

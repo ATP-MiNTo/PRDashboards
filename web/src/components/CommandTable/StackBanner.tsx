@@ -44,7 +44,7 @@ export function TicketBadge({
   title?: string;
 }) {
   const text = status ? `${ticketKey} · ${status}` : ticketKey;
-  const link = safeLink(url);
+  const link = safeLink(url, 'jira');
   return link ? (
     <a
       className={styles.ticketBadge}

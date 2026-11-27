@@ -25,7 +25,7 @@ const KIND_CLASS = {
 function TicketBadge({ ticket }: { ticket: HistoryTicket }) {
   const retry = useRetryTransition();
   const cls = `${styles.badge} ${KIND_CLASS[ticket.kind]}`;
-  const link = safeLink(ticket.url);
+  const link = safeLink(ticket.url, 'jira');
   const text = ticketText(ticket);
   return (
     <>

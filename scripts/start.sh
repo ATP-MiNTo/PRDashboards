@@ -8,6 +8,10 @@ fail() {
   exit 1
 }
 
+# VERSION goes into the linker flags, so it must be plain MAJOR.MINOR.PATCH before it is used.
+version=$(tr -d '\r' <VERSION)
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "VERSION must look like 1.2.3, found '$version'"
+
 version_ge() {
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -n1)" = "$2" ]
 }
@@ -57,7 +61,7 @@ if [ ! -f .build-hash ] || [ "$(cat .build-hash)" != "$hash" ] || [ ! -x "$bin" 
   find server/web -mindepth 1 -maxdepth 1 ! -name .gitkeep -exec rm -rf {} +
   cp -R web/out/. server/web/
   echo "==> go build"
-  go build -trimpath -ldflags "-X main.version=$(cat VERSION)" -o "$bin" ./server/cmd/prdash
+  go build -trimpath -ldflags "-X main.version=$version" -o "$bin" ./server/cmd/prdash
   printf '%s\n' "$hash" >.build-hash
 else
   echo "==> sources unchanged, skipping build"

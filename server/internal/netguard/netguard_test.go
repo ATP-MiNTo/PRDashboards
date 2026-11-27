@@ -137,7 +137,12 @@ func TestClientLimitsAndTLS(t *testing.T) {
 	if c.Timeout != 30*time.Second {
 		t.Fatalf("timeout %v", c.Timeout)
 	}
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
 	tr := New().base.(*http.Transport)
+	if tr.Proxy != nil {
+		t.Fatal("the transport must not use environment proxies")
+	}
 	if tr.TLSClientConfig.MinVersion != 0x0303 {
 		t.Fatalf("min TLS version %x", tr.TLSClientConfig.MinVersion)
 	}
