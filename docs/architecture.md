@@ -144,7 +144,7 @@ sequenceDiagram
 
 ### Frontend
 
-- Rows subscribe to their own PR, so one change re-renders one row.
+- Cards subscribe to their own PR, so one change re-renders one card.
 - Links are built from validated parts, never taken from API data as is.
 - No `dangerouslySetInnerHTML`. No third-party scripts, fonts or CDNs at runtime.
 
