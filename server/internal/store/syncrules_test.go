@@ -102,7 +102,7 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	recent := clock.Now().Add(-time.Hour).Unix()
 	r = baseRefresh(clock.Now())
 	r.PRs = r.PRs[1:]
-	r.Links = []store.LinkRow{{PRID: "P2", Key: "INP-7", Source: "branch"}}
+	r.Links = []store.LinkRow{{PRID: "P2", Key: "INP-7", Source: "branch"}, {PRID: "P2", Key: "INP-9", Source: "branch"}}
 	r.Resolved = []store.Resolution{{ID: "P1", State: "merged", MergedAt: &recent}, {ID: "P4", State: "merged", MergedAt: &old}, {ID: "P3", State: "closed"}}
 	if err := s.SaveRefresh(ctx, r); err != nil {
 		t.Fatal(err)
@@ -121,10 +121,8 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	if m := st.Merged[0]; m.Repo != "acme/web" || m.Number != 1 || m.Base != "main" || !slices.Equal(m.Tickets, []string{"INP-1", "INP-2"}) {
 		t.Fatalf("%+v", m)
 	}
-	// A merged pull request of any age counts while another PR of the ticket is still open.
-	if _, err := rawDB(t, path).Exec(`INSERT INTO ticket_links (pr_id, ticket_key, source, removed, position) VALUES ('P2', 'INP-9', 'branch', 0, 0)`); err != nil {
-		t.Fatal(err)
-	}
+	// A merged pull request of any age counts while another PR of the ticket is still open: P4 is a
+	// year old, and the refresh above kept it because P2, open, shares INP-9 with it.
 	st, _ = s.SyncState(ctx, clock.Now().Add(-24*time.Hour), nil)
 	ids = nil
 	for _, m := range st.Merged {
