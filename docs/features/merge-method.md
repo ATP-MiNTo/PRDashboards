@@ -5,8 +5,8 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 ## Purpose
 
 Decides how each pull request is merged (squash, merge commit or rebase) from the repo's ordered
-branch rules, the repo default and what the repo allows, shows the result in the Method column and
-lets the person change it for one merge. Repo defaults and branch rules are edited in the
+branch rules, the repo default and what the repo allows, shows the result in the merge dialog (the
+"Method" line, with where it comes from) and lets the person change it for one merge. Repo defaults and branch rules are edited in the
 [Settings sidebar](settings.md).
 
 Differences from the spec:
@@ -27,14 +27,14 @@ Differences from the spec:
 - [server/internal/poller/build.go](../../server/internal/poller/build.go): `mergeRepos`, `newRepo` and `resolutionOf` fill `mergeMethod` for every row from the stored repo configuration and the repo's allowed methods.
 - [server/internal/store/repos.go](../../server/internal/store/repos.go): `Repos`, `Repo`, `PutRepo` (one transaction replaces the rule list).
 - [server/internal/api/handlers_repos.go](../../server/internal/api/handlers_repos.go): `ListRepos`, `GetRepo`, `PutRepo`, which asks the poller to rebuild the snapshot from cached data.
-- [web/src/lib/merge.ts](../../web/src/lib/merge.ts): `methodOptions`, `effectiveMethod`, `sourceHint`. [MethodCell.tsx](../../web/src/components/CommandTable/MethodCell.tsx) and [Dropdown.tsx](../../web/src/components/Dropdown/Dropdown.tsx): the Method column.
+- [web/src/lib/merge.ts](../../web/src/lib/merge.ts): `METHOD_ORDER`, `METHOD_NAMES`, `effectiveMethod`, `methodFrom` (the source in words) and `methodWord`. The card has no method column any more: [MergeDialog.tsx](../../web/src/components/CommandTable/MergeDialog.tsx) shows the method and its source and holds the per-merge choice, in a [PopMenu](../../web/src/components/PopMenu/PopMenu.tsx).
 
 ## Key flows
 
 1. Resolution: the first branch rule whose pattern matches the PR's base branch wins, else the repo default (the global default for a repo not stored yet). If the repo disallows that method, the first allowed method in the order merge commit, squash, rebase is used and the warning is set.
 2. Every refresh and every `PUT /api/repos/{id}` rebuilds the snapshot, so `mergeMethod` follows the configuration without an outside call.
-3. The Method column shows the resolved method as "<Method> (default)", the other allowed methods, and the disallowed ones as "<Method> (not allowed)" and disabled. Under it the source ("Branch rule main", "Repo default", "New repo default") and the warning.
-4. Choosing another method in the column changes that row's next merge only. It is component state and is dropped when the repo stops allowing it.
+3. The merge dialog's first bullet reads "Method: [merge commit], from branch rule main" (`methodFrom`: "branch rule <pattern>", "the repo settings" or "the defaults"), with the warning under it. The method is a small dropdown button: "Squash", "Merge commit" and "Rebase", the resolved one marked "(default)" and the disallowed ones "(not allowed)" and disabled. When another method is chosen the line says ", chosen for this merge".
+4. Choosing another method in the dialog changes that merge only. It is dialog state, dropped when the dialog closes, and `effectiveMethod` falls back to the resolved method when the repo stops allowing the choice. The method sent to the server is always the shown one.
 5. `PUT /api/repos/{id}` validates the body against the schema (pattern shape, at most 50 rules), replaces the repo's rules and default in one transaction, optionally clears `is_new`, then calls `Poller.Relink`.
 
 ## Outside calls
@@ -52,4 +52,4 @@ None. The allowed methods come from the repository fields of the search query ([
 
 - [server/internal/merge/resolve_test.go](../../server/internal/merge/resolve_test.go): table tests of rule order, glob matching, defaults, fallback order and warnings.
 - [server/internal/store/repos_test.go](../../server/internal/store/repos_test.go), [server/internal/api/merge_api_test.go](../../server/internal/api/merge_api_test.go) (repo settings validation, 404, rebuild on save), [server/internal/poller/merge_method_test.go](../../server/internal/poller/merge_method_test.go).
-- [Dropdown.test.tsx](../../web/src/components/Dropdown/Dropdown.test.tsx), [MethodCell.test.tsx](../../web/src/components/CommandTable/MethodCell.test.tsx).
+- [merge.test.ts](../../web/src/lib/merge.test.ts) (`methodFrom`, `methodWord`, `effectiveMethod`), [MergeDialog.test.tsx](../../web/src/components/CommandTable/MergeDialog.test.tsx) (the resolved method, its source and warning, a per-merge choice that is sent, disallowed methods), [CommandTable.test.tsx](../../web/src/components/CommandTable/CommandTable.test.tsx), [e2e/merge.spec.ts](../../e2e/merge.spec.ts) ("merge commit" from "branch rule main").

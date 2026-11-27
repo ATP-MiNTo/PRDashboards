@@ -4,7 +4,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 
 ## Purpose
 
-A short message at the top right of the page that leaves by itself after 3.2 seconds. The header uses it to say what a Refresh found and to confirm the theme choice ([header.md](header.md)). The PRD and spec do not describe it; it is part of the v2 UI migration.
+A short message at the top right of the page that leaves by itself after 3.2 seconds. The header uses it to say what a Refresh found and to confirm the theme choice ([header.md](header.md)). The cards use it for the outcome of their actions: "You approved #N" and "You requested changes on #N" ([review-actions.md](review-actions.md)), "#N is no longer a draft" and the error of a refused review action or Ready, the summary after a merge ("#490 merged, INP-104 moved to Done", an error toast that names the failed step and says where to retry, or "#490 added to the merge queue", [merge-and-transition.md](merge-and-transition.md)), and a failed ticket link ([ticket-linking.md](ticket-linking.md)). The PRD and spec do not describe it; it is part of the v2 UI migration.
 
 ## Data model
 
