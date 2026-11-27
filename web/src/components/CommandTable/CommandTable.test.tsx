@@ -424,6 +424,42 @@ describe('CommandTable', () => {
     expect(within(accounts).getByText('Atlassian')).toBeInTheDocument();
   });
 
+  it('shows the GitHub API usage of the last refresh in the accounts eyebrow row', async () => {
+    api.getSnapshot.mockResolvedValue(
+      snapshot(rows(), {
+        sources: {
+          github: {
+            state: 'ok',
+            syncedAt: '2026-11-24T11:59:00Z',
+            error: null,
+            resetAt: null,
+            rateLimit: { used: 4180, limit: 5000, resetAt: '2026-11-24T13:00:00Z' },
+          },
+          jira: { state: 'ok', syncedAt: '2026-11-24T11:59:00Z', error: null, resetAt: null },
+          blockedOrgs: [],
+        },
+      }),
+    );
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    const usage = await within(accounts).findByText('API 4180/5000');
+    expect(usage).toHaveAttribute('aria-hidden', 'true');
+    expect(within(accounts).getByText('GitHub API usage 4180 of 5000')).toBeInTheDocument();
+    expect(within(accounts).getByText('Accounts').parentElement).toContainElement(usage);
+  });
+
+  it('shows no API usage while the snapshot has no rate limit', async () => {
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    fireEvent.click(screen.getByRole('button', { name: 'Settings sidebar' }));
+    const accounts = await screen.findByRole('region', { name: 'Accounts' });
+    await within(accounts).findByRole('button', { name: 'Manage accounts' });
+    expect(within(accounts).queryByText(/^API /)).toBeNull();
+    expect(within(accounts).queryByText(/GitHub API usage/)).toBeNull();
+  });
+
   it('has no Sync or Account button in the header', async () => {
     renderWithClient(<CommandTable />);
     await screen.findByText('Add login');

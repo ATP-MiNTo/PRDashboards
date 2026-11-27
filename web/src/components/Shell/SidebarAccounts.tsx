@@ -1,7 +1,7 @@
 'use client';
 
-import { useAccounts } from '@/api/queries';
-import type { Accounts } from '@/api/client';
+import { useAccounts, useSnapshot } from '@/api/queries';
+import type { Accounts, Snapshot } from '@/api/client';
 import styles from './Shell.module.css';
 
 const METHOD = { app: 'GitHub App', oauth: 'OAuth', pat: 'Token' } as const;
@@ -56,6 +56,28 @@ function JiraRow({ jira }: { jira: Accounts['jira'] }) {
   );
 }
 
+const rateLimitOf = (s: Snapshot) => s.sources.github.rateLimit;
+
+/**
+ * GitHub API usage ("API 4180/5000") from the last refresh, which the snapshot carries; the page
+ * makes no call for it. Nothing is shown while the snapshot has no budget (before the first
+ * refresh, when disconnected, or for a snapshot stored by an older version).
+ */
+function ApiUsage() {
+  const usage = useSnapshot(rateLimitOf).data;
+  if (!usage) return null;
+  return (
+    <span className={styles.usage}>
+      <span aria-hidden="true">
+        API {usage.used}/{usage.limit}
+      </span>
+      <span className={styles.srOnly}>
+        GitHub API usage {usage.used} of {usage.limit}
+      </span>
+    </span>
+  );
+}
+
 /** The accounts block pinned at the bottom of the sidebar: who is connected, and the way to manage them. */
 export function SidebarAccounts({ onManage }: { onManage: () => void }) {
   const accounts = useAccounts();
@@ -65,6 +87,7 @@ export function SidebarAccounts({ onManage }: { onManage: () => void }) {
         <span id="side-accounts" className={styles.eyebrow}>
           Accounts
         </span>
+        <ApiUsage />
       </div>
       {accounts.isPending && <p className={styles.accountNote}>Loading accounts</p>}
       {accounts.isError && (
