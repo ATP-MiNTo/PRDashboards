@@ -37,7 +37,7 @@ and shows each ticket with its status. Transitions are read (cached) but nothing
 ## Outside calls
 
 - `POST /rest/api/3/search/jql`, `key in (...)`, 100 keys per request, fields `summary,status,project,issuetype`.
-- `GET /rest/api/3/project/search`, paginated, once per Jira refresh.
+- `GET /rest/api/3/project/search`, paginated, at most once per 10 minutes per site (`jira.ProjectsTTL`, cached in the client like the statuses), however often the Jira refresh runs. A new project is therefore found within 10 minutes.
 - `POST /rest/api/3/search/jql` with `assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC`, at most 100, cached for the Jira interval, only when the "My tickets" menu is opened.
 - `GET /rest/api/3/issue/{key}/transitions?expand=transitions.fields`, cached 60 s, only on request.
 - All through `netguard` to `https://api.atlassian.com/ex/jira/{cloudId}`, with the OAuth access token (refreshed by `auth`). `429` and `503` back off with `Retry-After`.

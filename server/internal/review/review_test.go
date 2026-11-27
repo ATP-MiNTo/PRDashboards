@@ -76,7 +76,12 @@ func newRig() *rig {
 		snap:     &fakeSnapshot{known: true},
 		accounts: &fakeAccounts{login: "octocat"},
 	}
-	r.svc = review.New(review.Config{GitHub: r.gh, Snapshot: r.snap, Accounts: r.accounts, Refresh: func() { r.refreshes.Add(1) }})
+	r.svc = review.New(review.Config{GitHub: r.gh, Snapshot: r.snap, Accounts: r.accounts, Refresh: func(k []string) {
+		if k != nil {
+			panic("a review moves no ticket")
+		}
+		r.refreshes.Add(1)
+	}})
 	return r
 }
 

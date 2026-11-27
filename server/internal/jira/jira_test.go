@@ -334,6 +334,56 @@ func TestTransitionsWithFieldsAreCachedFor60Seconds(t *testing.T) {
 	}
 }
 
+func TestExpiredTransitionsAreDroppedOnTheNextWrite(t *testing.T) {
+	r := newRig(t, func(_ call, w http.ResponseWriter) bool { _, _ = io.WriteString(w, `{"transitions":[]}`); return true })
+	ctx := context.Background()
+	for _, k := range []string{"INP-1", "INP-2", "INP-3"} {
+		if _, err := r.c.Transitions(ctx, site, k); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := r.c.CachedTransitions(); n != 3 {
+		t.Fatalf("cached %d", n)
+	}
+	r.clock.Advance(jira.TransitionsTTL + time.Second)
+	if _, err := r.c.Transitions(ctx, site, "INP-4"); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.c.CachedTransitions(); n != 1 {
+		t.Fatalf("the three expired entries must be gone, the new one kept: %d", n)
+	}
+	// An entry that is still fresh survives a sweep.
+	r.clock.Advance(jira.TransitionsTTL / 2)
+	if _, err := r.c.Transitions(ctx, site, "INP-5"); err != nil {
+		t.Fatal(err)
+	}
+	if n := r.c.CachedTransitions(); n != 2 {
+		t.Fatalf("cached %d", n)
+	}
+}
+
+func TestProjectsAreCachedFor10MinutesPerSite(t *testing.T) {
+	ctx := context.Background()
+	r := newRig(t, nil, "projects_page1", "projects_page2", "projects_page1", "projects_page2", "projects_page1", "projects_page2")
+	got, err := r.c.Projects(ctx, site)
+	if err != nil || !slices.Equal(got, []string{"INP", "OPS", "WEB"}) || len(r.seen()) != 2 {
+		t.Fatalf("%v %v %d", got, err, len(r.seen()))
+	}
+	got[0] = "changed"
+	r.clock.Advance(jira.ProjectsTTL - time.Second)
+	again, err := r.c.Projects(ctx, site)
+	if err != nil || again[0] != "INP" || len(r.seen()) != 2 {
+		t.Fatalf("a cache hit makes no call and returns a copy: %v %v %d", again, err, len(r.seen()))
+	}
+	if _, err := r.c.Projects(ctx, "cloud-2"); err != nil || len(r.seen()) != 4 {
+		t.Fatalf("the cache is per site: %v %d", err, len(r.seen()))
+	}
+	r.clock.Advance(2 * time.Second)
+	if _, err := r.c.Projects(ctx, site); err != nil || len(r.seen()) != 6 {
+		t.Fatalf("expired after 10 minutes: %v %d", err, len(r.seen()))
+	}
+}
+
 func TestBackoffHonoursRetryAfterOn429And503(t *testing.T) {
 	r := newRig(t, nil, "rate_limited", "search_two")
 	if _, err := r.c.Search(context.Background(), site, []string{"INP-1"}); err != nil {

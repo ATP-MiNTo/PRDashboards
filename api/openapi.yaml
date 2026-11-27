@@ -214,9 +214,17 @@ paths:
           schema:
             type: string
             maxLength: 128
+        - name: Accept-Encoding
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 256
       responses:
         '200':
-          description: The snapshot.
+          description: >
+            The snapshot, gzip compressed (Content-Encoding gzip) when Accept-Encoding allows it. The
+            response varies on Accept-Encoding and both forms have the same ETag.
           headers:
             ETag:
               description: The snapshot version as a quoted string.
@@ -449,6 +457,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RulePreview'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /api/rules/previews:
+    post:
+      operationId: previewRules
+      summary: The tickets each of several rules would move now
+      description: >
+        Evaluates the rules, in order, against the cached snapshot as if none had ever fired. The
+        cached tickets and the settings are read once for the whole batch. No GitHub or Jira call,
+        and nothing is stored. Like /api/rules/preview it has a bucket of its own (120 per minute per
+        session) and does not spend the write bucket.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RulePreviewsRequest'
+      responses:
+        '200':
+          description: One preview per rule, in the order of the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePreviews'
         '422':
           $ref: '#/components/responses/Unprocessable'
   /api/prs/{id}/merge:
@@ -920,6 +952,20 @@ components:
           type: string
           format: date-time
           nullable: true
+        refreshes:
+          type: integer
+          format: int64
+          description: >
+            Refreshes finished since the server started. It goes up when a refresh ends, also when
+            it found nothing new and left the snapshot as it was.
+        snapshotVersion:
+          type: integer
+          format: int64
+          description: >
+            The version of the current snapshot. A refresh that changes nothing keeps it, and sends
+            no snapshot event.
+        rateLimit:
+          $ref: '#/components/schemas/RateLimitUsage'
     SourceState:
       type: string
       enum: [pending, ok, rate_limited, error, unreachable, disconnected]
@@ -1611,6 +1657,26 @@ components:
       properties:
         rule:
           $ref: '#/components/schemas/SyncRule'
+    RulePreviewsRequest:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SyncRule'
+    RulePreviews:
+      type: object
+      additionalProperties: false
+      required: [previews]
+      properties:
+        previews:
+          type: array
+          description: One preview per rule of the request, in the same order.
+          items:
+            $ref: '#/components/schemas/RulePreview'
     PrRef:
       type: object
       additionalProperties: false

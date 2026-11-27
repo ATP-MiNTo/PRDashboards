@@ -1,6 +1,7 @@
 package store_test
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
@@ -70,7 +71,7 @@ func TestPutRulesResetsAndBaselinesFirings(t *testing.T) {
 }
 
 func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
-	s, path, clock := open(t)
+	s, _, clock := open(t)
 	ctx := context.Background()
 	if err := s.PutRules(ctx, []store.SyncRule{rule("a", "merged")}, nil, nil, clock.Now()); err != nil {
 		t.Fatal(err)
@@ -101,7 +102,7 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	recent := clock.Now().Add(-time.Hour).Unix()
 	r = baseRefresh(clock.Now())
 	r.PRs = r.PRs[1:]
-	r.Links = []store.LinkRow{{PRID: "P2", Key: "INP-7", Source: "branch"}}
+	r.Links = []store.LinkRow{{PRID: "P2", Key: "INP-7", Source: "branch"}, {PRID: "P2", Key: "INP-9", Source: "branch"}}
 	r.Resolved = []store.Resolution{{ID: "P1", State: "merged", MergedAt: &recent}, {ID: "P4", State: "merged", MergedAt: &old}, {ID: "P3", State: "closed"}}
 	if err := s.SaveRefresh(ctx, r); err != nil {
 		t.Fatal(err)
@@ -114,16 +115,14 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	for _, m := range st.Merged {
 		ids = append(ids, m.ID)
 	}
-	if !slices.Equal(ids, []string{"P1", "P2"}) {
-		t.Fatalf("recent merge and the one just resolved: %v", ids)
+	if !slices.Equal(ids, []string{"P1", "P2", "P4"}) {
+		t.Fatalf("recent merge, the one just resolved, and the old one sharing INP-9 with an open pull request: %v", ids)
 	}
 	if m := st.Merged[0]; m.Repo != "acme/web" || m.Number != 1 || m.Base != "main" || !slices.Equal(m.Tickets, []string{"INP-1", "INP-2"}) {
 		t.Fatalf("%+v", m)
 	}
-	// A merged pull request of any age counts while another PR of the ticket is still open.
-	if _, err := rawDB(t, path).Exec(`INSERT INTO ticket_links (pr_id, ticket_key, source, removed, position) VALUES ('P2', 'INP-9', 'branch', 0, 0)`); err != nil {
-		t.Fatal(err)
-	}
+	// A merged pull request of any age counts while another PR of the ticket is still open: P4 is a
+	// year old, and the refresh above kept it because P2, open, shares INP-9 with it.
 	st, _ = s.SyncState(ctx, clock.Now().Add(-24*time.Hour), nil)
 	ids = nil
 	for _, m := range st.Merged {
@@ -203,11 +202,24 @@ func TestSaveSyncAndRefreshWriteTheEvaluationAtomically(t *testing.T) {
 	if n := count(t, path, `SELECT count(*) FROM rule_firings`); n != 2 {
 		t.Fatalf("firings %d", n)
 	}
-	// A failing write rolls the snapshot back with it.
-	if err := s.SaveSync(ctx, 99, nil, clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "x"}}}); err == nil {
-		t.Fatal("a row without its required columns was accepted")
+	// An empty snapshot leaves the stored one as it is, and the evaluation is still written.
+	before, _ := s.LoadSnapshot(ctx)
+	if err := s.SaveSync(ctx, 99, nil, clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "x"}}}); err != nil {
+		t.Fatal(err)
 	}
-	if snap, _ := s.LoadSnapshot(ctx); snap.Version == 99 {
+	if snap, _ := s.LoadSnapshot(ctx); snap.Version != before.Version || !bytes.Equal(snap.Data, before.Data) {
+		t.Fatal("an empty snapshot replaced the stored one")
+	}
+	if n := count(t, path, `SELECT count(*) FROM activity`); n != 3 {
+		t.Fatalf("activity %d", n)
+	}
+	// A failing write rolls the snapshot back with it.
+	dead, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := s.SaveSync(dead, 100, []byte("y"), clock.Now(), store.SyncWrite{Activity: []store.ActivityRow{{Kind: "z"}}}); err == nil {
+		t.Fatal("a cancelled write succeeded")
+	}
+	if snap, _ := s.LoadSnapshot(ctx); snap.Version == 100 {
 		t.Fatal("the snapshot was written although the transaction failed")
 	}
 }

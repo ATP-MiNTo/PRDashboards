@@ -1,9 +1,12 @@
 package api_test
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -32,6 +35,7 @@ type stubPoller struct {
 
 	reevaluations int
 	previewed     []rules.Rule
+	batches       int
 	baselined     []rules.Rule
 	preview       poller.RulePreview
 	baseline      []store.Firing
@@ -77,6 +81,18 @@ func (s *stubPoller) Preview(_ context.Context, r rules.Rule) (poller.RulePrevie
 	defer s.mu.Unlock()
 	s.previewed = append(s.previewed, r)
 	return s.preview, nil
+}
+
+func (s *stubPoller) PreviewAll(_ context.Context, rs []rules.Rule) ([]poller.RulePreview, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.previewed = append(s.previewed, rs...)
+	s.batches++
+	out := make([]poller.RulePreview, len(rs))
+	for i := range rs {
+		out[i] = s.preview
+	}
+	return out, nil
 }
 
 func (s *stubPoller) Baseline(_ context.Context, rs []rules.Rule) ([]store.Firing, error) {
@@ -169,6 +185,50 @@ func TestSnapshotServesTheEncodedBytesWithAnETag(t *testing.T) {
 		t.Fatalf("a stale ETag gets the snapshot: %d", w.Code)
 	}
 	wantProblem(t, g.do(http.MethodGet, "/api/snapshot", ""), http.StatusUnauthorized, "unauthenticated")
+}
+
+func TestSnapshotServesTheStoredGzipWhenAccepted(t *testing.T) {
+	g := newSnapRig(t, prRow("PR_1"))
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write(g.p.pub.JSON)
+	_ = zw.Close()
+	g.p.pub.Gzip = buf.Bytes()
+	get := func(opts ...reqOpt) *httptest.ResponseRecorder {
+		return g.do(http.MethodGet, "/api/snapshot", "", append([]reqOpt{cookie(g.l.cookie)}, opts...)...)
+	}
+	for _, ae := range []string{"gzip", "br, gzip;q=0.5", "GZIP", "*", "deflate, gzip, br"} {
+		w := get(header("Accept-Encoding", ae))
+		if w.Code != 200 || w.Header().Get("Content-Encoding") != "gzip" || w.Header().Get("ETag") != `"7"` ||
+			w.Header().Get("Vary") != "Accept-Encoding" || !bytes.Equal(w.Body.Bytes(), buf.Bytes()) {
+			t.Fatalf("%q: %d %v", ae, w.Code, w.Header())
+		}
+		zr, err := gzip.NewReader(w.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if raw, _ := io.ReadAll(zr); !bytes.Equal(raw, g.p.pub.JSON) {
+			t.Fatalf("%q: the gzip body is not the snapshot", ae)
+		}
+	}
+	for _, ae := range []string{"", "identity", "gzip;q=0", "br", "*;q=0"} {
+		var opts []reqOpt
+		if ae != "" {
+			opts = append(opts, header("Accept-Encoding", ae))
+		}
+		w := get(opts...)
+		if w.Header().Get("Content-Encoding") != "" || w.Header().Get("Vary") != "Accept-Encoding" || w.Body.String() != string(g.p.pub.JSON) {
+			t.Fatalf("%q: %d %v", ae, w.Code, w.Header())
+		}
+	}
+	w := get(header("Accept-Encoding", "gzip"), header("If-None-Match", `"7"`))
+	if w.Code != http.StatusNotModified || w.Body.Len() != 0 || w.Header().Get("ETag") != `"7"` || w.Header().Get("Vary") != "Accept-Encoding" {
+		t.Fatalf("304 with gzip: %d %v", w.Code, w.Header())
+	}
+	g.p.pub.Gzip = nil
+	if w := get(header("Accept-Encoding", "gzip")); w.Header().Get("Content-Encoding") != "" || w.Body.String() != string(g.p.pub.JSON) {
+		t.Fatal("without stored gzip the raw JSON is served")
+	}
 }
 
 func TestSyncNowAcceptsAndJoins(t *testing.T) {

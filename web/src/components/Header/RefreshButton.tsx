@@ -72,23 +72,31 @@ export function RefreshButton({
     return () => document.removeEventListener('keydown', onKey);
   }, [open]);
 
-  // The toast waits for the refresh to end and for a snapshot newer than the one at the click.
-  const asked = useRef<Snapshot | null>(null);
+  // The toast waits for the refresh to end. A refresh that finds nothing new keeps the snapshot
+  // and its version, so the status (its count of finished refreshes and the snapshot version it
+  // saw) tells that case from a newer snapshot that is still on its way.
+  const asked = useRef<{ snapshot: Snapshot; refreshes: number } | null>(null);
   const giveUp = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(giveUp.current), []);
   useEffect(() => {
     const before = asked.current;
-    if (!before || running || !snapshot || snapshot.version <= before.version) return;
+    if (!before || running || !snapshot) return;
+    const newer = snapshot.version > before.snapshot.version;
+    const unchanged =
+      status != null &&
+      (status.refreshes ?? 0) > before.refreshes &&
+      status.snapshotVersion === before.snapshot.version;
+    if (!newer && !unchanged) return;
     asked.current = null;
     clearTimeout(giveUp.current);
-    const t = refreshToast(before, snapshot, Date.now());
+    const t = refreshToast(before.snapshot, snapshot, Date.now());
     toast.show(t.message, t.kind);
-  }, [running, snapshot, toast]);
+  }, [running, snapshot, status, toast]);
 
   const onClick = () => {
     if (running) return;
     if (snapshot) {
-      asked.current = snapshot;
+      asked.current = { snapshot, refreshes: status?.refreshes ?? 0 };
       clearTimeout(giveUp.current);
       giveUp.current = setTimeout(() => (asked.current = null), TOAST_WAIT_MS);
     }

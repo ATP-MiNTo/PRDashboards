@@ -17,6 +17,10 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
+// PruneEvery is the shortest time between two prunes of old rows: the first refresh after a start
+// prunes, then one a day.
+const PruneEvery = 24 * time.Hour
+
 // ErrNoSite means Jira is connected but no site is selected.
 var ErrNoSite = jira.ErrNoSite
 
@@ -82,7 +86,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 		keys = withKeys(keys, mergedKeys(state))
 	}
 	if site.ID != "" && projectsOK {
-		p.lookupTickets(ctx, now, site, keys, jiraDue)
+		p.lookupTickets(ctx, now, site, keys, p.actedKeys(now, req), jiraDue)
 	}
 	if jiraDue || req.jira {
 		p.mu.Lock()
@@ -101,36 +105,61 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	out := p.runRules(ctx, now, state, ls, site, st.ExcludedStatuses)
 
 	p.mu.Lock()
-	p.version++
-	version := p.version
+	version := p.version + 1
 	snap := build(buildInput{
 		Now: now, Version: version, Linked: ls, Repos: mergeRepos(repos, st.DefaultMethod), NewRepo: newRepo(st.DefaultMethod), Issues: p.jira.issues, Site: p.jira.site,
 		GitHub: p.ghSrc, RateLimit: p.rl, Jira: p.jiraStatus(), Blocked: p.gh.blocked, Warnings: p.gh.warnings, Waiting: out.waiting, Plans: out.plans,
 	})
 	p.mu.Unlock()
 
-	raw, err := encode(snap)
-	if err != nil {
-		return err
+	// A refresh that changes nothing the person sees keeps the version, the stored blob and the
+	// snapshot event. The sync times and the API usage reach the browser on sync-status.
+	sum := fingerprint(snap)
+	p.mu.Lock()
+	unchanged := p.sumOK && sum == p.sum
+	if unchanged {
+		version = p.version
+	} else {
+		p.version, p.sum, p.sumOK = version, sum, true
 	}
-	data, err := compress(raw)
-	if err != nil {
-		return err
+	p.mu.Unlock()
+
+	var raw, data []byte
+	if !unchanged {
+		if raw, err = encode(snap); err != nil {
+			return err
+		}
+		if data, err = compress(raw); err != nil {
+			return err
+		}
 	}
 	var saveErr error
+	prune := false
 	if fetched {
-		saveErr = p.cfg.Store.SaveRefresh(ctx, store.Refresh{
+		p.mu.Lock()
+		prune = p.lastPrune.IsZero() || now.Sub(p.lastPrune) >= PruneEvery
+		p.mu.Unlock()
+		saveErr = p.cfg.Store.SaveRefresh(ctx, store.Refresh{Prune: prune,
 			Now: now, DefaultMethod: st.DefaultMethod, Repos: repoRows(p.gh.prs), PRs: prRows(p.gh.prs),
 			Links: linkRows(ls), Resolved: resolved, Version: version, Snapshot: data, Sync: out.write,
 		})
 	} else if out.write.Empty() {
-		saveErr = p.cfg.Store.SaveSnapshot(ctx, version, data, now)
+		if !unchanged {
+			saveErr = p.cfg.Store.SaveSnapshot(ctx, version, data, now)
+		}
 	} else {
 		saveErr = p.cfg.Store.SaveSync(ctx, version, data, now, out.write)
 	}
-	p.cur.Store(&Published{Snapshot: snap, JSON: raw})
-	if p.cfg.Publisher != nil {
-		_ = p.cfg.Publisher.Publish(events.Snapshot, map[string]int64{"version": version})
+	if prune && saveErr == nil {
+		p.mu.Lock()
+		p.lastPrune = now
+		p.mu.Unlock()
+	}
+	if !unchanged {
+		p.cur.Store(&Published{Snapshot: snap, JSON: raw, Gzip: data})
+		if p.cfg.Publisher != nil {
+			_ = p.cfg.Publisher.Publish(events.Snapshot, map[string]int64{"version": version})
+		}
 	}
 	if saveErr == nil {
 		p.publishActivity(out.write)
@@ -339,9 +368,23 @@ func (p *Poller) fetchProjects(ctx context.Context, now time.Time, site jira.Sit
 	return true
 }
 
+// actedKeys takes the keys an action asked to look up again, those of this request and those of
+// requests that joined the running refresh. Nothing is asked while Jira is in backoff.
+func (p *Poller) actedKeys(now time.Time, req request) []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	extra := append(p.extra, req.keys...)
+	p.extra = nil
+	if now.Before(p.jiraBackoff) {
+		return nil
+	}
+	return extra
+}
+
 // lookupTickets asks Jira for the tickets of the snapshot. A full refresh asks for every key. Otherwise
-// only keys never looked up are asked, so a new pull request does not wait for the interval.
-func (p *Poller) lookupTickets(ctx context.Context, now time.Time, site jira.Site, keys []string, full bool) {
+// only keys never looked up are asked, so a new pull request does not wait for the interval, and the
+// acted keys that the snapshot needs, whose status an action may have changed.
+func (p *Poller) lookupTickets(ctx context.Context, now time.Time, site jira.Site, keys, acted []string, full bool) {
 	p.mu.Lock()
 	ask := keys
 	if !full {
@@ -353,7 +396,7 @@ func (p *Poller) lookupTickets(ctx context.Context, now time.Time, site jira.Sit
 		for _, k := range keys {
 			_, have := p.jira.issues[k]
 			_, gone := p.jira.missing[k]
-			if !have && !gone {
+			if !have && !gone || slices.Contains(acted, k) {
 				ask = append(ask, k)
 			}
 		}

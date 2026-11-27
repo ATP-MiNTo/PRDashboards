@@ -19,3 +19,6 @@ func (l *Loop) Run(ctx context.Context) { l.p.Run(ctx) }
 
 // RateLimitUsage exposes the mapping of the GitHub budget to the snapshot field.
 var RateLimitUsage = rateLimitUsage
+
+// Idle waits for the refreshes that are running.
+func (p *Poller) Idle() { p.flights.Wait() }

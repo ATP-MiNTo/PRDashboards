@@ -18,6 +18,7 @@ import {
   putRepos,
   getRules,
   previewRule,
+  previewRules,
   putRules,
   getRetries,
   getTransitions,
@@ -316,11 +317,16 @@ export function useSaveRules() {
 export const usePreviewRule = () =>
   useMutation({ mutationFn: (rule: SyncRule) => previewRule(rule) });
 
-/** Previews several rules, each against the cached data. The server makes no outside call for it. */
+/**
+ * Previews several rules, each against the cached data, in one request. The server makes no outside
+ * call for it and answers one preview per rule, in order.
+ */
 export const usePreviewRules = () =>
   useMutation({
-    mutationFn: (rules: SyncRule[]) =>
-      Promise.all(rules.map(async (rule) => ({ rule, preview: await previewRule(rule) }))),
+    mutationFn: async (rules: SyncRule[]) => {
+      const { previews } = await previewRules(rules);
+      return rules.map((rule, i) => ({ rule, preview: previews[i]! }));
+    },
   });
 
 /**

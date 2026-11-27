@@ -175,6 +175,19 @@ describe('api client operations', () => {
     expect(init?.body).toBe(body === undefined ? undefined : JSON.stringify(body));
   });
 
+  it('previews all rules with one POST /api/rules/previews', async () => {
+    fetchMock.mockResolvedValueOnce(json(session));
+    await getSession();
+    fetchMock.mockResolvedValueOnce(json({ previews: [] }));
+    const rules = [{ id: 'a' }, { id: 'b' }] as client.SyncRule[];
+    await expect(client.previewRules(rules)).resolves.toEqual({ previews: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    expect(url).toBe('/api/rules/previews');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBe(JSON.stringify({ rules }));
+  });
+
   it('puts the settings and returns the saved ones', async () => {
     const saved = {
       polling: { githubSec: 60, jiraSec: 300 },

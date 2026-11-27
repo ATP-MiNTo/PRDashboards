@@ -285,7 +285,7 @@ Resolution for each PR (pure function in `linking`):
    order and without duplicates.
 2. Manual links in `ticket_links` are added. Keys the user removed are hidden.
 3. Keys are kept only if the Jira project exists on the connected site (project keys are cached
-   from one `GET /rest/api/3/project/search` per Jira refresh), so a branch like `UTF-8` is not
+   from one `GET /rest/api/3/project/search`, cached 10 minutes per site), so a branch like `UTF-8` is not
    linked by mistake.
 4. No key: the ticket cell offers a picker that lists Jira tickets assigned to the user
    (`assignee = currentUser() AND statusCategory != Done`, one JQL, cached for the Jira interval).
@@ -547,6 +547,7 @@ Source of truth: `api/openapi.yaml`. Main operations:
 | `GET/PUT /api/repos/{id}` | Repo default and branch rules |
 | `GET/PUT /api/rules` | Ordered sync rules (whole list, one transaction) |
 | `POST /api/rules/preview` | Tickets a draft rule would move now |
+| `POST /api/rules/previews` | The same for up to 100 rules in one call (`{rules}` answers `{previews}` in order). Both preview endpoints use their own rate bucket (120 per minute per session), not the write bucket |
 | `GET /api/jira/options` | Jira status names (one call, cached 10 minutes) and project keys (from memory) for the rule form |
 | `GET /api/activity` | Activity log, paginated |
 | `GET /oauth/{provider}/start`, `GET /oauth/{provider}/callback` | OAuth flow: start is protected, the callback is cookie-less and only redirects to `/oauth/finish/` (5.4) |
@@ -571,7 +572,9 @@ Errors use `application/problem+json` with a stable `code` (`org_blocked`, `head
 1. Two paginated GraphQL searches, 50 per page, run concurrently and merged by PR id (a PR that is
    assigned to me and opened by me appears once):
    `search(query: "is:pr is:open assignee:@me archived:false", type: ISSUE, first: 50, after: $c)` and
-   the same with `author:@me`.
+   the same with `author:@me -assignee:@me`, so a PR that is both assigned and opened by me is
+   fetched once, by the first search. The query also selects `viewer { login }`, and a PR of the
+   assigned search whose author is that login gets the authored role too.
    Per PR it selects: id, number, title, url, isDraft, mergeable, mergeStateStatus, reviewDecision,
    headRefName, headRefOid, baseRefName, repository { id nameWithOwner squashMergeAllowed
    mergeCommitAllowed rebaseMergeAllowed }, `commits(last: 1) { commit { committedDate

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -65,6 +66,9 @@ func TestMergeMovesEveryTicketAndRecordsOnceInOneTransaction(t *testing.T) {
 	}
 	if r.refreshes.Load() != 1 || len(r.events.list) != 1 || r.events.list[0] != "activity" {
 		t.Fatalf("refreshes %d events %v", r.refreshes.Load(), r.events.list)
+	}
+	if len(r.keys) != 1 || !slices.Contains(r.keys[0], "INP-1") {
+		t.Fatalf("the refresh after a merge is told which tickets moved: %v", r.keys)
 	}
 
 	acts, err := r.store.Activity(context.Background(), 0, 50)

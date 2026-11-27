@@ -174,7 +174,7 @@ func run(ctx context.Context, o options, e env) error {
 		Store:     db,
 		Snapshot:  snapshots,
 		Accounts:  acc,
-		Refresh:   func() { snapshots.Trigger() },
+		Refresh:   func(keys []string) { snapshots.TriggerAfterAction(keys) },
 		Publisher: hub,
 		Log:       log,
 		Clock:     e.clock,
@@ -183,7 +183,7 @@ func run(ctx context.Context, o options, e env) error {
 		GitHub:   ghClient,
 		Snapshot: snapshots,
 		Accounts: acc,
-		Refresh:  func() { snapshots.Trigger() },
+		Refresh:  func([]string) { snapshots.TriggerAfterAction(nil) },
 		Log:      log,
 	})
 	handler, err := api.New(api.Config{

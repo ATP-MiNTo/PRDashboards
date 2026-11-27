@@ -98,6 +98,19 @@ func page(ids []string, issueCount, remaining, cost int, extra map[string]any) f
 	return fixtureBody{status: 200, body: body}
 }
 
+// byAuthor sets the author of each node of a page by id and the viewer of the answer.
+func byAuthor(f fixtureBody, viewer string, authors map[string]string) fixtureBody {
+	data := f.body["data"].(map[string]any)
+	data["viewer"] = map[string]any{"login": viewer}
+	for _, n := range data["search"].(map[string]any)["nodes"].([]any) {
+		node := n.(map[string]any)
+		if login, ok := authors[node["id"].(string)]; ok {
+			node["author"] = map[string]any{"login": login}
+		}
+	}
+	return f
+}
+
 type fixtureBody struct {
 	status  int
 	headers map[string]string
@@ -383,21 +396,22 @@ func ids(prs []github.PR) []string {
 func TestSearchOpenSendsBothQueriesAndMergesByID(t *testing.T) {
 	var mu sync.Mutex
 	var sentQueries []string
+	authors := map[string]string{"A": "Octocat", "B": "priya", "C": "octocat"}
 	c := serveBodies(t, func(q string) fixtureBody {
 		mu.Lock()
 		sentQueries = append(sentQueries, q)
 		mu.Unlock()
 		if q == github.OpenAssignedQuery {
-			return page([]string{"A", "B", "C"}, 3, 4000, 1, nil)
+			return byAuthor(page([]string{"A", "B", "C"}, 3, 4000, 1, nil), "octocat", authors)
 		}
-		return page([]string{"C", "D", "A", "E"}, 4, 4500, 1, nil)
+		return byAuthor(page([]string{"D", "E"}, 2, 4500, 1, nil), "octocat", map[string]string{"D": "octocat", "E": "octocat"})
 	})
 	res, err := c.SearchOpen(context.Background(), "tok")
 	if err != nil {
 		t.Fatal(err)
 	}
 	slices.Sort(sentQueries)
-	if !slices.Equal(sentQueries, []string{"is:pr is:open assignee:@me archived:false", "is:pr is:open author:@me archived:false"}) {
+	if !slices.Equal(sentQueries, []string{"is:pr is:open assignee:@me archived:false", "is:pr is:open author:@me -assignee:@me archived:false"}) {
 		t.Fatalf("queries %v", sentQueries)
 	}
 	if got := ids(res.PRs); !slices.Equal(got, []string{"A", "B", "C", "D", "E"}) {
@@ -414,11 +428,27 @@ func TestSearchOpenSendsBothQueriesAndMergesByID(t *testing.T) {
 			t.Errorf("roles of %s: got %v, want %v", id, roles[id], w)
 		}
 	}
+	if res.Viewer != "octocat" {
+		t.Fatalf("viewer %q", res.Viewer)
+	}
 	if res.Total != 5 || res.Capped || res.Incomplete || res.Requests != 2 || len(res.Errors) != 0 || len(res.Blocked) != 0 {
 		t.Fatalf("%+v", res)
 	}
 	if res.RateLimit.Cost != 2 || res.RateLimit.Remaining != 4000 || res.RateLimit.Limit != 5000 {
 		t.Fatalf("rate limit takes the lowest remaining and sums cost: %+v", res.RateLimit)
+	}
+}
+
+func TestSearchOpenWithoutAViewerGivesNoAuthoredRoleToAssignedPRs(t *testing.T) {
+	c := serveBodies(t, func(q string) fixtureBody {
+		if q == github.OpenAssignedQuery {
+			return byAuthor(page([]string{"A"}, 1, 4000, 1, nil), "", map[string]string{"A": "octocat"})
+		}
+		return page(nil, 0, 4500, 1, nil)
+	})
+	res, err := c.SearchOpen(context.Background(), "tok")
+	if err != nil || len(res.PRs) != 1 || !slices.Equal(res.PRs[0].Roles, []string{github.RoleAssigned}) {
+		t.Fatalf("%+v %v", res, err)
 	}
 }
 

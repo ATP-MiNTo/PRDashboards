@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,24 +21,68 @@ const maxManualTickets = 20
 
 func jiraTTL(s store.Settings) time.Duration { return time.Duration(s.JiraSec) * time.Second }
 
-// snapshotResponse writes the snapshot JSON the poller encoded once, so a request costs no
-// encoding.
-type snapshotResponse struct{ pub *poller.Published }
+// snapshotResponse writes the snapshot JSON the poller encoded once, or the gzip it compressed
+// once for a client that accepts it, so a request costs neither encoding nor compression. Both
+// forms carry the ETag of the version, and the response varies on Accept-Encoding.
+type snapshotResponse struct {
+	pub  *poller.Published
+	gzip bool
+}
 
 func (r snapshotResponse) VisitGetSnapshotResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("ETag", r.pub.ETag())
+	body := r.pub.JSON
+	h := w.Header()
+	h.Set("Content-Type", "application/json")
+	h.Set("ETag", r.pub.ETag())
+	h.Add("Vary", "Accept-Encoding")
+	if r.gzip && len(r.pub.Gzip) > 0 {
+		body = r.pub.Gzip
+		h.Set("Content-Encoding", "gzip")
+	}
+	h.Set("Content-Length", strconv.Itoa(len(body)))
 	w.WriteHeader(http.StatusOK)
-	_, err := w.Write(r.pub.JSON)
+	_, err := w.Write(body)
 	return err
+}
+
+// notModified is the 304 of the snapshot, with the validators a cache needs.
+type notModified struct{ etag string }
+
+func (r notModified) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("ETag", r.etag)
+	w.Header().Add("Vary", "Accept-Encoding")
+	w.WriteHeader(http.StatusNotModified)
+	return nil
 }
 
 func (h *handlers) GetSnapshot(_ context.Context, req gen.GetSnapshotRequestObject) (gen.GetSnapshotResponseObject, error) {
 	pub := h.cfg.Poller.Current()
 	if m := req.Params.IfNoneMatch; m != nil && etagMatches(*m, pub.ETag()) {
-		return gen.GetSnapshot304Response{}, nil
+		return notModified{etag: pub.ETag()}, nil
 	}
-	return snapshotResponse{pub: pub}, nil
+	return snapshotResponse{pub: pub, gzip: req.Params.AcceptEncoding != nil && acceptsGzip(*req.Params.AcceptEncoding)}, nil
+}
+
+// acceptsGzip reports whether an Accept-Encoding header allows gzip: listed or covered by *, and
+// not with a quality of 0.
+func acceptsGzip(header string) bool {
+	star := false
+	for v := range strings.SplitSeq(header, ",") {
+		name, params, _ := strings.Cut(v, ";")
+		name = strings.TrimSpace(name)
+		ok := true
+		if q, found := strings.CutPrefix(strings.ReplaceAll(strings.ToLower(params), " ", ""), "q="); found {
+			f, err := strconv.ParseFloat(q, 64)
+			ok = err != nil || f > 0
+		}
+		switch {
+		case strings.EqualFold(name, "gzip"):
+			return ok
+		case name == "*":
+			star = ok
+		}
+	}
+	return star
 }
 
 // etagMatches implements the weak comparison of If-None-Match.

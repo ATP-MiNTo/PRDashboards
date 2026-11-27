@@ -210,6 +210,9 @@ export const putRules = (update: RulesUpdate) =>
   json<Schemas['Rules']>('PUT', '/api/rules', update);
 export const previewRule = (rule: SyncRule) =>
   json<RulePreview>('POST', '/api/rules/preview', { rule });
+/** One request for all rules: one preview per rule, in order. */
+export const previewRules = (rules: SyncRule[]) =>
+  json<Schemas['RulePreviews']>('POST', '/api/rules/previews', { rules });
 
 export type ReviewResult = Schemas['ReviewResult'];
 export type ApproveRequest = Schemas['ApproveRequest'];

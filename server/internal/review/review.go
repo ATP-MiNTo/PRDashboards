@@ -50,7 +50,7 @@ type Config struct {
 	Accounts Accounts
 	// Refresh starts a refresh without waiting for it. It is how the snapshot learns the new review
 	// state, the same call a merge makes.
-	Refresh func()
+	Refresh func(movedTickets []string)
 	Log     *slog.Logger
 }
 
@@ -63,7 +63,7 @@ func New(cfg Config) *Service {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
 	if cfg.Refresh == nil {
-		cfg.Refresh = func() {}
+		cfg.Refresh = func([]string) {}
 	}
 	return &Service{cfg: cfg}
 }
@@ -127,19 +127,19 @@ func (s *Service) run(ctx context.Context, action string, req Request) (Result, 
 		return Result{}, err
 	}
 	if e := s.check(ctx, action, pr, req); e != nil {
-		s.cfg.Refresh()
+		s.cfg.Refresh(nil)
 		return Result{}, e
 	}
 	err = s.send(ctx, action, token, pr, req)
 	var rejected *github.ReviewRejectedError
 	switch {
 	case errors.Is(err, github.ErrHeadMoved):
-		s.cfg.Refresh()
+		s.cfg.Refresh(nil)
 		return Result{}, &merge.Error{Code: merge.CodeHeadMoved, Detail: "the branch changed while the review was prepared", Fresh: merge.FreshOf(pr)}
 	case errors.Is(err, github.ErrOwnPullRequest):
 		return Result{}, &merge.Error{Code: merge.CodeOwnPullRequest, Detail: "GitHub does not let you review a pull request you opened", Fresh: merge.FreshOf(pr)}
 	case errors.Is(err, github.ErrNotDraft):
-		s.cfg.Refresh()
+		s.cfg.Refresh(nil)
 		return Result{}, &merge.Error{Code: merge.CodeNotDraft, Detail: "the pull request is not a draft", Fresh: merge.FreshOf(pr)}
 	case errors.Is(err, github.ErrPRNotFound):
 		return Result{}, &merge.Error{Code: merge.CodeNotFound, Detail: "GitHub has no such pull request"}
@@ -154,7 +154,7 @@ func (s *Service) run(ctx context.Context, action string, req Request) (Result, 
 	s.cfg.Log.InfoContext(ctx, "review action done", "pr", req.PRID, "action", action)
 	// The snapshot learns the new review state from one refresh, the same as after a merge: two
 	// searches, never a call per pull request.
-	s.cfg.Refresh()
+	s.cfg.Refresh(nil)
 	return Result{PRID: req.PRID, Action: action}, nil
 }
 

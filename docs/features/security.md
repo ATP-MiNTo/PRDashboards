@@ -66,7 +66,7 @@ Server:
 
 - [server/internal/api/mw/problem.go](../../server/internal/api/mw/problem.go): problem writer, problem codes, `Protected` (includes `/oauth/{provider}/start`, excludes the callback), `Chain`.
 - [server/internal/api/mw/guards.go](../../server/internal/api/mw/guards.go): `HostAllowlist`, `NoCORS`, `SameOrigin` (Sec-Fetch-Site and Origin).
-- [server/internal/api/mw/ratelimit.go](../../server/internal/api/mw/ratelimit.go): token buckets, 30 per minute per session and 10 per minute for session creation.
+- [server/internal/api/mw/ratelimit.go](../../server/internal/api/mw/ratelimit.go): token buckets, 30 writes per minute per session, 120 rule previews per minute per session and 10 per minute for session creation, with idle buckets swept.
 - [server/internal/api/mw/session.go](../../server/internal/api/mw/session.go): `Identify`, `RequireSession`, `RequireCSRF`.
 - [server/internal/api/mw/body.go](../../server/internal/api/mw/body.go): content type, size, single JSON value, OpenAPI request validation (`kin-openapi`, with the spec embedded by the generator).
 - [server/internal/api/mw/headers.go](../../server/internal/api/mw/headers.go): `CSP`, `LoadScriptHashes`, `SecurityHeaders`.
@@ -91,7 +91,13 @@ Web:
    valid session goes into the request context and the cookie is sent again when older than 24 h.
    It never rejects.
 3. `RateLimit` applies to non-GET `/api/*`. The key is the session, or one shared bucket without a
-   session. `POST /api/session` uses its own bucket.
+   session. `POST /api/session` uses its own bucket (10 per minute). The two rule preview endpoints
+   (`POST /api/rules/preview` and `/api/rules/previews`) are read-only computations over cached
+   data with no outside call, so they do not spend the write bucket of 30 per minute: they have a
+   separate bucket of 120 per minute per session, and still pass Host, Sec-Fetch-Site, Origin,
+   session, CSRF, body size and schema checks. A bucket idle for a full minute (a full bucket again)
+   is dropped, swept at most once a minute while requests arrive, so the maps do not grow with
+   sessions that went away.
 4. `Validate` reads the body (64 KiB cap), requires a single JSON value, then runs
    `openapi3filter.ValidateRequest`. Paths missing from the spec pass to the router, which answers
    `404 not_found`. A write without a body skips the content type and JSON checks, and the schema
@@ -140,7 +146,7 @@ None.
 
 - [server/internal/api/api_test.go](../../server/internal/api/api_test.go): every check in the chain with a passing and a failing case (Host, OPTIONS, Sec-Fetch-Site, Origin, session, CSRF, content type, body size, invalid and unknown fields, rate limits and `Retry-After`), launch flow, cookie attributes, sliding re-issue, security headers on API, static and error responses, log hygiene, and the `additionalProperties` rule.
 - [server/internal/api/static_test.go](../../server/internal/api/static_test.go): static serving.
-- [server/internal/api/mw/mw_test.go](../../server/internal/api/mw/mw_test.go): chain order, panic recovery, access log, CSP and `csp.json` loading, rate limit rounding, validator pass-through.
+- [server/internal/api/mw/mw_test.go](../../server/internal/api/mw/mw_test.go): chain order, panic recovery, access log, CSP and `csp.json` loading, rate limit rounding, the separate preview bucket, validator pass-through; [ratelimit_internal_test.go](../../server/internal/api/mw/ratelimit_internal_test.go): eviction of idle buckets.
 - [server/internal/auth/launch_test.go](../../server/internal/auth/launch_test.go) and [session_test.go](../../server/internal/auth/session_test.go): single use, expiry, previous token, rotation, JSON launch file, forged cookies, key in the secrets store, legacy key import, revoke all.
 - [server/internal/logging/redact_test.go](../../server/internal/logging/redact_test.go): redaction of every listed key, groups and `With`.
 - [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): data dir modes, private file refusal, lock contention, bind address.

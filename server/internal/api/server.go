@@ -27,6 +27,7 @@ type Poller interface {
 	Relink(ctx context.Context) error
 	Reevaluate(ctx context.Context) error
 	Preview(ctx context.Context, r rules.Rule) (poller.RulePreview, error)
+	PreviewAll(ctx context.Context, rs []rules.Rule) ([]poller.RulePreview, error)
 	Baseline(ctx context.Context, rs []rules.Rule) ([]store.Firing, error)
 	Reschedule()
 	ProjectKeys() []string

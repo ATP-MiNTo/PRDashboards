@@ -117,6 +117,62 @@ func TestRulesPutValidation(t *testing.T) {
 	}
 }
 
+func TestRulesPreviewsBatch(t *testing.T) {
+	g := newMergeRig(t)
+	g.p.preview = poller.RulePreview{Moves: []poller.PreviewMove{{Ticket: "INP-1", Status: "In Review"}}}
+	body := `{"rules":[` + ruleJSON("a", "merged", 0, "") + `,` + ruleJSON("b", "review_approved", 0, "") + `]}`
+	w := g.do(http.MethodPost, "/api/rules/previews", body, g.l.write()...)
+	var out gen.RulePreviews
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &out) != nil || len(out.Previews) != 2 || out.Previews[1].Moves[0].TicketKey != "INP-1" {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	if g.p.batches != 1 || len(g.p.previewed) != 2 || g.p.previewed[0].ID != "a" || g.p.previewed[1].ID != "b" {
+		t.Fatalf("one batch in order: %d %+v", g.p.batches, g.p.previewed)
+	}
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{"rules":[]}`, g.l.write()...); w.Code != 200 || !strings.Contains(w.Body.String(), `"previews":[]`) {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	wantProblem(t, g.do(http.MethodPost, "/api/rules/previews", `{"rules":[`+ruleJSON("a", "commit_stale", 0, "")+`]}`, g.l.write()...), 422, "invalid_rule")
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{}`, g.l.write()...); w.Code != http.StatusBadRequest {
+		t.Fatalf("missing rules: %d", w.Code)
+	}
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{"rules":[],"extra":1}`, g.l.write()...); w.Code != http.StatusBadRequest {
+		t.Fatalf("extra property: %d", w.Code)
+	}
+	many := strings.TrimSuffix(strings.Repeat(ruleJSON("a", "merged", 0, "")+",", 101), ",")
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{"rules":[`+many+`]}`, g.l.write()...); w.Code != http.StatusBadRequest {
+		t.Fatalf("101 rules: %d", w.Code)
+	}
+}
+
+func TestRulesPreviewsStillNeedSessionAndCSRF(t *testing.T) {
+	g := newMergeRig(t)
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{"rules":[]}`); w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
+		t.Fatalf("no session: %d", w.Code)
+	}
+	if w := g.do(http.MethodPost, "/api/rules/previews", `{"rules":[]}`, cookie(g.l.cookie)); w.Code != http.StatusForbidden {
+		t.Fatalf("no CSRF token: %d", w.Code)
+	}
+}
+
+func TestRulesPreviewsDoNotSpendTheWriteBucket(t *testing.T) {
+	g := newMergeRig(t)
+	for i := range 60 {
+		path := "/api/rules/preview"
+		body := `{"rule":` + ruleJSON("a", "merged", 0, "") + `}`
+		if i%2 == 1 {
+			path, body = "/api/rules/previews", `{"rules":[`+ruleJSON("a", "merged", 0, "")+`]}`
+		}
+		if w := g.do(http.MethodPost, path, body, g.l.write()...); w.Code != 200 {
+			t.Fatalf("preview %d: %d %s", i, w.Code, w.Body)
+		}
+	}
+	w := g.do(http.MethodPut, "/api/rules", putRules(false), g.l.write()...)
+	if w.Code != 200 {
+		t.Fatalf("a write after 60 previews: %d %s", w.Code, w.Body)
+	}
+}
+
 func TestRulesPreview(t *testing.T) {
 	g := newMergeRig(t)
 	g.p.preview = poller.RulePreview{

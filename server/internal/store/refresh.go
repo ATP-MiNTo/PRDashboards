@@ -51,7 +51,11 @@ type Refresh struct {
 	Links         []LinkRow
 	Resolved      []Resolution
 	Version       int64
-	Snapshot      []byte
+	// Snapshot is the compressed snapshot; empty leaves the stored one as it is.
+	Snapshot []byte
+	// Prune asks for the rows older than Retention to be dropped in this transaction. The poller
+	// sets it at most once a day.
+	Prune bool
 	// Sync is the result of the rule evaluation of this refresh, written in the same transaction.
 	Sync SyncWrite
 }
@@ -83,6 +87,13 @@ func ids[T any](rows []T, id func(T) string) []string {
 	}
 	return out
 }
+
+// Retention is how long merged and closed pull requests, the activity log and spent rule firings
+// are kept. SaveRefresh drops what is older when asked (Refresh.Prune).
+const Retention = 90 * 24 * time.Hour
+
+const snapshotUpsert = `INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
+	ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data, updated_at = excluded.updated_at`
 
 // SaveRefresh writes repos, pull requests, ticket links, resolutions and the snapshot in one
 // transaction, with one statement per table. Repos seen for the first time get is_new, the global
@@ -133,17 +144,48 @@ func (s *Store) SaveRefresh(ctx context.Context, r Refresh) error {
 			         json_extract(value, '$.position')
 			  FROM json_each(?) WHERE true ON CONFLICT (pr_id, ticket_key) DO NOTHING`,
 				[]any{marshal(r.Links)}},
-			{`INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
-			  ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data, updated_at = excluded.updated_at`,
-				[]any{r.Version, r.Snapshot, now}},
+		}
+		if len(r.Snapshot) > 0 {
+			steps = append(steps, struct {
+				sql  string
+				args []any
+			}{snapshotUpsert, []any{r.Version, r.Snapshot, now}})
 		}
 		for _, st := range steps {
 			if _, err := tx.ExecContext(ctx, st.sql, st.args...); err != nil {
 				return err
 			}
 		}
-		return writeSync(ctx, tx, r.Now, r.Sync)
+		if err := writeSync(ctx, tx, r.Now, r.Sync); err != nil {
+			return err
+		}
+		if !r.Prune {
+			return nil
+		}
+		return prune(ctx, tx, r.Now.Add(-Retention))
 	})
+}
+
+// prune drops, with one set-based statement per table, what is older than cutoff: merged and closed
+// pull requests (their ticket links go with them) unless one of their tickets still has an open
+// pull request, which a rule over several pull requests needs; activity rows; and rule firings of
+// tickets that no pull request links to any more, since only those can never fire again.
+func prune(ctx context.Context, tx *sql.Tx, cutoff time.Time) error {
+	at := unix(cutoff)
+	for _, q := range []string{
+		`DELETE FROM prs
+		 WHERE (state = 'merged' AND merged_at < ?1 OR state = 'closed' AND last_seen_at < ?1)
+		   AND NOT EXISTS (SELECT 1 FROM ticket_links l JOIN ticket_links o ON o.ticket_key = l.ticket_key AND o.removed = 0
+		                   JOIN prs op ON op.id = o.pr_id AND op.state = 'open'
+		                   WHERE l.pr_id = prs.id AND l.removed = 0)`,
+		`DELETE FROM activity WHERE created_at < ?1`,
+		`DELETE FROM rule_firings WHERE fired_at < ?1 AND ticket_key NOT IN (SELECT ticket_key FROM ticket_links)`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, at); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func newIDs(ctx context.Context, tx *sql.Tx, idsJSON string) ([]string, error) {
@@ -184,10 +226,7 @@ func (s *Store) LoadSnapshot(ctx context.Context) (StoredSnapshot, error) {
 
 // SaveSnapshot replaces the stored snapshot only.
 func (s *Store) SaveSnapshot(ctx context.Context, version int64, data []byte, now time.Time) error {
-	_, err := s.w.ExecContext(ctx,
-		`INSERT INTO snapshot (id, version, data, updated_at) VALUES (1, ?, ?, ?)
-		 ON CONFLICT (id) DO UPDATE SET version = excluded.version, data = excluded.data, updated_at = excluded.updated_at`,
-		version, data, unix(now))
+	_, err := s.w.ExecContext(ctx, snapshotUpsert, version, data, unix(now))
 	return err
 }
 

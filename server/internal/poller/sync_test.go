@@ -448,6 +448,39 @@ func TestPreviewAndBaseline(t *testing.T) {
 	}
 }
 
+func TestPreviewAllReadsTheCacheOnceAndKeepsTheOrder(t *testing.T) {
+	fe := pr("PR_fe", 34, "acme/fe", "feat/INP-1-fe", "main", "fe")
+	solo := pr("PR_solo", 3, "acme/web", "feat/INP-2", "main", "solo")
+	fe.ReviewDecision, solo.ReviewDecision = "APPROVED", "APPROVED"
+	r := newRig(t, fe, solo)
+	r.sync()
+	approved := rules.Rule{ID: "x", Name: "x", Enabled: true, Trigger: rules.ReviewApproved, Target: "Done", Mode: rules.All}
+	merged := rules.Rule{ID: "y", Name: "y", Enabled: true, Trigger: rules.Merged, Target: "Done", Mode: rules.All}
+	r.store.mu.Lock()
+	r.store.syncReads, r.store.settingReads = 0, 0
+	r.store.mu.Unlock()
+	got, err := r.p.PreviewAll(context.Background(), []rules.Rule{approved, merged, approved})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.store.mu.Lock()
+	reads, settings := r.store.syncReads, r.store.settingReads
+	r.store.mu.Unlock()
+	if reads != 1 || settings != 1 {
+		t.Fatalf("a batch reads the cache once, got %d sync reads and %d settings reads", reads, settings)
+	}
+	if len(got) != 3 || len(got[0].Moves) != 2 || len(got[1].Moves) != 0 || len(got[2].Moves) != 2 {
+		t.Fatalf("%+v", got)
+	}
+	single, err := r.p.Preview(context.Background(), approved)
+	if err != nil || len(single.Moves) != len(got[0].Moves) {
+		t.Fatalf("%+v %v", single, err)
+	}
+	if none, err := r.p.PreviewAll(context.Background(), nil); err != nil || len(none) != 0 {
+		t.Fatalf("%+v %v", none, err)
+	}
+}
+
 func TestMergedFiringsCoverTheJustMergedPR(t *testing.T) {
 	a := pr("PR_a", 1, "acme/web", "feat/INP-1", "main", "a")
 	b := pr("PR_b", 2, "acme/web", "feat/INP-2", "main", "b")

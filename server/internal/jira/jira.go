@@ -35,6 +35,8 @@ const (
 	TransitionsTTL = 60 * time.Second
 	// StatusesTTL is how long the status names of a site are cached.
 	StatusesTTL = 10 * time.Minute
+	// ProjectsTTL is how long the project keys of a site are cached.
+	ProjectsTTL = 10 * time.Minute
 
 	// AssignedJQL lists the open tickets of the connected user.
 	AssignedJQL = "assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC"
@@ -132,6 +134,9 @@ type Client struct {
 	assigned    map[string]cachedIssues
 	transitions map[string]cachedTransitions
 	statuses    map[string]cachedStatuses
+	projects    map[string]cachedStatuses
+	// swept is when the expired transitions were last dropped.
+	swept time.Time
 }
 
 type cachedStatuses struct {
@@ -364,8 +369,30 @@ func unknownKeys(messages []string) []string {
 	return out
 }
 
-// Projects lists the project keys of the site with GET /project/search, following its pages.
+// Projects lists the project keys of the site with GET /project/search, following its pages. The
+// answer is cached per site for ProjectsTTL, so a refresh every 30 seconds asks Jira once in 10
+// minutes.
 func (c *Client) Projects(ctx context.Context, site string) ([]string, error) {
+	c.mu.Lock()
+	hit, ok := c.projects[site]
+	c.mu.Unlock()
+	if ok && c.now().Sub(hit.at) < ProjectsTTL {
+		return slices.Clone(hit.names), nil
+	}
+	out, err := c.fetchProjects(ctx, site)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if c.projects == nil {
+		c.projects = map[string]cachedStatuses{}
+	}
+	c.projects[site] = cachedStatuses{at: c.now(), names: out}
+	c.mu.Unlock()
+	return slices.Clone(out), nil
+}
+
+func (c *Client) fetchProjects(ctx context.Context, site string) ([]string, error) {
 	var out []string
 	for start := 0; ; {
 		q := url.Values{"maxResults": {strconv.Itoa(projectPage)}, "startAt": {strconv.Itoa(start)}}
@@ -488,9 +515,26 @@ func (c *Client) Transitions(ctx context.Context, site, key string) ([]Transitio
 	if c.transitions == nil {
 		c.transitions = map[string]cachedTransitions{}
 	}
-	c.transitions[cacheKey] = cachedTransitions{at: c.now(), transitions: out}
+	now := c.now()
+	c.transitions[cacheKey] = cachedTransitions{at: now, transitions: out}
+	c.sweepTransitions(now)
 	c.mu.Unlock()
 	return slices.Clone(out), nil
+}
+
+// sweepTransitions drops the cached transitions past their TTL. It scans at most once per TTL, on a
+// write, so the map holds about the tickets of the last minute or two and the cost is amortized
+// constant. The caller holds mu.
+func (c *Client) sweepTransitions(now time.Time) {
+	if now.Sub(c.swept) < TransitionsTTL {
+		return
+	}
+	c.swept = now
+	for k, v := range c.transitions {
+		if now.Sub(v.at) >= TransitionsTTL {
+			delete(c.transitions, k)
+		}
+	}
 }
 
 // Statuses lists the distinct status names of the site, sorted, from one GET /status. Names with the
