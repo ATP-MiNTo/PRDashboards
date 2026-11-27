@@ -851,7 +851,7 @@ export interface components {
             projects: string[];
         };
         /** @enum {string} */
-        RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged";
+        RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged" | "no_review_yet" | "waiting_approvals";
         /** @enum {string} */
         RuleMode: "all" | "any";
         /** @description Every filter is optional (an empty string is no filter) and they combine with AND. */

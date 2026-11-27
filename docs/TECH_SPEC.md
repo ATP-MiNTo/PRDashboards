@@ -322,6 +322,8 @@ Triggers in v1:
 | `commit_stale` | Latest commit is older than N hours (N in the rule) | head SHA |
 | `ci_failing` / `ci_passing` | CI rollup state changes to that value | head SHA + state |
 | `merged` | PR is merged | merged PR id |
+| `no_review_yet` | PR is open, not a draft, has no review and no review decision | head SHA + `:unreviewed` |
+| `waiting_approvals` | PR is open, not a draft, and has at least one approval but fewer than its repository requires | head SHA + `:waiting` |
 
 Filters (all optional, AND): repo (exact or glob), target branch (exact or glob), Jira project,
 Jira issue type, current Jira status.

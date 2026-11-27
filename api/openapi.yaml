@@ -1479,6 +1479,8 @@ components:
         - ci_failing
         - ci_passing
         - merged
+        - no_review_yet
+        - waiting_approvals
     RuleMode:
       type: string
       enum: [all, any]

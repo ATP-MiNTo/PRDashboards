@@ -515,3 +515,44 @@ func TestSnapshotCarriesTheMergePlanOfEachTicket(t *testing.T) {
 		t.Fatalf("plans %v", plans)
 	}
 }
+
+func TestNoReviewYetAndWaitingApprovalsUseTheRepoApprovalsSetting(t *testing.T) {
+	half := pr("PR_half", 1, "acme/web", "feat/INP-1-half", "main", "half")
+	half.ReviewDecision, half.Reviews = "REVIEW_REQUIRED", []github.Review{approved("1", "alice")}
+	fresh := pr("PR_fresh", 2, "acme/web", "feat/INP-2-fresh", "main", "fresh")
+	fresh.ReviewDecision = ""
+	draft := pr("PR_draft", 3, "acme/web", "feat/INP-3-draft", "main", "draft")
+	draft.ReviewDecision, draft.Draft = "", true
+	r := newRig(t, half, fresh, draft)
+	r.sync()
+	ctx := context.Background()
+	preview := func(tr rules.Trigger) []string {
+		pv, err := r.p.Preview(ctx, rules.Rule{ID: "x", Enabled: true, Trigger: tr, Target: "Done", Mode: rules.All})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for _, m := range pv.Moves {
+			keys = append(keys, m.Ticket)
+		}
+		return keys
+	}
+	if got := preview(rules.NoReviewYet); !slices.Equal(got, []string{"INP-2"}) {
+		t.Fatalf("only the ready pull request nobody reviewed: %v", got)
+	}
+	if got := preview(rules.WaitingApprovals); len(got) != 0 {
+		t.Fatalf("one approval is enough with the default of 1: %v", got)
+	}
+	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, 2); err != nil {
+		t.Fatal(err)
+	}
+	if got := preview(rules.WaitingApprovals); !slices.Equal(got, []string{"INP-1"}) {
+		t.Fatalf("1 of the 2 approvals the repo requires: %v", got)
+	}
+	r.putRules(syncRule("waiting", "waiting_approvals", "Done", "all"))
+	r.allowTransitions("INP-1")
+	r.sync()
+	if got := r.jira.moveLog(); !slices.Equal(got, []string{"INP-1:31"}) {
+		t.Fatalf("the engine moves the ticket with the same count: %v", got)
+	}
+}

@@ -92,6 +92,9 @@ func TestSyncStateMergedPRsAndReadySHA(t *testing.T) {
 	if len(st.Merged) != 0 || st.ReadySHA["P1"] != "aaa" || st.ReadySHA["P3"] != "" || len(st.ReadySHA) != 3 {
 		t.Fatalf("open PRs only, a draft has no ready sha: %+v", st)
 	}
+	if len(st.ApprovalsNeed) == 0 || st.ApprovalsNeed["R1"] != 1 {
+		t.Fatalf("each repo carries the approvals it requires: %+v", st.ApprovalsNeed)
+	}
 
 	// P1 merged an hour ago, P4 a year ago, and P2 is the one the running refresh just resolved.
 	old := clock.Now().Add(-365 * 24 * time.Hour).Unix()
