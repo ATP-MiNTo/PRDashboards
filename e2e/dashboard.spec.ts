@@ -33,7 +33,7 @@ test("an SSO-blocked organization shows the banner while the other rows load", a
   await expect(page.getByText("WIP schema cleanup")).toBeVisible();
 
   await configure(request, "github", { sso: true });
-  await page.getByRole("button", { name: "Sync", exact: true }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
 
   const banner = page.getByRole("alert").filter({ hasText: "acme-corp" });
   await expect(banner).toContainText("acme-corp has not authorized this token");

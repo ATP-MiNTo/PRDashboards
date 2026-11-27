@@ -120,10 +120,10 @@ export async function connectAccounts(
   await page.context().close();
 }
 
-// Presses Sync until a row with the text shows, because the first refresh can still be running.
+// Presses Refresh until a row with the text shows, because the first refresh can still be running.
 export async function syncUntil(page: Page, text: string) {
   await expect(async () => {
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(
       page.locator("tr[data-pr]").filter({ hasText: text }).first(),
     ).toBeVisible({ timeout: 3000 });

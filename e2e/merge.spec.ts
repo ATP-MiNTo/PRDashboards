@@ -52,7 +52,7 @@ test.beforeEach(async ({ page, request }) => {
   await signIn(page, "merge");
   await page.goto(APP + "/");
   await expect(async () => {
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(rowOf(page, "INP-104 Invoice export")).toBeVisible({
       timeout: 3000,
     });
@@ -178,7 +178,7 @@ test("a head that moved is refused and the row is refreshed", async ({
     )
     .toBeGreaterThan(before);
   await expect(
-    page.getByRole("button", { name: "Sync", exact: true }),
+    page.getByRole("button", { name: "Refresh", exact: true }),
   ).toBeVisible();
 
   await panel.getByRole("button", { name: "Cancel" }).click();
@@ -234,7 +234,7 @@ test("a stacked pull request merges through GitHub's asynchronous API", async ({
   await configure(request, "github", { stacked: true });
   const row = rowOf(page, "Stack bottom");
   await expect(async () => {
-    await page.getByRole("button", { name: "Sync", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(row).toBeVisible({ timeout: 3000 });
   }).toPass({ intervals: [1000, 2000, 3000], timeout: 15_000 });
   await row.getByRole("button", { name: "Merge", exact: true }).click();

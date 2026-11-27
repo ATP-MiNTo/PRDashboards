@@ -32,7 +32,7 @@ test.beforeEach(async ({ page, request }) => {
 });
 
 const sync = (page: Page) =>
-  page.getByRole("button", { name: "Sync", exact: true }).click();
+  page.getByRole("button", { name: "Refresh", exact: true }).click();
 
 const approve = async (
   page: Page,
