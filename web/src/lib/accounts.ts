@@ -35,14 +35,6 @@ export const SOURCE_VIA: Record<Source, string> = {
   classic: 'a classic token',
 };
 
-/** Why the repository list says what it says: what the source can see. */
-export const SOURCE_WHY: Record<Source, string> = {
-  app: 'Fetched with the GitHub App, which sees the repositories it is installed on',
-  oauth: 'Fetched with the OAuth sign-in',
-  'fine-grained': 'Fetched with the token, which only sees the repositories it was granted',
-  classic: 'Fetched with the token, which sees every repository you can',
-};
-
 /** The host of a Jira site, for "Jira · acme.atlassian.net". Null when the URL is not https. */
 export function siteHost(url: string): string | null {
   try {
