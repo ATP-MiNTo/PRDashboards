@@ -307,6 +307,13 @@ export function useSaveRules() {
 export const usePreviewRule = () =>
   useMutation({ mutationFn: (rule: SyncRule) => previewRule(rule) });
 
+/** Previews several rules, each against the cached data. The server makes no outside call for it. */
+export const usePreviewRules = () =>
+  useMutation({
+    mutationFn: (rules: SyncRule[]) =>
+      Promise.all(rules.map(async (rule) => ({ rule, preview: await previewRule(rule) }))),
+  });
+
 /**
  * The Jira statuses and project keys for the rule form. It is read on demand and kept for a few
  * minutes, never refetched on a timer or on focus.
