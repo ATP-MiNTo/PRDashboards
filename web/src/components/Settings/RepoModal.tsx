@@ -8,8 +8,8 @@ import type {
   RepoSettings,
   Snapshot,
 } from '@/api/client';
-import { useAccounts, useSaveRepo, useSettings, useSnapshot } from '@/api/queries';
-import { SOURCE_VIA, sourceOf } from '@/lib/accounts';
+import { useAccounts, useRepoTokens, useSaveRepo, useSettings, useSnapshot } from '@/api/queries';
+import { SOURCE_VIA, repoTokenTip, sourceOf, tokenOfRepo } from '@/lib/accounts';
 import { METHOD_NAMES, METHOD_ORDER } from '@/lib/merge';
 import {
   DELETE_CHOICES,
@@ -261,7 +261,14 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
   );
 
   const source = accounts ? sourceOf(accounts.github) : null;
-  const tip = `${source ? `Fetched via ${SOURCE_VIA[source]}. ` : ''}"Use default" follows the Repositories defaults.`;
+  const repoToken = useRepoTokens().data?.[repo.id];
+  const ref = tokenOfRepo(repoToken, accounts?.githubTokens ?? []);
+  const fetched = ref
+    ? `${repoTokenTip(ref, repoToken?.viewerPermission)} `
+    : source
+      ? `Fetched via ${SOURCE_VIA[source]}. `
+      : '';
+  const tip = `${fetched}"Use default" follows the Repositories defaults.`;
   const valid = draftValid(draft);
   const setRules = (rules: BranchRule[]) => edit({ ...draft, rules });
 

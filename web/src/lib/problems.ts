@@ -1,6 +1,9 @@
 const MESSAGES: Record<string, string> = {
   invalid_token: 'GitHub rejected the token.',
   insufficient_scopes: 'The token lacks scopes the app needs (repo and read:org).',
+  token_limit: 'You can connect up to 10 tokens.',
+  token_duplicate: 'That token is already connected.',
+  token_name_taken: 'Another token already has that name.',
   org_blocked:
     'An organization requires SAML SSO or blocks this kind of token. Authorize it for the organization in GitHub.',
   missing_permission: 'The token lacks a GitHub permission this action needs.',

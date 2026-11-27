@@ -223,4 +223,99 @@ describe('RepositoriesSection', () => {
     fireEvent.click(await fold());
     expect(await screen.findByText('No repositories yet.')).toBeInTheDocument();
   });
+
+  describe('with several tokens', () => {
+    const tok = (id: string, name: string, over: Record<string, unknown> = {}) => ({
+      id,
+      name,
+      method: 'pat',
+      fineGrained: true,
+      login: 'minto',
+      warning: null,
+      needsReconnect: false,
+      ...over,
+    });
+    const withTokens = () => {
+      api.getAccounts.mockResolvedValue({
+        github: { connected: true, login: 'me', method: 'pat', needsReconnect: false },
+        githubTokens: [
+          tok('aaaaaaaa', 'Work'),
+          tok('bbbbbbbb', 'Personal', { fineGrained: false }),
+        ],
+        githubTokenLimit: 10,
+        jira: { connected: false, sites: [], selectedSiteId: null, needsReconnect: false },
+      });
+      const base = pr('a', 1).repo;
+      api.getSnapshot.mockResolvedValue(
+        snapshot([
+          pr('a', 1, {
+            repo: {
+              ...base,
+              id: 'R1',
+              tokenId: 'aaaaaaaa',
+              tokenName: 'Work',
+              viewerPermission: 'WRITE',
+            },
+          }),
+          pr('b', 2, {
+            repo: {
+              ...base,
+              id: 'R2',
+              nameWithOwner: 'acme/api',
+              tokenId: 'bbbbbbbb',
+              tokenName: 'Personal',
+              viewerPermission: 'READ',
+            },
+          }),
+        ]),
+      );
+    };
+
+    it('names the token on each badge, so two tokens differ by text and not only by colour', async () => {
+      withTokens();
+      renderSection();
+      fireEvent.click(await fold());
+      const list = await screen.findByRole('list', { name: 'Repositories' });
+      const [web, api2] = within(list).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+      expect(await within(web).findByText('Work')).toBeInTheDocument();
+      expect(within(api2).getByText('Personal')).toBeInTheDocument();
+      expect(within(web).queryByText('Token')).toBeNull();
+    });
+
+    it('explains the token in a hint a keyboard can reach, with the role', async () => {
+      withTokens();
+      renderSection();
+      fireEvent.click(await fold());
+      const tip = await screen.findByRole('button', { name: 'About the token of acme/web' });
+      expect(tip).toHaveAccessibleDescription(
+        'Fetched with Work (fine-grained token, minto). Your role here: Write. A fine-grained token works for one owner only.',
+      );
+      fireEvent.focus(tip);
+      expect(document.body.textContent).toContain('Fetched with Work');
+    });
+
+    it('says in the hint that a read-only role cannot merge, and what to do', async () => {
+      withTokens();
+      renderSection();
+      fireEvent.click(await fold());
+      const tip = await screen.findByRole('button', { name: 'About the token of acme/api' });
+      expect(tip).toHaveAccessibleDescription(
+        "Fetched with Personal (classic token, minto). Your role here: Read. Read-only: Merge and Ready are not available here. Add a token from this repository's owner in Accounts.",
+      );
+    });
+
+    it('keeps the generic label, and no hint, for a repository without a token in the snapshot', async () => {
+      withTokens();
+      api.getRepos.mockResolvedValue({
+        repos: [repo('R1', 'acme/web'), repo('R7', 'acme/quiet')],
+      });
+      renderSection();
+      fireEvent.click(await fold());
+      const quiet = (await screen.findByRole('checkbox', { name: 'Show acme/quiet' })).closest(
+        'li',
+      ) as HTMLElement;
+      expect(within(quiet).getByText('Token')).toBeInTheDocument();
+      expect(within(quiet).queryByRole('button', { name: /About the token/ })).toBeNull();
+    });
+  });
 });
