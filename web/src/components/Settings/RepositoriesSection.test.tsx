@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoSettings } from '@/api/client';
@@ -93,6 +95,42 @@ describe('RepositoriesSection', () => {
       'title',
       'Custom settings',
     );
+  });
+
+  it('keeps the badge and the gear of every row with 25 very long names, each name in a one-line cut box', async () => {
+    const long =
+      'a-very-long-organization-name/some-extremely-long-repository-name-for-the-platform';
+    api.getRepos.mockResolvedValue({
+      repos: Array.from({ length: 25 }, (_, i) => repo(`R${i}`, `${long}-${i}`)),
+    });
+    renderSection();
+    fireEvent.click(await fold());
+    const list = await screen.findByRole('list', { name: 'Repositories' });
+    const rows = within(list).getAllByRole('listitem');
+    expect(rows).toHaveLength(25);
+    for (const row of rows) {
+      expect(within(row).getByText('GitHub App')).toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: /^Settings for / })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('button', { name: 'Select all' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    // The name is the Marquee box (a block that is cut with an ellipsis), the one thing in a row that may shrink.
+    const name = within(rows[0] as HTMLElement).getByText(`${long}-0`);
+    expect(name.className).toMatch(/mq/);
+  });
+
+  // jsdom has no layout, so the cause of the 2.4.0 cropping is pinned in the stylesheet itself: an
+  // `auto` grid track is as wide as the longest unbreakable line (a repository name) and pushed the
+  // content out of the sidebar's hidden overflow. The real measure is e2e/sidebar.spec.ts.
+  it('keeps the sidebar content in one shrinkable column', () => {
+    const css = readFileSync(
+      join(process.cwd(), 'src/components/Settings/Settings.module.css'),
+      'utf8',
+    );
+    for (const selector of ['.body', '.section']) {
+      const block = new RegExp(`${selector.replace('.', '\\.')} \\{[^}]*\\}`).exec(css)?.[0] ?? '';
+      expect(block, selector).toContain('grid-template-columns: minmax(0, 1fr)');
+    }
   });
 
   it('shows and hides repositories one by one, with Select all and Clear', async () => {

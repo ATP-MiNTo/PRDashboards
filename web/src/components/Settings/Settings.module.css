@@ -1,15 +1,21 @@
 /* The sidebar content: the repositories, the polling and the theme. Sizes are those of the
    approved design (daisyUI: gap-3 blocks, btn-xs and btn-sm, checkbox-sm, badge-xs). */
 
+/* One column that may shrink to the sidebar: a plain `auto` track is as wide as the longest
+   unbreakable line inside (a repository name), which pushed the select, the Select all button and
+   the gears out of the sidebar, where its hidden overflow cut them off. */
 .body {
   composes: ui-controls from global;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
 .section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
+  min-width: 0;
 }
 
 .section h3 {
@@ -25,12 +31,6 @@
 .error {
   margin: 0;
   color: var(--bad);
-}
-
-.check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .body button:focus-visible,
