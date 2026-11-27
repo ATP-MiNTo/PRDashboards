@@ -15,7 +15,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
   ...api,
 }));
 
-import { AUTO_TOAST } from './ThemeButton';
+import { AUTO_TOAST, THEME_TITLE } from './ThemeButton';
 import { Header, type HeaderProps } from './Header';
 import { SearchBox } from './SearchBox';
 
@@ -325,6 +325,14 @@ describe('theme button', () => {
     fireEvent.click(button('Theme: light'), { shiftKey: true });
     expect(onTheme).toHaveBeenCalledTimes(1);
     expect(onTheme).toHaveBeenLastCalledWith('auto');
+  });
+
+  it('explains the Auto gestures in its tooltip and description', () => {
+    draw(<Theme theme="light" mode="light" onTheme={() => {}} />);
+    const b = button('Theme: light');
+    expect(b).toHaveAttribute('title', THEME_TITLE);
+    expect(b).toHaveAccessibleDescription(THEME_TITLE);
+    expect(THEME_TITLE).toMatch(/right-click.*Shift\+click.*Shift\+Enter.*Menu key/);
   });
 
   it('goes back to the mode chosen before Auto, with a second right-click', () => {

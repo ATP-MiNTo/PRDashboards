@@ -62,13 +62,13 @@ const show = (onOpenRules: () => void = () => {}) =>
 const lastSaved = () => api.putSettings.mock.calls.at(-1)?.[0];
 
 describe('SettingsContent', () => {
-  it('has the repositories, the polling and the theme, and nothing the dialogs took over', async () => {
+  it('has the repositories and the polling, and nothing the dialogs took over, not even a theme block', async () => {
     show();
     const page = document.body;
-    for (const name of [/^Repositories setting/, 'Theme']) {
-      expect(await within(page).findByRole('heading', { name })).toBeInTheDocument();
-    }
-    expect(within(page).getByRole('region', { name: 'Polling' })).toBeInTheDocument();
+    expect(
+      await within(page).findByRole('heading', { name: /^Repositories setting/ }),
+    ).toBeInTheDocument();
+    expect(await within(page).findByRole('region', { name: 'Polling' })).toBeInTheDocument();
     // They moved to the repository dialog, the accounts dialog, the rules dialog and the History view.
     for (const gone of [
       'Delete branch after merge',
@@ -76,25 +76,25 @@ describe('SettingsContent', () => {
       'Status sync rules',
       'Multi-PR tickets',
       'Activity',
+      'Theme',
     ]) {
       expect(within(page).queryByRole('heading', { name: gone })).toBeNull();
     }
+    expect(within(page).queryByRole('checkbox', { name: /^Auto/ })).toBeNull();
     expect(within(page).queryByRole('button', { name: 'Sign out all browsers' })).toBeNull();
     expect(within(page).queryByRole('group', { name: 'Exclude statuses' })).toBeNull();
   });
 
-  it('orders the sections: repositories, polling, theme', async () => {
+  it('orders the sections: repositories, then polling', async () => {
     show();
     const page = document.body;
     const polling = await within(page).findByRole('region', { name: 'Polling' });
     const names = within(page)
       .getAllByRole('heading', { level: 3 })
       .map((h) => h.textContent?.replace(/\d+\/\d+$/, ''));
-    expect(names).toEqual(['Repositories setting', 'Theme']);
+    expect(names).toEqual(['Repositories setting']);
     const repos = within(page).getByRole('heading', { name: /^Repositories setting/ });
-    const theme = within(page).getByRole('heading', { name: 'Theme' });
     expect(repos.compareDocumentPosition(polling) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(polling.compareDocumentPosition(theme) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   describe('polling', () => {
@@ -183,50 +183,6 @@ describe('SettingsContent', () => {
       fireEvent.keyDown(await github(), { key: 'ArrowUp' });
       await waitFor(() => expect(api.putSettings).toHaveBeenCalled());
       expect(await screen.findByRole('alert')).toHaveTextContent('Could not save the settings.');
-    });
-  });
-
-  describe('theme', () => {
-    beforeEach(() => document.documentElement.removeAttribute('data-mode'));
-
-    const auto = async () => {
-      const box = await screen.findByRole('checkbox', {
-        name: /^Auto \(light from 07:00 to 19:00\)/,
-      });
-      await waitFor(() => expect(box).toBeEnabled());
-      return box as HTMLInputElement;
-    };
-    const withTheme = (theme: string) => api.getSettings.mockResolvedValue({ ...settings, theme });
-
-    it('has only the Auto checkbox: the sun and moon button is in the header', async () => {
-      withTheme('dark');
-      show();
-      expect(await auto()).not.toBeChecked();
-      expect(screen.queryByRole('checkbox', { name: 'Dark mode' })).toBeNull();
-    });
-
-    it('turns Auto on and saves it', async () => {
-      withTheme('dark');
-      show();
-      fireEvent.click(await auto());
-      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: 'auto' }));
-    });
-
-    it('is checked in Auto, and turns Auto off by saving the mode in effect', async () => {
-      withTheme('auto');
-      show();
-      const box = await auto();
-      await waitFor(() => expect(box).toBeChecked());
-      await waitFor(() => expect(document.documentElement.dataset.mode).toBeTruthy());
-      const shown = document.documentElement.dataset.mode;
-      fireEvent.click(box);
-      await waitFor(() => expect(lastSaved()).toEqual({ ...settings, theme: shown }));
-    });
-
-    it('is disabled until the settings load', async () => {
-      api.getSettings.mockReturnValue(new Promise(() => {}));
-      show();
-      expect(await screen.findByRole('checkbox', { name: /^Auto/ })).toBeDisabled();
     });
   });
 });

@@ -11,6 +11,10 @@ const hh = (h: number) => String(h).padStart(2, '0');
 /** What the person is told after turning Auto on. */
 export const AUTO_TOAST = `Theme is Auto: light from ${hh(LIGHT_FROM_HOUR)}:00 to ${hh(DARK_FROM_HOUR)}:00`;
 
+/** The tooltip, and the accessible description, of the button: how to reach Auto without a mouse too. */
+export const THEME_TITLE =
+  'Click: light or dark. Auto: right-click, Shift+click, Shift+Enter or the Menu key';
+
 const SUN = (
   <>
     <circle cx="12" cy="12" r="4" />
@@ -28,7 +32,8 @@ const AUTO = (
 
 /**
  * The theme circle. A click switches between light and dark (a click in Auto leaves Auto). A
- * right-click, the context-menu key or Shift+click turns Auto on, or off again with the mode that
+ * right-click, the context-menu key, Shift+click or Shift+Enter (a keyboard "click" carries the
+ * Shift state) turns Auto on, or off again with the mode that
  * was chosen before. The icon is the mode a click would switch to: a sun in the dark, a moon in the
  * light, and a half-filled circle in Auto.
  */
@@ -64,7 +69,7 @@ export function ThemeButton({
       type="button"
       className={styles.ctlButton}
       aria-label={`Theme: ${state}`}
-      title="Click: light or dark. Right-click or Shift+click: Auto"
+      title={THEME_TITLE}
       disabled={loading}
       onClick={(e) => {
         if (e.shiftKey) toggleAuto();
