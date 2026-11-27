@@ -40,7 +40,7 @@ against fresh data and acts as the viewer.
 2. `Service.run`: the pull request must be in the current snapshot (`not_found` otherwise), the GitHub token is read (`not_connected`), and one GraphQL node query fetches the pull request again.
 3. `check` against the fresh data: open (`not_open`), a draft when marking ready (`not_draft`), head equal to `expectedHeadSha` (`head_moved`), and for approve and request changes not opened by the connected user (`own_pull_request`, compared case-insensitively with the stored login of the account; GitHub refuses it too, and that refusal is mapped to the same code). A refusal carries the fresh state, and starts a refresh so the card catches up.
 4. The write: approve and request changes are `POST /repos/{o}/{r}/pulls/{n}/reviews` with the event, the text and `commit_id` set to `expectedHeadSha`, so GitHub itself refuses a commit that is no longer the head (`head_moved`). Mark ready is the GraphQL mutation `markPullRequestReadyForReview` and succeeds only when GitHub answers with the pull request no longer a draft. The viewer's own token is used.
-5. After a success `Refresh` starts one refresh (`Poller.Trigger`, joining a running one), the same call a merge makes. It is the usual two searches, so there is no call per pull request and no polling of its own; the `snapshot` event it publishes is what the browser already listens to. The web hooks also invalidate the snapshot query when the request ends, whatever the outcome.
+5. After a success `Refresh` starts one refresh (`Poller.Trigger`, joining a running one), the same call a merge makes. It is the usual three searches, so there is no call per pull request and no polling of its own; the `snapshot` event it publishes is what the browser already listens to. The web hooks also invalidate the snapshot query when the request ends, whatever the outcome.
 6. Merge: `check` counts the approvals of the fresh pull request against `Linked.ApprovalsRequired`. The card's Merge cell uses `blockOf`, which applies the same rule to `SnapshotPr.approvals` with the same words, after "Changes requested" and before "Review required".
 
 ### On the card
@@ -55,7 +55,7 @@ against fresh data and acts as the viewer.
 
 ## Outside calls
 
-- Per action: one GraphQL node query (the re-check) and one write: one REST review POST, or one GraphQL mutation. Then one refresh (two searches, [poller.md](poller.md)).
+- Per action: one GraphQL node query (the re-check) and one write: one REST review POST, or one GraphQL mutation. Then one refresh (three searches, [poller.md](poller.md)).
 - Nothing from the browser to GitHub. Saving the approvals setting makes no outside call: it rebuilds the snapshot from cached data (`Relink`).
 
 ## Rules and invariants

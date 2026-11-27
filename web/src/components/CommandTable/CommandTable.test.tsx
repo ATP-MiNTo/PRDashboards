@@ -184,6 +184,22 @@ describe('CommandTable', () => {
       expect(screen.getByText('Plain fix')).toBeInTheDocument();
     });
 
+    it('tints only the Blocked tile red, in the strip, and keeps it pressed when it is the filter', async () => {
+      renderWithClient(<CommandTable />);
+      await screen.findByText('Add login');
+      const tiles = screen.getByRole('group', { name: 'Summary' });
+      const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+      expect(tile(/^Blocked/).className).toMatch(/statBlocked/);
+      for (const other of [/^Showing/, /^Ready/, /^Running/, /^Draft/, /^Stale/, /^Stacks/]) {
+        expect(tile(other).className).not.toMatch(/statBlocked/);
+      }
+      expect(tile(/^Blocked/).className).not.toMatch(/statOn/);
+      fireEvent.click(tile(/^Blocked/));
+      expect(tile(/^Blocked/)).toHaveAttribute('aria-pressed', 'true');
+      expect(tile(/^Blocked/).className).toMatch(/statBlocked.*statOn/);
+      expect(tiles.querySelector('[style]')).toBeNull();
+    });
+
     it('filters to the blocked, draft and stale pull requests', async () => {
       renderWithClient(<CommandTable />);
       await screen.findByText('Add login');
@@ -257,6 +273,22 @@ describe('CommandTable', () => {
         ]);
         strip(300, true);
         expect(compact()).toHaveAttribute('aria-hidden', 'true');
+      });
+
+      it('tints the Blocked button red like the tile, and keeps it pressed when it is on', async () => {
+        renderWithClient(<CommandTable />);
+        await screen.findByText('Add login');
+        strip(20, false);
+        const blocked = () => within(compact()).getByRole('button', { name: 'Blocked: 2' });
+        expect(blocked().className).toMatch(/csBlocked/);
+        const others = within(compact())
+          .getAllByRole('button')
+          .filter((b) => b !== blocked());
+        expect(others).toHaveLength(6);
+        for (const b of others) expect(b.className).not.toMatch(/csBlocked/);
+        fireEvent.click(blocked());
+        expect(blocked()).toHaveAttribute('aria-pressed', 'true');
+        expect(blocked().className).toMatch(/csBlocked.*csOn/);
       });
 
       it('applies the same filters as the tiles, and shows which one is on', async () => {

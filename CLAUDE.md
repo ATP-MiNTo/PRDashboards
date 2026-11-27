@@ -1,6 +1,6 @@
 # PR Dashboards
 
-A local dashboard for every open pull request assigned to me or opened by me across GitHub, linked to Jira
+A local dashboard for every open pull request assigned to me, opened by me or waiting on my review across GitHub, linked to Jira
 tickets, with merge and Jira status sync. Background: [docs/PRD.md](docs/PRD.md),
 [docs/TECH_SPEC.md](docs/TECH_SPEC.md) and [docs/architecture.md](docs/architecture.md).
 
@@ -55,7 +55,7 @@ the Playwright specs in `e2e/` with Chromium from `PW_CHROMIUM_PATH` (else
 
 ## Calls and storage
 
-- No N+1 calls: two paginated GraphQL searches for PRs (assigned and authored), one JQL per 100 ticket keys, transitions
+- No N+1 calls: three paginated GraphQL searches for PRs (assigned, authored and review requested), one JQL per 100 ticket keys, transitions
   only for tickets being moved.
 - One refresh at a time. Browser tabs never trigger outside calls on their own.
 - One SQLite writer. Multi-row changes in one transaction. No per-row loops against the database.

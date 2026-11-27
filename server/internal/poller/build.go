@@ -236,19 +236,23 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 }
 
 // rolesOf maps the roles the search recorded. A pull request without any (a refresh that predates
-// roles) counts for both, so the dashboard still lists it under every Show state.
+// roles) counts for assigned and authored, so the dashboard still lists it under the Mine Show
+// state; it never counts as review requested, which only the review search can say.
 func rolesOf(roles []string) []gen.SnapshotPrRoles {
-	out := make([]gen.SnapshotPrRoles, 0, 2)
-	for _, r := range []string{github.RoleAssigned, github.RoleAuthored} {
-		if len(roles) == 0 || slices.Contains(roles, r) {
+	out := make([]gen.SnapshotPrRoles, 0, 3)
+	if len(roles) == 0 {
+		roles = []string{github.RoleAssigned, github.RoleAuthored}
+	}
+	for _, r := range []string{github.RoleAssigned, github.RoleAuthored, github.RoleReviewer} {
+		if slices.Contains(roles, r) {
 			out = append(out, gen.SnapshotPrRoles(r))
 		}
 	}
 	return out
 }
 
-// fillRoles gives every pull request of a snapshot stored before roles existed both roles. It
-// reports whether it changed anything.
+// fillRoles gives every pull request of a snapshot stored before roles existed assigned and
+// authored. It reports whether it changed anything.
 func fillRoles(s *gen.Snapshot) bool {
 	changed := false
 	for i := range s.Prs {

@@ -2,9 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { reducedMotion } from '@/lib/storage';
 import styles from './Toolbar.module.css';
 
+/** The colour of the dot an option shows before its label, the same green and red as the cards. */
+export type RollTone = 'green' | 'red';
+
 export interface RollOption<T extends string> {
   id: T;
   label: string;
+  /** A dot of this colour before the label. Without it there is no dot. */
+  tone?: RollTone;
 }
 
 /**
@@ -55,7 +60,7 @@ export function RollSwitch<T extends string>({
   defaultChoice,
 }: RollSwitchProps<T>) {
   const current = options.find((o) => o.id === value) ?? options[0];
-  const [from, setFrom] = useState<string | null>(null);
+  const [from, setFrom] = useState<RollOption<T> | null>(null);
   const [announce, setAnnounce] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -64,13 +69,20 @@ export function RollSwitch<T extends string>({
   const go = (next: RollOption<T> | undefined) => {
     if (!next) return;
     if (!reducedMotion()) {
-      setFrom(current.label);
+      setFrom(current);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => setFrom(null), ROLL_MS);
     }
     setAnnounce(`${name}: ${next.label}`);
     onChange(next.id);
   };
+
+  const line = (o: RollOption<T>) => (
+    <span className={styles.rollLine}>
+      {o.tone && <span className={`${styles.rollDot} ${styles[`rollDot_${o.tone}`]}`} />}
+      {o.label}
+    </span>
+  );
 
   // A switch with a default has nothing to roll to when the turn has one option only.
   const goIfOther = (next: RollOption<T> | undefined) => {
@@ -120,9 +132,12 @@ export function RollSwitch<T extends string>({
       >
         <span className={styles.rollWin} aria-hidden="true">
           {/* While it rolls, the old label sits above the new one and both slide up together. */}
-          <span key={`${value}${from ?? ''}`} className={from === null ? undefined : styles.rollGo}>
-            {from !== null && <span className={styles.rollLine}>{from}</span>}
-            <span className={styles.rollLine}>{current.label}</span>
+          <span
+            key={`${value}${from?.id ?? ''}`}
+            className={from === null ? undefined : styles.rollGo}
+          >
+            {from !== null && line(from)}
+            {line(current)}
           </span>
         </span>
         {count !== undefined && (

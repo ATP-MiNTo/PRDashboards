@@ -26,6 +26,28 @@ function Harness({ onChange }: { onChange?: (v: string) => void }) {
 }
 
 describe('RollSwitch', () => {
+  it('draws a dot before the label of an option with a tone, and not before the others', () => {
+    const options: RollOption<'a' | 'b' | 'c'>[] = [
+      { id: 'a', label: 'Alpha' },
+      { id: 'b', label: 'Beta', tone: 'green' },
+      { id: 'c', label: 'Gamma', tone: 'red' },
+    ];
+    const dots = () => screen.getByRole('button').querySelectorAll('[class*="rollDot"]');
+    const view = (value: 'a' | 'b' | 'c') => (
+      <RollSwitch name="Show" options={options} value={value} onChange={() => {}} />
+    );
+    const { rerender } = render(view('a'));
+    expect(dots()).toHaveLength(0);
+    rerender(view('b'));
+    expect(dots()).toHaveLength(1);
+    expect(dots()[0]!.className).toMatch(/rollDot_green/);
+    expect(dots()[0]).not.toHaveAttribute('style');
+    rerender(view('c'));
+    expect(dots()[0]!.className).toMatch(/rollDot_red/);
+    // The dot is decoration: the name says the state in words.
+    expect(screen.getByRole('button')).toHaveAccessibleName(/now Gamma/);
+  });
+
   it('names the switch with its state and count', () => {
     render(<Harness />);
     expect(screen.getByRole('button', { name: /^Show, now Alpha, 1/ })).toBeInTheDocument();

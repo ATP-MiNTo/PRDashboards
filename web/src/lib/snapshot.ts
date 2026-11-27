@@ -148,7 +148,7 @@ const NO_REPOS: ReadonlySet<string> = new Set();
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
-  show: ShowMode = 'everything',
+  show: ShowMode = 'all',
   terms: readonly string[] = [],
   off: ReadonlySet<string> = NO_REPOS,
   now: number = Date.now(),

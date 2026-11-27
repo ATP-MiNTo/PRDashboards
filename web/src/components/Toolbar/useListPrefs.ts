@@ -3,7 +3,7 @@ import { searchTerms } from '@/lib/search';
 import { readStored, readStringList, writeStored } from '@/lib/storage';
 import { DEFAULT_SORT, type SortKey } from '@/lib/sort';
 import type { Filter } from '@/lib/snapshot';
-import { isShowMode, type ShowMode } from '@/lib/show';
+import { parseShowMode, type ShowMode } from '@/lib/show';
 import { NOTES_KEY, parseNotes, pruneNotes, withNote, type Notes } from '@/lib/notes';
 import { DEFAULT_PAGE_SIZE, isHideMode, isPageSize, pruneHidden, type HideMode } from '@/lib/view';
 
@@ -19,8 +19,7 @@ function storedMode(): HideMode {
 }
 
 function storedShow(): ShowMode {
-  const v = readStored(SHOW_KEY);
-  return isShowMode(v) ? v : 'everything';
+  return parseShowMode(readStored(SHOW_KEY));
 }
 
 function storedPageSize(): number {

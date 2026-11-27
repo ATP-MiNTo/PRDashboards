@@ -12,6 +12,8 @@ interface Tile {
   short: string;
   filter: Filter;
   hl?: boolean;
+  /** Tinted pastel red, for the tile that says something is stuck. */
+  red?: boolean;
 }
 
 /** In this order, "Showing" first: the unfiltered list, then the statuses, then the stacks. */
@@ -19,11 +21,25 @@ export const TILES: Tile[] = [
   { key: 'showing', label: 'Showing', short: 'Showing', filter: 'all' },
   { key: 'ready', label: 'Ready to merge', short: 'Ready', filter: 'ready', hl: true },
   { key: 'running', label: 'Running CI', short: 'CI', filter: 'running' },
-  { key: 'blocked', label: 'Blocked', short: 'Blocked', filter: 'blocked' },
+  { key: 'blocked', label: 'Blocked', short: 'Blocked', filter: 'blocked', red: true },
   { key: 'draft', label: 'Draft', short: 'Draft', filter: 'draft' },
   { key: 'stale', label: 'Stale', short: 'Stale', filter: 'stale' },
   { key: 'stacks', label: 'Stacks', short: 'Stacks', filter: 'stacks' },
 ];
+
+/** The class of a tile or compact button: its base, the red tint of Blocked, and the pressed state. */
+function tileClass(
+  base: string | undefined,
+  pressed: string | undefined,
+  red: string | undefined,
+  t: Tile,
+  on: boolean,
+): string {
+  const cls = [base];
+  if (t.red) cls.push(red);
+  if (on && t.filter !== 'all') cls.push(pressed);
+  return cls.filter(Boolean).join(' ');
+}
 
 /** The numbers of the tiles for what the list shows, or undefined before the snapshot is there. */
 export function useListStats(view: ListView): ListStats | undefined {
@@ -56,7 +72,7 @@ export function StatStrip({
           <button
             key={t.key}
             type="button"
-            className={on && t.filter !== 'all' ? `${styles.stat} ${styles.statOn}` : styles.stat}
+            className={tileClass(styles.stat, styles.statOn, styles.statBlocked, t, on)}
             aria-pressed={on}
             onClick={() => onFilter(t.filter)}
           >
@@ -84,7 +100,7 @@ export function CompactStats({ stats, filter, onFilter }: TilesProps) {
           <button
             key={t.key}
             type="button"
-            className={on && t.filter !== 'all' ? `${styles.cs} ${styles.csOn}` : styles.cs}
+            className={tileClass(styles.cs, styles.csOn, styles.csBlocked, t, on)}
             aria-pressed={on}
             aria-label={`${t.label}: ${stats[t.key]}`}
             onClick={() => onFilter(t.filter)}
