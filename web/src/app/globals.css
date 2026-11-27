@@ -23,6 +23,13 @@
   --radius-pill: 9999px;
   --ctl-h: 2rem;
 
+  /* The floating header pills (Header.module.css) and the room under them: toasts start at
+     --header-bottom and end at --header-edge from the right, so they never cover the header. */
+  --pill-top: 22px;
+  --pill-h: 44px;
+  --header-bottom: calc(var(--pill-top) + var(--pill-h));
+  --header-edge: calc(max(16px, env(safe-area-inset-right, 0px)) + 12px);
+
   /* Text: ink, and the muted steps. The design mutes text to 70% (65% for eyebrows), which gives
      3.3 to 3.8:1 on the glass in light mode. These steps are the lowest that reach 4.5:1 on every
      surface of the page, tinted rows and stack banners included. */

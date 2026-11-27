@@ -8,7 +8,7 @@ The top of the dashboard: two floating glass pills that stay at the top while th
 
 - Left pill: the burger ("Settings sidebar") and the brand "PRDashboards" (Space Grotesk, 18px, 600) followed by the repo and branch icon. The name slides in after the page scrolls (max width 14rem, .4s).
 - Right pill: the compact summary (only once the stat strip has scrolled out of view, at every width; its Blocked button has the same pastel red tint as the Blocked tile, [command-table.md](command-table.md)), the search field (from 768px, [search.md](search.md)), the Refresh circle, the history circle and the theme circle.
-- Both pills are 44px high, 22px from the top, 12px from the sides, and transparent until the page scrolls past 24px, then glass (`oklch(var(--b1) / .94)`, blur 10px, a 15% ink border, a soft shadow).
+- Both pills are 44px high, 22px from the top (`--pill-h` and `--pill-top` in globals.css; with `--header-bottom` they place the toasts under the pills, [toast.md](toast.md)), 12px from the sides, and transparent until the page scrolls past 24px, then glass (`oklch(var(--b1) / .94)`, blur 10px, a 15% ink border, a soft shadow).
 - Under the pills a glass title bar holds the `h1` (the same name and icon). It scrolls away with the page.
 
 ## Data model

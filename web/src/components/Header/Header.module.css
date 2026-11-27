@@ -17,8 +17,8 @@
 .pill {
   display: flex;
   align-items: center;
-  height: 44px;
-  margin-top: 22px;
+  height: var(--pill-h);
+  margin-top: var(--pill-top);
   border: 1px solid transparent;
   border-radius: 0.75rem;
   background: transparent;
