@@ -109,3 +109,27 @@ func TestInstallFilesAreServedWithoutASessionAndWithTheSecurityHeaders(t *testin
 		}
 	}
 }
+
+func TestFontsAndCursorsAreServedWithTheirTypesAndAllowedByTheCSP(t *testing.T) {
+	g := newRig(t, webFS())
+	for _, c := range []struct {
+		path, contentType, cache string
+	}{
+		{"/_next/static/media/inter-latin-wght-normal.abc.woff2", "font/woff2", "public, max-age=31536000, immutable"},
+		{"/cursors/arrow.svg", "image/svg+xml", "no-cache"},
+	} {
+		w := g.do(http.MethodGet, c.path, "")
+		if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), c.contentType) {
+			t.Fatalf("%s: %d %q", c.path, w.Code, w.Header().Get("Content-Type"))
+		}
+		if w.Header().Get("Cache-Control") != c.cache {
+			t.Errorf("%s: Cache-Control %q", c.path, w.Header().Get("Cache-Control"))
+		}
+		csp := w.Header().Get("Content-Security-Policy")
+		for _, want := range []string{"font-src 'self'", "img-src 'self'"} {
+			if !strings.Contains(csp, want) {
+				t.Errorf("%s: CSP lacks %q: %s", c.path, want, csp)
+			}
+		}
+	}
+}

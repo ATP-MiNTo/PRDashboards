@@ -9,9 +9,16 @@ import (
 )
 
 func init() {
-	// The platform's MIME tables differ, and a manifest served as anything else is ignored.
-	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
-		panic(err)
+	// The platform's MIME tables differ, and a manifest served as anything else is ignored. Fonts
+	// and cursors are served as files, and the browser checks their type.
+	for ext, typ := range map[string]string{
+		".webmanifest": "application/manifest+json",
+		".woff2":       "font/woff2",
+		".svg":         "image/svg+xml",
+	} {
+		if err := mime.AddExtensionType(ext, typ); err != nil {
+			panic(err)
+		}
 	}
 }
 
