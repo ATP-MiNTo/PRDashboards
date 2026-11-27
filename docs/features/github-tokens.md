@@ -1,10 +1,8 @@
 # Several GitHub tokens
 
-Status: Partial. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 5, 7 and 10. Related: [auth.md](auth.md), [storage.md](storage.md), [poller.md](poller.md), [security.md](security.md), [merge-and-transition.md](merge-and-transition.md), [review-actions.md](review-actions.md), [settings.md](settings.md), [sidebar-shell.md](sidebar-shell.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 5, 7 and 10. Related: [auth.md](auth.md), [storage.md](storage.md), [poller.md](poller.md), [security.md](security.md), [merge-and-transition.md](merge-and-transition.md), [review-actions.md](review-actions.md), [settings.md](settings.md), [sidebar-shell.md](sidebar-shell.md).
 
 ## Purpose
-
-The server side is built. The Accounts dialog still shows one token, and the web work is separate.
 
 One dashboard reads and operates on repositories of different owners. A fine-grained token or a GitHub App
 installation belongs to one owner (a user or an organization), so a person who works in `acme` and in
@@ -18,8 +16,8 @@ This is not in the PRD or the spec. It changes the one-token rule of the auth an
 - There is a primary token, the first of the list. The summary `Accounts.github` describes it, a GitHub App
   or OAuth sign-in replaces the App or OAuth entry in place (at most one of those), and a personal access
   token is always added.
-- The API is complete. The Accounts dialog still has the single token UI (its "Replace token" form calls
-  `PUT /api/github/pat`, which now adds a token when one is stored), until the web change lands.
+- The Accounts dialog lists the tokens (rename, check, remove, add, "n of 10"); the sidebar badge and the Source
+  column of its table name the token used for each repository.
 
 ## Data model
 

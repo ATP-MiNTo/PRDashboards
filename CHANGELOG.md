@@ -6,6 +6,22 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.3] - 2026-11-27
+
+### Added
+
+- Up to 10 named GitHub tokens. A fine-grained token belongs to one owner, so each owner can have its own. The poller runs the
+  three searches for every token and uses, for each repository, the token whose account has the highest role there. Merge,
+  Approve, Request changes and Ready use that token. The Accounts dialog lists the tokens (add, rename, check, remove), and the
+  token badge in the repository list shows the token's name with a hint.
+- Merge and Ready are greyed out, with the reason, in a repository where your account can only read.
+
+### Changed
+
+- The permission error names the token and the repository, and says that a fine-grained token works for one owner only.
+- The toasts show at the top right, below the header.
+- The Blocked tile only has its number in red.
+
 ## [2.4.2] - 2026-11-27
 
 ### Changed

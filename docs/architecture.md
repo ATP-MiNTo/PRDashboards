@@ -156,7 +156,7 @@ sequenceDiagram
 | Security middleware | [features/security.md](features/security.md) | Built |
 | Storage and secrets | [features/storage.md](features/storage.md) | Built |
 | GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
-| Several GitHub tokens | [features/github-tokens.md](features/github-tokens.md) | Partial |
+| Several GitHub tokens | [features/github-tokens.md](features/github-tokens.md) | Built |
 | Poller and snapshot | [features/poller.md](features/poller.md) | Built |
 | Command Table | [features/command-table.md](features/command-table.md) | Built |
 | Toolbar, show by role, hidden pull requests, pager and footer | [features/toolbar-pager-footer.md](features/toolbar-pager-footer.md) | Built |
