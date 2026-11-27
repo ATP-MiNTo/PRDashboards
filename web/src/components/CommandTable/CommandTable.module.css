@@ -104,7 +104,8 @@
   background: oklch(var(--bc) / 0.08);
 }
 
-/* Blocked is red: a pastel wash and a dark red number, a deeper wash while it is the filter. */
+/* Blocked is red: a pastel red wash, a dark red number and a red-toned label, a deeper wash while
+   it is the filter. */
 .statBlocked {
   background: var(--blocked-bg);
 }
@@ -120,6 +121,10 @@
 
 .statBlocked .statValue {
   color: var(--blocked-fg);
+}
+
+.statBlocked .statTitle {
+  color: var(--blocked-label);
 }
 
 .statTitle {
@@ -183,6 +188,10 @@
 
 .csBlocked .csValue {
   color: var(--blocked-fg);
+}
+
+.csBlocked .csLabel {
+  color: var(--blocked-label);
 }
 
 .csLabel {

@@ -84,12 +84,14 @@
   --rc-r: #f9c9c9;
   --stack: #8b6cf0;
 
-  /* The Blocked tile: a pastel red wash, and its number in a dark red, at least 4.9:1 on the wash
-     (rest, hover and pressed) over the page and the glass, usually 6 to 10. */
-  --blocked-bg: rgba(235, 90, 100, 0.22);
-  --blocked-bg-hover: rgba(235, 90, 100, 0.28);
-  --blocked-bg-on: rgba(235, 90, 100, 0.38);
-  --blocked-fg: #8a1420;
+  /* The Blocked tile: a solid pastel red wash (the --rc-r family), a dark red number and a
+     red-toned label. Contrast on rest #f9c9c9, hover #f4b8b8 and pressed #eea4a4: number 7.43,
+     6.47 and 5.47; label 6.31, 5.50 and 4.65. */
+  --blocked-bg: #f9c9c9;
+  --blocked-bg-hover: #f4b8b8;
+  --blocked-bg-on: #eea4a4;
+  --blocked-fg: #7a1018;
+  --blocked-label: #86202a;
   --card-a-bg: color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1)));
   --card-r-bg: color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1)));
   --card-b-bg: linear-gradient(
@@ -193,10 +195,13 @@
   --rc-a: #1d5560;
   --rc-r: #6a363c;
   --stack: #a994ff;
-  --blocked-bg: rgba(240, 110, 130, 0.18);
-  --blocked-bg-hover: rgba(240, 110, 130, 0.23);
-  --blocked-bg-on: rgba(240, 110, 130, 0.32);
+  /* Dark: a red-tinted dark wash, #5a2328, #672a30 and #7a3138 (rest, hover, pressed). Contrast:
+     number 8.49, 7.42 and 6.23; label 7.16, 6.26 and 5.25. */
+  --blocked-bg: #5a2328;
+  --blocked-bg-hover: #672a30;
+  --blocked-bg-on: #7a3138;
   --blocked-fg: #ffc9cc;
+  --blocked-label: #f8b4b8;
   --card-a-bg: linear-gradient(120deg, rgba(86, 196, 214, 0.17), rgba(86, 196, 214, 0.05) 70%);
   --card-r-bg: linear-gradient(120deg, rgba(240, 128, 150, 0.17), rgba(240, 128, 150, 0.05) 70%);
   --card-b-bg: linear-gradient(
