@@ -148,7 +148,7 @@ export const useSaveRepo = () =>
   useSaveReposWith(({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update));
 
 /**
- * The update that changes only the approvals a repository needs (1 to 10): everything else is sent
+ * The update that changes only the approvals a repository needs (0 to 10): everything else is sent
  * as the repository has it now, and the repository stays marked new or seen as it was.
  */
 export const approvalsUpdate = (repo: RepoSettings, approvalsRequired: number): RepoUpdate => ({
