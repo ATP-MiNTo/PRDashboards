@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError, type SnapshotPr } from '@/api/client';
-import { useMarkReady } from '@/api/queries';
+import { useAccounts, useMarkReady } from '@/api/queries';
 import { describeReviewProblem } from '@/lib/problems';
-import { blockOf } from '@/lib/snapshot';
+import { blockOf, readyBlockOf } from '@/lib/snapshot';
 import { Tip } from '../Tip/Tip';
 import { useToast } from '../Toast/Toast';
 import styles from './Controls.module.css';
@@ -37,7 +37,15 @@ function MergedButton() {
 }
 
 /** A button that looks and reads disabled, but can be focused so that its reason is read out. */
-function Blocked({ reason, className }: { reason: string; className: string | undefined }) {
+function Blocked({
+  reason,
+  className,
+  label = 'Merge',
+}: {
+  reason: string;
+  className: string | undefined;
+  label?: string;
+}) {
   const id = useId();
   return (
     <Tip tip={reason} side="left">
@@ -48,7 +56,7 @@ function Blocked({ reason, className }: { reason: string; className: string | un
         aria-describedby={id}
         onClick={(e) => e.preventDefault()}
       >
-        Merge
+        {label}
       </button>
       <span id={id} className={styles.srOnly}>
         {reason}
@@ -59,7 +67,8 @@ function Blocked({ reason, className }: { reason: string; className: string | un
 
 /**
  * The Merge cell of a card: the blue Merge button when the pull request is ready, the green Ready
- * button for a draft, and otherwise a disabled Merge with the reason as a tooltip on its left.
+ * button for a draft, and otherwise a disabled Merge with the reason as a tooltip on its left. A
+ * repository the account can only read disables Merge, and Ready unless the viewer opened the draft.
  * `launched` shows the launch animation after the server accepted the merge.
  */
 export function MergeCell({
@@ -72,6 +81,7 @@ export function MergeCell({
   onMerge: () => void;
 }) {
   const block = blockOf(pr);
+  const login = useAccounts().data?.github.login ?? undefined;
   const ready = useMarkReady();
   const toast = useToast();
   // After "Ready" the snapshot can still say draft for a moment: the card keeps showing the frosted,
@@ -120,6 +130,9 @@ export function MergeCell({
   if (pr.isDraft && readied) return <Blocked reason={COLD_TIP} className={styles.mergeOff} />;
 
   if (pr.isDraft) {
+    // The account cannot write here and did not open the draft: GitHub would refuse, so say so.
+    const readOnly = readyBlockOf(pr, login);
+    if (readOnly) return <Blocked reason={readOnly} className={styles.mergeOff} label="Ready" />;
     return (
       <Tip tip={DRAFT_TIP} side="left">
         <button

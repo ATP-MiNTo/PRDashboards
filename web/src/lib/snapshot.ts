@@ -74,8 +74,35 @@ export function approvalsBlock(a: Approvals): string | null {
   return a.have >= need ? null : `Needs ${need} approvals, has ${a.have}`;
 }
 
+/**
+ * Why the connected account cannot write to the repository of a pull request, or null. It reads the
+ * account's role on the repository (`repo.viewerPermission`): read and triage cannot merge or take
+ * a draft out of draft, and GitHub would refuse. A snapshot stored before the role was carried has
+ * none, and then nothing is blocked. The role is the account's, not the token's: a token without
+ * Pull requests: write still fails at click time with the server's message.
+ */
+export function readOnlyReason(pr: SnapshotPr): string | null {
+  const role = pr.repo.viewerPermission;
+  if (role !== 'READ' && role !== 'TRIAGE') return null;
+  return `Read-only here: your token's account can't write to ${pr.repo.nameWithOwner}`;
+}
+
+/**
+ * Why a draft cannot be marked ready by the connected account, or null. The author may mark their
+ * own draft ready even without write access; anyone else needs it. `login` is the connected GitHub
+ * login, undefined while it is not known (the `authored` role still says it is the viewer's).
+ */
+export function readyBlockOf(pr: SnapshotPr, login: string | undefined): string | null {
+  const own =
+    pr.roles.includes('authored') ||
+    (login !== undefined && pr.author?.toLowerCase() === login.toLowerCase());
+  return own ? null : readOnlyReason(pr);
+}
+
 export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.isDraft) return { readiness: 'draft', reason: 'Draft' };
+  const readOnly = readOnlyReason(pr);
+  if (readOnly) return { readiness: 'blocked', reason: readOnly };
   const parent = parentNumber ?? pr.stack?.parentNumber ?? null;
   if (pr.stack?.parentId && parent !== null) {
     return { readiness: 'blocked', reason: `Merge after #${parent}` };

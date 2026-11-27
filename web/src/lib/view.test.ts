@@ -158,6 +158,17 @@ describe('listStats', () => {
     });
   });
 
+  it('counts a pull request in a read-only repository as blocked, not ready, and filters it so', () => {
+    const readOnly = pr('r', 6, {
+      roles: ['reviewer'],
+      repo: { ...pr('r', 6).repo, id: 'R2', viewerPermission: 'READ' },
+    });
+    const withRo = snapshot([...s.prs, readOnly]);
+    expect(listStats(withRo, view())).toMatchObject({ showing: 6, ready: 2, blocked: 3, draft: 1 });
+    expect(listStats(withRo, view({ filter: 'blocked' })).showing).toBe(3);
+    expect(listStats(withRo, view({ filter: 'ready' })).showing).toBe(2);
+  });
+
   it('counts a pull request as stale from three days after its last commit, and never without one', () => {
     const at = (iso: string | null) => snapshot([pr('x', 1, { committedAt: iso })]);
     const day = 24 * 60 * 60 * 1000;

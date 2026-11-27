@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { SnapshotPr } from '@/api/client';
 import { NOW, pr, snapshot } from '@/test-fixtures';
 import {
   approvalsBlock,
@@ -12,6 +13,8 @@ import {
   matches,
   STALE_AFTER_MS,
   orgSsoUrl,
+  readOnlyReason,
+  readyBlockOf,
   relativeTime,
   safeLink,
 } from './snapshot';
@@ -107,11 +110,64 @@ describe('blockOf', () => {
     expect(blockOf(pr('a', 1, over))).toEqual({ readiness, reason });
   });
 
+  it.each(['READ', 'TRIAGE'] as const)('blocks a repository the account can only %s', (role) => {
+    const row = pr('a', 1, { repo: { ...pr('a', 1).repo, viewerPermission: role } });
+    expect(blockOf(row)).toEqual({
+      readiness: 'blocked',
+      reason: "Read-only here: your token's account can't write to acme/web",
+    });
+  });
+
+  it.each([['WRITE'], ['MAINTAIN'], ['ADMIN'], [undefined]] as const)(
+    'blocks nothing for the role %s (a snapshot without the role gates nothing)',
+    (role) => {
+      const row = pr('a', 1, { repo: { ...pr('a', 1).repo, viewerPermission: role } });
+      expect(blockOf(row)).toEqual({ readiness: 'ready', reason: null });
+    },
+  );
+
+  it('keeps a draft a draft whatever the role, and says read-only before other blocks', () => {
+    const repo = { ...pr('a', 1).repo, viewerPermission: 'READ' as const };
+    expect(blockOf(pr('a', 1, { repo, isDraft: true }))).toEqual({
+      readiness: 'draft',
+      reason: 'Draft',
+    });
+    expect(blockOf(pr('a', 1, { repo, mergeable: 'CONFLICTING' })).reason).toMatch(
+      /^Read-only here/,
+    );
+  });
+
   it('tells a stacked child to merge after its parent', () => {
     const child = pr('b', 2, {
       stack: { id: 'a', position: 2, size: 2, parentId: 'a', parentNumber: 1 },
     });
     expect(blockOf(child).reason).toBe('Merge after #1');
+  });
+});
+
+describe('readOnlyReason and readyBlockOf', () => {
+  const readOnly = (over: Partial<SnapshotPr> = {}) =>
+    pr('a', 1, {
+      isDraft: true,
+      author: 'priya',
+      roles: ['assigned'],
+      repo: { ...pr('a', 1).repo, viewerPermission: 'READ' },
+      ...over,
+    });
+
+  it('names the repository, and is null without a read-only role', () => {
+    expect(readOnlyReason(readOnly())).toBe(
+      "Read-only here: your token's account can't write to acme/web",
+    );
+    expect(readOnlyReason(pr('a', 1))).toBeNull();
+  });
+
+  it('blocks Ready for a draft of someone else, but not for its author', () => {
+    expect(readyBlockOf(readOnly(), 'octocat')).toMatch(/^Read-only here/);
+    expect(readyBlockOf(readOnly(), undefined)).toMatch(/^Read-only here/);
+    expect(readyBlockOf(readOnly({ author: 'OctoCat' }), 'octocat')).toBeNull();
+    expect(readyBlockOf(readOnly({ roles: ['authored'] }), undefined)).toBeNull();
+    expect(readyBlockOf(pr('a', 1, { isDraft: true }), 'octocat')).toBeNull();
   });
 });
 

@@ -481,3 +481,36 @@ test("marks a draft ready from its card", async ({ page, request }) => {
   ).toHaveAccessibleDescription("Checks restart after leaving draft.");
   await pollSnapshot(page, 32, (p) => p.isDraft).toBe(false);
 });
+
+test("a repository where the account can only read blocks Merge up front but keeps the review actions", async ({
+  page,
+  request,
+}) => {
+  await configure(request, "github", { review: true, readOnly: true });
+  const title = "RO-41 Someone else's repository";
+  const card = cardOf(page, title);
+  await expect(async () => {
+    if (!(await card.isVisible())) {
+      expect((await call(page, "POST", "/api/sync")).status).toBe(202);
+    }
+    await expect(card).toBeVisible({ timeout: 3000 });
+  }).toPass({ intervals: [500, 1500], timeout: 15_000 });
+
+  const merge = card.getByRole("button", { name: "Merge", exact: true });
+  await expect(merge).toHaveAttribute("aria-disabled", "true");
+  await expect(merge).toHaveAccessibleDescription(
+    "Read-only here: your token's account can't write to oss/lib",
+  );
+  expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
+  // Reviewing needs no write role: the Action menu stays.
+  await expect(
+    card.getByRole("button", { name: "Review action for #41" }),
+  ).toBeVisible();
+  // The other repositories keep their Merge button.
+  await expect(
+    cardOf(page, "REV-31 Needs two approvals").getByRole("button", {
+      name: "Merge",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
