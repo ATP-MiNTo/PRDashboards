@@ -14,14 +14,17 @@ type Settings struct {
 	Theme                  string
 	DefaultMethod          string
 	DeleteBranchAfterMerge bool
-	JiraSiteID             *string
+	// MultiPrTickets is when a ticket shared by several pull requests moves for the rules in mode
+	// "default": "all" (the last PR meets the rule) or "any" (the first one does).
+	MultiPrTickets string
+	JiraSiteID     *string
 	// ExcludedStatuses are the Jira statuses whose tickets no sync rule moves.
 	ExcludedStatuses []string
 }
 
 // DefaultSettings returns the settings of a fresh install.
 func DefaultSettings() Settings {
-	return Settings{GitHubSec: 60, JiraSec: 300, Theme: "auto", DefaultMethod: "squash", ExcludedStatuses: []string{"Done"}}
+	return Settings{GitHubSec: 60, JiraSec: 300, Theme: "auto", DefaultMethod: "squash", MultiPrTickets: "all", ExcludedStatuses: []string{"Done"}}
 }
 
 const (
@@ -30,6 +33,7 @@ const (
 	keyTheme         = "theme"
 	keyDefaultMethod = "defaultMethodForNewRepos"
 	keyDeleteBranch  = "deleteBranchAfterMerge"
+	keyMultiPr       = "multiPrTickets"
 	keyJiraSite      = "jiraSiteId"
 	keyExcluded      = "excludedStatuses"
 )
@@ -59,6 +63,8 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 			dst = &out.DefaultMethod
 		case keyDeleteBranch:
 			dst = &out.DeleteBranchAfterMerge
+		case keyMultiPr:
+			dst = &out.MultiPrTickets
 		case keyJiraSite:
 			dst = &out.JiraSiteID
 		case keyExcluded:
@@ -85,6 +91,7 @@ func (s *Store) PutSettings(ctx context.Context, v Settings) error {
 		{keyTheme, v.Theme},
 		{keyDefaultMethod, v.DefaultMethod},
 		{keyDeleteBranch, v.DeleteBranchAfterMerge},
+		{keyMultiPr, v.MultiPrTickets},
 		{keyJiraSite, v.JiraSiteID},
 		{keyExcluded, v.ExcludedStatuses},
 	}

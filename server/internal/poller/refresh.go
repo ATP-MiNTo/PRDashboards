@@ -14,6 +14,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
@@ -98,7 +99,7 @@ func (p *Poller) refresh(ctx context.Context, req request) error {
 	p.mu.Lock()
 	p.ls = ls
 	p.mu.Unlock()
-	out := p.runRules(ctx, now, state, ls, site, st.ExcludedStatuses)
+	out := p.runRules(ctx, now, state, ls, site, st.ExcludedStatuses, rules.Mode(st.MultiPrTickets))
 
 	p.mu.Lock()
 	p.version++

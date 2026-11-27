@@ -434,20 +434,20 @@ func TestRepoMethodInheritanceAndDeleteBranchChoice(t *testing.T) {
 		}
 		return r
 	}
-	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); !r.InheritMethod || r.DeleteBranch != gen.Default {
+	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); !r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceDefault {
 		t.Fatalf("a new repo follows the defaults: %+v", r)
 	}
 	r := read(put(`{"defaultMethod":"rebase","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"no"}`))
-	if r.InheritMethod || r.DeleteBranch != gen.No || r.DefaultMethod != "rebase" {
+	if r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceNo || r.DefaultMethod != "rebase" {
 		t.Fatalf("%+v", r)
 	}
 	// The delete-branch choice left out stays; the inheritance left out is false, like the method it goes with.
 	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false}`))
-	if r.InheritMethod || r.DeleteBranch != gen.No {
+	if r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceNo {
 		t.Fatalf("%+v", r)
 	}
 	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"inheritMethod":true,"deleteBranch":"yes"}`))
-	if !r.InheritMethod || r.DeleteBranch != gen.Yes {
+	if !r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceYes {
 		t.Fatalf("%+v", r)
 	}
 	if _, relinks, _ := g.p.counts(); relinks != 3 {
@@ -465,7 +465,7 @@ func TestRepoMethodInheritanceAndDeleteBranchChoice(t *testing.T) {
 	}
 	w := g.do(http.MethodPut, "/api/repos", `{"repos":[{"id":"R1","update":{"defaultMethod":"squash","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"default"}}]}`, g.l.write()...)
 	var list gen.Repos
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].InheritMethod || list.Repos[0].DeleteBranch != gen.Default {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].InheritMethod || list.Repos[0].DeleteBranch != gen.DeleteBranchChoiceDefault {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }

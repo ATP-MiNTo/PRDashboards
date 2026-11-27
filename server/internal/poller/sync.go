@@ -155,7 +155,7 @@ func fired(st store.SyncState) map[rules.Key]string {
 
 // runRules evaluates the rules after the data of a refresh is in, moves the tickets that fire and
 // returns what to store with the snapshot (TECH_SPEC 7.3, 7.4).
-func (p *Poller) runRules(ctx context.Context, now time.Time, st store.SyncState, ls []linked, site jira.Site, exclude []string) ruleOutcome {
+func (p *Poller) runRules(ctx context.Context, now time.Time, st store.SyncState, ls []linked, site jira.Site, exclude []string, global rules.Mode) ruleOutcome {
 	var out ruleOutcome
 	if !hasEnabled(st.Rules) {
 		return out
@@ -164,9 +164,9 @@ func (p *Poller) runRules(ctx context.Context, now time.Time, st store.SyncState
 	p.mu.Lock()
 	tickets := p.ticketsOf(st, ls)
 	p.mu.Unlock()
-	res := rules.Evaluate(rules.Input{Now: now, Rules: rs, Tickets: tickets, Fired: fired(st), Exclude: exclude})
+	res := rules.Evaluate(rules.Input{Now: now, Rules: rs, Tickets: tickets, Fired: fired(st), Exclude: exclude, DefaultMode: global})
 	out.waiting = waitingOf(res.Waiting, rs)
-	out.plans = plansOf(now, rs, tickets, exclude)
+	out.plans = plansOf(now, rs, tickets, exclude, global)
 	if len(res.Firings) == 0 || site.ID == "" {
 		return out
 	}
@@ -201,7 +201,7 @@ func waitingOf(ws []rules.Waiting, rs []rules.Rule) map[string]gen.TicketWaiting
 
 // plansOf works out, for every open pull request of every ticket, what the merged rules do when it
 // is merged. Tickets without a merged rule have no plan.
-func plansOf(now time.Time, rs []rules.Rule, tickets []rules.Ticket, exclude []string) map[string]gen.TicketMergePlan {
+func plansOf(now time.Time, rs []rules.Rule, tickets []rules.Ticket, exclude []string, global rules.Mode) map[string]gen.TicketMergePlan {
 	if !slices.ContainsFunc(rs, func(r rules.Rule) bool { return r.Enabled && r.Trigger == rules.Merged }) {
 		return nil
 	}
@@ -215,7 +215,7 @@ func plansOf(now time.Time, rs []rules.Rule, tickets []rules.Ticket, exclude []s
 			if p.State != rules.StateOpen {
 				continue
 			}
-			if plan, ok := rules.AfterMerge(rs, t, p.ID, now, exclude); ok {
+			if plan, ok := rules.AfterMerge(rs, t, p.ID, now, exclude, global); ok {
 				out[p.ID+"|"+t.Key] = gen.TicketMergePlan{Rule: names[plan.Rule], Target: plan.Target, Total: plan.Total, WaitingOn: prRefs(plan.WaitingOn)}
 			}
 		}
@@ -372,7 +372,7 @@ func (p *Poller) Preview(ctx context.Context, r rules.Rule) (RulePreview, error)
 	if err != nil {
 		return RulePreview{}, err
 	}
-	pv := rules.PreviewRule(r, p.cfg.Clock(), tickets, set.ExcludedStatuses)
+	pv := rules.PreviewRule(r, p.cfg.Clock(), tickets, set.ExcludedStatuses, rules.Mode(set.MultiPrTickets))
 	status := make(map[string]string, len(tickets))
 	for _, t := range tickets {
 		status[t.Key] = t.Status
@@ -395,7 +395,7 @@ func (p *Poller) Baseline(ctx context.Context, rs []rules.Rule) ([]store.Firing,
 	if err != nil {
 		return nil, err
 	}
-	res := rules.Evaluate(rules.Input{Now: p.cfg.Clock(), Rules: rs, Tickets: tickets, Exclude: set.ExcludedStatuses})
+	res := rules.Evaluate(rules.Input{Now: p.cfg.Clock(), Rules: rs, Tickets: tickets, Exclude: set.ExcludedStatuses, DefaultMode: rules.Mode(set.MultiPrTickets)})
 	out := make([]store.Firing, len(res.Holds))
 	for i, h := range res.Holds {
 		out[i] = store.Firing{Rule: h.Rule, Ticket: h.Ticket, Fingerprint: h.Fingerprint}
@@ -419,7 +419,7 @@ func (p *Poller) MergedFirings(ctx context.Context, prID string, tickets []strin
 		return nil, err
 	}
 	rs := toRules(st.Rules)
-	res := rules.Evaluate(rules.Input{Now: p.cfg.Clock(), Rules: rs, Tickets: view, Exclude: set.ExcludedStatuses})
+	res := rules.Evaluate(rules.Input{Now: p.cfg.Clock(), Rules: rs, Tickets: view, Exclude: set.ExcludedStatuses, DefaultMode: rules.Mode(set.MultiPrTickets)})
 	var out []store.Firing
 	for _, h := range res.Holds {
 		if h.Trigger == rules.Merged && slices.Contains(tickets, h.Ticket) {

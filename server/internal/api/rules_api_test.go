@@ -75,6 +75,24 @@ func TestRulesGetPutAndReevaluate(t *testing.T) {
 	wantProblem(t, g.do(http.MethodPut, "/api/rules", putRules(false), g.l.write()...), 500, "internal_error")
 }
 
+func TestRulesAcceptTheDefaultMode(t *testing.T) {
+	g := newMergeRig(t)
+	follow := strings.Replace(ruleJSON("a", "merged", 0, ""), `"mode":"all"`, `"mode":"default"`, 1)
+	w := g.do(http.MethodPut, "/api/rules", putRules(false, follow, ruleJSON("b", "merged", 0, "")), g.l.write()...)
+	var list gen.Rules
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Rules[0].Mode != gen.RuleModeDefault || list.Rules[1].Mode != gen.RuleModeAll {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	stored, _ := g.store.Rules(t.Context())
+	if stored[0].Mode != "default" || stored[1].Mode != "all" {
+		t.Fatalf("%+v", stored)
+	}
+	w = g.do(http.MethodPost, "/api/rules/preview", `{"rule":`+follow+`}`, g.l.write()...)
+	if w.Code != 200 || len(g.p.previewed) != 1 || g.p.previewed[0].Mode != rules.Default {
+		t.Fatalf("%d %s %+v", w.Code, w.Body, g.p.previewed)
+	}
+}
+
 func TestRulesPutValidation(t *testing.T) {
 	g := newMergeRig(t)
 	put := func(body string) *http.Response {
@@ -89,6 +107,7 @@ func TestRulesPutValidation(t *testing.T) {
 		"unknown":      strings.Replace(putRules(false, ruleJSON("a", "merged", 0, "")), `"mode":"all"`, `"mode":"all","x":1`, 1),
 		"bad trigger":  putRules(false, ruleJSON("a", "pushed", 0, "")),
 		"bad mode":     strings.Replace(putRules(false, ruleJSON("a", "merged", 0, "")), `"mode":"all"`, `"mode":"some"`, 1),
+		"empty mode":   strings.Replace(putRules(false, ruleJSON("a", "merged", 0, "")), `"mode":"all"`, `"mode":""`, 1),
 		"bad glob":     putRules(false, ruleJSON("a", "merged", 0, "a b")),
 		"bad id":       putRules(false, ruleJSON("a b", "merged", 0, "")),
 		"721 hours":    putRules(false, ruleJSON("a", "commit_stale", 721, "")),

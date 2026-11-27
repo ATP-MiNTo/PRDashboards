@@ -84,7 +84,7 @@ func TestMigrationsAreRecordedOnceAndReopenIsIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 	var n int
-	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 5 {
+	if err := rawDB(t, path).QueryRow(`SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 6 {
 		t.Fatalf("migrations recorded %d, %v", n, err)
 	}
 }
@@ -163,7 +163,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("defaults: %+v %v", got, err)
 	}
 	site := "cloud-1"
-	want := store.Settings{GitHubSec: 120, JiraSec: 900, Theme: "dark", DefaultMethod: "rebase", DeleteBranchAfterMerge: true, JiraSiteID: &site, ExcludedStatuses: []string{"Done", "Closed"}}
+	want := store.Settings{GitHubSec: 120, JiraSec: 900, Theme: "dark", DefaultMethod: "rebase", DeleteBranchAfterMerge: true, MultiPrTickets: "any", JiraSiteID: &site, ExcludedStatuses: []string{"Done", "Closed"}}
 	if err := s.PutSettings(ctx, want); err != nil {
 		t.Fatal(err)
 	}
@@ -205,11 +205,34 @@ func TestSettingsStoredAsTypedJSON(t *testing.T) {
 	}
 	for k, want := range map[string]string{
 		"polling.githubSec": "60", "polling.jiraSec": "300", "theme": `"auto"`,
-		"defaultMethodForNewRepos": `"squash"`, "deleteBranchAfterMerge": "false", "jiraSiteId": "null",
+		"defaultMethodForNewRepos": `"squash"`, "deleteBranchAfterMerge": "false", "multiPrTickets": `"all"`, "jiraSiteId": "null",
 	} {
 		if vals[k] != want {
 			t.Errorf("%s = %q, want %q", k, vals[k], want)
 		}
+	}
+}
+
+func TestSettingsMultiPrTicketsDefaultsToAll(t *testing.T) {
+	ctx := context.Background()
+	s, path, _ := open(t)
+	if got := store.DefaultSettings().MultiPrTickets; got != "all" {
+		t.Fatalf("default = %q", got)
+	}
+	// A database written before the setting existed has no row, so it reads as "all".
+	if _, err := rawDB(t, path).Exec(`INSERT INTO settings (key, value) VALUES ('theme', '"dark"')`); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetSettings(ctx)
+	if err != nil || got.MultiPrTickets != "all" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	got.MultiPrTickets = "any"
+	if err := s.PutSettings(ctx, got); err != nil {
+		t.Fatal(err)
+	}
+	if got, err = s.GetSettings(ctx); err != nil || got.MultiPrTickets != "any" {
+		t.Fatalf("%+v %v", got, err)
 	}
 }
 

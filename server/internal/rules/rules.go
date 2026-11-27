@@ -50,11 +50,35 @@ const (
 // Mode says how a ticket with several pull requests meets a rule.
 type Mode string
 
-// Modes. All is the default.
+// Modes. All is the default of the global setting. Default is only valid on a rule: it follows the
+// global mode that the caller passes in, so this package never reads settings itself.
 const (
-	All Mode = "all"
-	Any Mode = "any"
+	All     Mode = "all"
+	Any     Mode = "any"
+	Default Mode = "default"
 )
+
+// Resolve is the mode a rule runs with: its own, or the global one when it follows the default. A
+// global mode that is not Any counts as All.
+func (m Mode) Resolve(global Mode) Mode {
+	if m == Default {
+		m = global
+	}
+	if m == Any {
+		return Any
+	}
+	return All
+}
+
+// resolveAll returns the rules with every Default mode replaced by the global mode.
+func resolveAll(rs []Rule, global Mode) []Rule {
+	out := make([]Rule, len(rs))
+	for i, r := range rs {
+		r.Mode = r.Mode.Resolve(global)
+		out[i] = r
+	}
+	return out
+}
 
 // Filters narrow a rule. Every filter is optional and they combine with AND. Repo and Branch
 // accept `*` globs, the others are compared without regard to case.
@@ -143,6 +167,8 @@ type Input struct {
 	// Exclude lists the statuses whose tickets no rule moves, fires or lists as waiting. They are
 	// compared without regard to case.
 	Exclude []string
+	// DefaultMode is the global "Multi-PR tickets move when" setting. Rules in mode Default use it.
+	DefaultMode Mode
 }
 
 // Firing is a rule whose condition holds with a fingerprint that is not stored yet.
@@ -192,7 +218,7 @@ type Result struct {
 func Evaluate(in Input) Result {
 	var out Result
 	enabled := make([]Rule, 0, len(in.Rules))
-	for _, r := range in.Rules {
+	for _, r := range resolveAll(in.Rules, in.DefaultMode) {
 		if r.Enabled {
 			enabled = append(enabled, r)
 		}
@@ -392,20 +418,20 @@ type Preview struct {
 }
 
 // PreviewRule evaluates one rule as if it had never fired, enabled and in isolation. Tickets in an
-// excluded status are left out.
-func PreviewRule(r Rule, now time.Time, tickets []Ticket, exclude []string) Preview {
+// excluded status are left out. A rule in mode Default runs with the global mode.
+func PreviewRule(r Rule, now time.Time, tickets []Ticket, exclude []string, global Mode) Preview {
 	r.Enabled = true
-	res := Evaluate(Input{Now: now, Rules: []Rule{r}, Tickets: tickets, Exclude: exclude})
+	res := Evaluate(Input{Now: now, Rules: []Rule{r}, Tickets: tickets, Exclude: exclude, DefaultMode: global})
 	return Preview{Moves: res.Firings, Waiting: res.Waiting}
 }
 
-// Validate checks a rule the way the API does after the schema: a known trigger and mode, hours for
-// commit_stale, and a target.
+// Validate checks a rule the way the API does after the schema: a known trigger and mode (all, any
+// or default), hours for commit_stale, and a target.
 func Validate(r Rule) string {
 	switch {
 	case !slices.Contains(Triggers, r.Trigger):
 		return "unknown trigger"
-	case r.Mode != All && r.Mode != Any:
+	case r.Mode != All && r.Mode != Any && r.Mode != Default:
 		return "unknown mode"
 	case strings.TrimSpace(r.Target) == "" || len(r.Target) > MaxTarget:
 		return "target status must be 1 to " + strconv.Itoa(MaxTarget) + " characters"
@@ -429,8 +455,8 @@ type MergePlan struct {
 // AfterMerge evaluates the enabled merged rules in order for a ticket as if the pull request prID
 // were merged, ignoring what fired before. The first rule whose filters accept the ticket and that
 // pull request is the plan, whether or not it has to wait. It reports false when no rule applies,
-// or when the ticket is in an excluded status.
-func AfterMerge(rs []Rule, t Ticket, prID string, now time.Time, exclude []string) (MergePlan, bool) {
+// or when the ticket is in an excluded status. Rules in mode Default run with the global mode.
+func AfterMerge(rs []Rule, t Ticket, prID string, now time.Time, exclude []string, global Mode) (MergePlan, bool) {
 	if !t.Available || excluded(exclude, t.Status) {
 		return MergePlan{}, false
 	}
@@ -451,7 +477,7 @@ func AfterMerge(rs []Rule, t Ticket, prID string, now time.Time, exclude []strin
 	if this == nil {
 		return MergePlan{}, false
 	}
-	for _, r := range rs {
+	for _, r := range resolveAll(rs, global) {
 		if !r.Enabled || r.Trigger != Merged || !ticketPasses(r.Filters, t) || !prPasses(r.Filters, *this) {
 			continue
 		}

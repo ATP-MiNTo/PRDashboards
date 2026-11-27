@@ -158,6 +158,12 @@ func (s *Store) PutRules(ctx context.Context, list []SyncRule, reset []string, b
 	})
 }
 
+// RecordFirings stores fingerprints in one transaction without moving anything, for the rules whose
+// effective mode changed and must not fire for tickets that already hold.
+func (s *Store) RecordFirings(ctx context.Context, firings []Firing, now time.Time) error {
+	return s.Write(ctx, func(tx *sql.Tx) error { return insertFirings(ctx, tx, now, firings) })
+}
+
 // insertFirings records fingerprints. A firing for a rule that no longer exists is dropped.
 func insertFirings(ctx context.Context, tx *sql.Tx, now time.Time, firings []Firing) error {
 	if len(firings) == 0 {

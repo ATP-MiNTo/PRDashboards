@@ -301,7 +301,7 @@ func TestTransitionsAreMappedAndErrorsBecomeProblems(t *testing.T) {
 func TestConnectionAndSettingChangesWakeThePoller(t *testing.T) {
 	g := newSnapRig(t)
 	put := func(site string) {
-		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"squash","deleteBranchAfterMerge":true,"jiraSiteId":` + site + `,"excludedStatuses":["Done","QA"]}`
+		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"squash","deleteBranchAfterMerge":true,"multiPrTickets":"all","jiraSiteId":` + site + `,"excludedStatuses":["Done","QA"]}`
 		if w := g.do(http.MethodPut, "/api/settings", body, g.l.write()...); w.Code != http.StatusOK {
 			t.Fatalf("%d %s", w.Code, w.Body)
 		}
@@ -394,7 +394,7 @@ func TestJiraOptionsReturnStatusesAndProjectsAndDegradeToProjects(t *testing.T) 
 func TestChangingTheDefaultMethodResolvesThePullRequestsAgain(t *testing.T) {
 	g := newSnapRig(t)
 	put := func(method string) {
-		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"` + method + `","deleteBranchAfterMerge":true,"jiraSiteId":null,"excludedStatuses":["Done"]}`
+		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"` + method + `","deleteBranchAfterMerge":true,"multiPrTickets":"all","jiraSiteId":null,"excludedStatuses":["Done"]}`
 		if w := g.do(http.MethodPut, "/api/settings", body, g.l.write()...); w.Code != http.StatusOK {
 			t.Fatalf("%d %s", w.Code, w.Body)
 		}
@@ -406,5 +406,51 @@ func TestChangingTheDefaultMethodResolvesThePullRequestsAgain(t *testing.T) {
 	put("rebase")
 	if tr, relinks, _ := g.p.counts(); relinks != 1 || tr != 0 {
 		t.Fatalf("repositories that follow the default take it from cached data: relinks %d triggers %d", relinks, tr)
+	}
+}
+
+func TestChangingTheMultiPrModeEvaluatesAgainWithoutMovingHeldTickets(t *testing.T) {
+	g := newMergeRig(t)
+	follow := strings.Replace(ruleJSON("a", "merged", 0, ""), `"mode":"all"`, `"mode":"default"`, 1)
+	explicit := ruleJSON("b", "merged", 0, "")
+	if w := g.do(http.MethodPut, "/api/rules", putRules(false, follow, explicit), g.l.write()...); w.Code != http.StatusOK {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+	base := g.p.reevaluations
+	put := func(mode string) {
+		body := `{"polling":{"githubSec":120,"jiraSec":900},"theme":"auto","defaultMethodForNewRepos":"squash","deleteBranchAfterMerge":true,"multiPrTickets":"` + mode + `","jiraSiteId":null,"excludedStatuses":["Done"]}`
+		if w := g.do(http.MethodPut, "/api/settings", body, g.l.write()...); w.Code != http.StatusOK {
+			t.Fatalf("%d %s", w.Code, w.Body)
+		}
+	}
+	put("all")
+	if g.p.reevaluations != base || len(g.p.baselined) != 0 {
+		t.Fatalf("the same mode changes nothing: %d %d", g.p.reevaluations, len(g.p.baselined))
+	}
+	g.p.baseline = []store.Firing{{Rule: "a", Ticket: "INP-1", Fingerprint: "x"}}
+	put("any")
+	if g.p.reevaluations != base+1 {
+		t.Fatalf("reevaluations %d", g.p.reevaluations)
+	}
+	if len(g.p.baselined) != 1 || g.p.baselined[0].ID != "a" || g.p.baselined[0].Mode != rules.Default {
+		t.Fatalf("only the rules that follow the default are baselined: %+v", g.p.baselined)
+	}
+	st, _ := g.store.SyncState(t.Context(), g.clock.Now(), nil)
+	if len(st.Fired) != 1 || st.Fired[0].Rule != "a" || st.Fired[0].Fingerprint != "x" {
+		t.Fatalf("what holds is recorded so nothing moves: %+v", st.Fired)
+	}
+	got, _ := g.store.GetSettings(t.Context())
+	if got.MultiPrTickets != "any" {
+		t.Fatalf("%+v", got)
+	}
+
+	// Without a rule that follows the default there is nothing to record.
+	if w := g.do(http.MethodPut, "/api/rules", putRules(false, explicit), g.l.write()...); w.Code != http.StatusOK {
+		t.Fatalf("%d", w.Code)
+	}
+	g.p.baselined = nil
+	put("all")
+	if len(g.p.baselined) != 0 {
+		t.Fatalf("%+v", g.p.baselined)
 	}
 }

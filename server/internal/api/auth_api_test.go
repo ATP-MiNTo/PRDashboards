@@ -29,11 +29,12 @@ type settingsBody struct {
 	Theme                    string
 	DefaultMethodForNewRepos string
 	DeleteBranchAfterMerge   bool
+	MultiPrTickets           string
 	JiraSiteID               *string
 	ExcludedStatuses         []string
 }
 
-const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"jiraSiteId":null,"excludedStatuses":["Done","Closed"]}`
+const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"multiPrTickets":"any","jiraSiteId":null,"excludedStatuses":["Done","Closed"]}`
 
 func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	g := newRig(t, webFS())
@@ -44,7 +45,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	}
 	got := decode[settingsBody](t, w)
 	if got.Polling.GithubSec != 60 || got.Polling.JiraSec != 300 || got.Theme != "auto" || got.DefaultMethodForNewRepos != "squash" ||
-		got.DeleteBranchAfterMerge || got.JiraSiteID != nil || !slices.Equal(got.ExcludedStatuses, []string{"Done"}) {
+		got.DeleteBranchAfterMerge || got.MultiPrTickets != "all" || got.JiraSiteID != nil || !slices.Equal(got.ExcludedStatuses, []string{"Done"}) {
 		t.Fatalf("defaults %+v", got)
 	}
 	if !strings.Contains(w.Body.String(), `"jiraSiteId":null`) {
@@ -56,7 +57,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("put: %d %s", w.Code, w.Body)
 	}
 	got = decode[settingsBody](t, g.do(http.MethodGet, "/api/settings", "", cookie(l.cookie)))
-	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge ||
+	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge || got.MultiPrTickets != "any" ||
 		!slices.Equal(got.ExcludedStatuses, []string{"Done", "Closed"}) {
 		t.Fatalf("after put %+v", got)
 	}
@@ -78,6 +79,9 @@ func TestSettingsValidation(t *testing.T) {
 		"unknown field":         strings.Replace(validSettings, `"theme"`, `"extra":1,"theme"`, 1),
 		"unknown polling key":   strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":900,"x":1`, 1),
 		"missing field":         `{"polling":{"githubSec":60,"jiraSec":300},"theme":"auto"}`,
+		"multi-PR mode":         strings.Replace(validSettings, `"multiPrTickets":"any"`, `"multiPrTickets":"first"`, 1),
+		"multi-PR default":      strings.Replace(validSettings, `"multiPrTickets":"any"`, `"multiPrTickets":"default"`, 1),
+		"multi-PR missing":      strings.Replace(validSettings, `"multiPrTickets":"any",`, ``, 1),
 		"flag as string":        strings.Replace(validSettings, `true`, `"yes"`, 1),
 		"empty excluded status": strings.Replace(validSettings, `"Closed"`, `""`, 1),
 		"excluded not a list":   strings.Replace(validSettings, `["Done","Closed"]`, `"Done"`, 1),

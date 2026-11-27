@@ -2,11 +2,14 @@ package store_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/testutil"
 )
 
 func rule(id, trigger string) store.SyncRule {
@@ -209,5 +212,98 @@ func TestSaveSyncAndRefreshWriteTheEvaluationAtomically(t *testing.T) {
 	}
 	if snap, _ := s.LoadSnapshot(ctx); snap.Version == 99 {
 		t.Fatal("the snapshot was written although the transaction failed")
+	}
+}
+
+func TestRuleModeDefaultIsStored(t *testing.T) {
+	s, _, clock := open(t)
+	ctx := context.Background()
+	follow, anyRule := rule("a", "merged"), rule("b", "merged")
+	follow.Mode, anyRule.Mode = "default", "any"
+	if err := s.PutRules(ctx, []store.SyncRule{follow, anyRule, rule("c", "merged")}, nil, nil, clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Rules(ctx)
+	if err != nil || len(got) != 3 || got[0].Mode != "default" || got[1].Mode != "any" || got[2].Mode != "all" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	bad := rule("d", "merged")
+	bad.Mode = "some"
+	if err := s.PutRules(ctx, []store.SyncRule{bad}, nil, nil, clock.Now()); err == nil {
+		t.Fatal("an unknown mode was stored")
+	}
+}
+
+// The migration that allows mode 'default' rebuilds sync_rules, so it must keep the stored rules with
+// their explicit mode, and their firings.
+func TestMigrationKeepsRulesAndFiringsWhenModeDefaultIsAllowed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data.db")
+	db := rawDB(t, path)
+	if _, err := db.Exec(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL) STRICT`); err != nil {
+		t.Fatal(err)
+	}
+	for v, name := range []string{"0001_init.sql", "0002_merge.sql", "0003_sync.sql", "0004_approvals.sql", "0005_repo_prefs.sql"} {
+		body, err := os.ReadFile(filepath.Join("migrations", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(string(body)); err != nil {
+			t.Fatal(name, err)
+		}
+		if _, err := db.Exec(`INSERT INTO schema_migrations (version, applied_at) VALUES (?, 0)`, v+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, q := range []string{
+		`INSERT INTO sync_rules (id, position, name, enabled, trigger, filters, target_status, mode) VALUES ('a', 0, 'A', 1, '{"type":"merged"}', '{}', 'Done', 'any')`,
+		`INSERT INTO sync_rules (id, position, name, enabled, trigger, filters, target_status, mode) VALUES ('b', 1, 'B', 0, '{"type":"merged"}', '{}', 'QA', 'all')`,
+		`INSERT INTO rule_firings (rule_id, ticket_key, fingerprint, fired_at) VALUES ('a', 'INP-1', 'fp', 5)`,
+	} {
+		if _, err := db.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	clock := testutil.NewClock()
+	s, err := store.Open(path, clock.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	got, err := s.Rules(ctx)
+	if err != nil || len(got) != 2 || got[0].ID != "a" || got[0].Mode != "any" || got[1].ID != "b" || got[1].Mode != "all" || got[1].Enabled {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if n := count(t, path, `SELECT count(*) FROM rule_firings WHERE rule_id = 'a' AND ticket_key = 'INP-1' AND fingerprint = 'fp'`); n != 1 {
+		t.Fatalf("firings kept: %d", n)
+	}
+	got[0].Mode = "default"
+	if err := s.PutRules(ctx, got, nil, nil, clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	// The cascade still works on the rebuilt tables.
+	if err := s.PutRules(ctx, got[1:], nil, nil, clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, path, `SELECT count(*) FROM rule_firings`); n != 0 {
+		t.Fatalf("firings of a deleted rule: %d", n)
+	}
+}
+
+func TestRecordFiringsStoresFingerprintsOfKnownRules(t *testing.T) {
+	s, path, clock := open(t)
+	ctx := context.Background()
+	if err := s.PutRules(ctx, []store.SyncRule{rule("a", "merged")}, nil, nil, clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	err := s.RecordFirings(ctx, []store.Firing{{Rule: "a", Ticket: "INP-1", Fingerprint: "x"}, {Rule: "gone", Ticket: "INP-1", Fingerprint: "y"}}, clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, path, `SELECT count(*) FROM rule_firings`); n != 1 {
+		t.Fatalf("firings %d", n)
+	}
+	if err := s.RecordFirings(ctx, nil, clock.Now()); err != nil {
+		t.Fatal(err)
 	}
 }

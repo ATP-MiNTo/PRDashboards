@@ -730,7 +730,7 @@ components:
     Settings:
       type: object
       additionalProperties: false
-      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, jiraSiteId, excludedStatuses]
+      required: [polling, theme, defaultMethodForNewRepos, deleteBranchAfterMerge, multiPrTickets, jiraSiteId, excludedStatuses]
       properties:
         polling:
           type: object
@@ -749,6 +749,13 @@ components:
           enum: [squash, merge, rebase]
         deleteBranchAfterMerge:
           type: boolean
+        multiPrTickets:
+          type: string
+          enum: [all, any]
+          description: >
+            When a ticket linked to several pull requests moves, for the status sync rules whose mode is
+            "default": "all" when the last pull request meets the rule, "any" when the first one does.
+            Defaults to "all".
         jiraSiteId:
           type: string
           nullable: true
@@ -1528,7 +1535,10 @@ components:
         - waiting_approvals
     RuleMode:
       type: string
-      enum: [all, any]
+      enum: [all, any, default]
+      description: >
+        How a ticket with several pull requests meets a rule. "all": when the last pull request meets it.
+        "any": when the first one does. "default" follows Settings.multiPrTickets.
     RuleFilters:
       type: object
       additionalProperties: false
