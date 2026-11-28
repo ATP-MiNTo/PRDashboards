@@ -1,6 +1,17 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { flushSync } from 'react-dom';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot, useSyncStatus } from '@/api/queries';
@@ -12,12 +23,9 @@ import styles from './CommandTable.module.css';
 import { OrgBanner } from './OrgBanner';
 import { CompactStats, StatStrip, useListStats } from './StatStrip';
 import { List, Notice } from './List';
-import { AccountsModal } from '../Accounts/AccountsModal';
-import { HistoryView } from '../History/HistoryView';
 import { Footer } from '../Toolbar/Footer';
 import { Toolbar } from '../Toolbar/Toolbar';
 import { useListPrefs } from '../Toolbar/useListPrefs';
-import { RulesModal } from '../RulesModal/RulesModal';
 import { SettingsContent } from '../Settings/SettingsContent';
 import { Header } from '../Header/Header';
 import { SearchBox } from '../Header/SearchBox';
@@ -32,7 +40,56 @@ import { useStripOut } from './useStripOut';
 const NO_IDS: string[] = [];
 const selectIds = (s: Snapshot) => s.prs.map((p) => p.id);
 const HISTORY_TITLE = 'PRDashboards · History';
+/** How often the clock of the Stale filter ticks. */
+export const STALE_TICK_MS = 3_600_000;
+/** How long after the page is drawn the code of the History view is fetched. */
+const HISTORY_PRELOAD_MS = 1500;
 const NO_SHOW_COUNTS = { all: 0, mine: 0, review: 0 };
+
+// The dialogs and the History view load when they are first opened, not with the page.
+const loadAccounts = () => import('../Accounts/AccountsModal');
+const loadRules = () => import('../RulesModal/RulesModal');
+const loadHistory = () => import('../History/HistoryView');
+const AccountsModal = lazy(() => loadAccounts().then((m) => ({ default: m.AccountsModal })));
+const RulesModal = lazy(() => loadRules().then((m) => ({ default: m.RulesModal })));
+const HistoryView = lazy(() => loadHistory().then((m) => ({ default: m.HistoryView })));
+
+/** The Settings sidebar. It renders again only when what it shows changes, not for a keystroke in the search. */
+const SidebarPane = memo(function SidebarPane({
+  open,
+  overlay,
+  onClose,
+  asideRef,
+  returnFocus,
+  onManage,
+  onOpenRules,
+  off,
+  onOff,
+}: {
+  open: boolean;
+  overlay: boolean;
+  onClose: () => void;
+  asideRef: RefObject<HTMLElement | null>;
+  returnFocus: RefObject<HTMLElement | null>;
+  onManage: () => void;
+  onOpenRules: () => void;
+  off: ReadonlySet<string>;
+  onOff: (next: ReadonlySet<string>) => void;
+}) {
+  return (
+    <Sidebar
+      id="settings-sidebar"
+      open={open}
+      overlay={overlay}
+      onClose={onClose}
+      asideRef={asideRef}
+      returnFocus={returnFocus}
+      footer={<SidebarAccounts onManage={onManage} />}
+    >
+      <SettingsContent onOpenRules={onOpenRules} off={off} onOff={onOff} />
+    </Sidebar>
+  );
+});
 
 export function CommandTable() {
   const snapshot = useSnapshot();
@@ -40,11 +97,18 @@ export function CommandTable() {
   const theme = useTheme(); // keeps the mode on <html> in step with the setting
   const ids = useSnapshot(selectIds).data ?? NO_IDS;
   const prefs = useListPrefs(ids);
-  const { filter, show, terms, hidden, mode, off } = prefs;
-  const shown = useSnapshot((s: Snapshot) => showCounts(s, off)).data ?? NO_SHOW_COUNTS;
-  const listed =
-    useSnapshot((s: Snapshot) => s.prs.filter((p) => !off.has(p.repo.id)).map((p) => p.id)).data ??
-    NO_IDS;
+  const { filter, show, terms, hidden, mode, off, setFilter, setOff } = prefs;
+  const selectShown = useCallback((s: Snapshot) => showCounts(s, off), [off]);
+  const selectListed = useCallback(
+    (s: Snapshot) => s.prs.filter((p) => !off.has(p.repo.id)).map((p) => p.id),
+    [off],
+  );
+  const shown = useSnapshot(selectShown).data ?? NO_SHOW_COUNTS;
+  const listed = useSnapshot(selectListed).data ?? NO_IDS;
+  const hiddenListed = useMemo(
+    () => listed.filter((id) => hidden.has(id)).length,
+    [listed, hidden],
+  );
   const [account, setAccount] = useState(false);
   const [rules, setRules] = useState(false);
   const [history, setHistory] = useState(false);
@@ -52,8 +116,9 @@ export function CommandTable() {
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
-  // The clock of the Stale filter: a minute is fine for a three day limit.
-  const now = useNow(60_000);
+  // The clock of the Stale filter, which has a three day limit: an hour is fine, and the list does
+  // not render again every minute. Times shown on a card tick on their own.
+  const now = useNow(STALE_TICK_MS);
   const view = useMemo(
     () => ({ filter, show, terms, hidden, mode, off, now }),
     [filter, show, terms, hidden, mode, off, now],
@@ -62,8 +127,38 @@ export function CommandTable() {
   // Once the strip has scrolled away, the same tiles show in the right header pill.
   const strip = useStripOut();
   // The History view replaces the list with a cross-fade of the whole page (0.9s).
-  const toggleHistory = () =>
-    crossfade(document, () => flushSync(() => setHistory((h) => !h)), reducedMotion());
+  const toggleHistory = useCallback(
+    () => crossfade(document, () => flushSync(() => setHistory((h) => !h)), reducedMotion()),
+    [],
+  );
+  // Its code loads once the page is idle, so the first toggle fades into a finished view.
+  useEffect(() => {
+    const id = setTimeout(() => void loadHistory(), HISTORY_PRELOAD_MS);
+    return () => clearTimeout(id);
+  }, []);
+  const historyProp = useMemo(
+    () => ({ active: history, onToggle: toggleHistory }),
+    [history, toggleHistory],
+  );
+  const openAccounts = useCallback(() => setAccount(true), []);
+  const closeAccounts = useCallback(() => setAccount(false), []);
+  const openRules = useCallback(() => setRules(true), []);
+  const closeRules = useCallback(() => setRules(false), []);
+  const compactStats = useMemo(
+    () =>
+      stats && !history ? (
+        <CompactStats stats={stats} filter={filter} onFilter={setFilter} />
+      ) : undefined,
+    [stats, history, filter, setFilter],
+  );
+  const counts = useMemo(
+    () => ({
+      visible: Math.max(0, listed.length - hiddenListed),
+      all: listed.length,
+      hidden: hiddenListed,
+    }),
+    [listed, hiddenListed],
+  );
 
   // The History view re-tints the whole page, light and dark, through a `data-view` on <html>
   // (the warm palette of the design, in globals.css). Set in the same commit as the view, so the
@@ -77,22 +172,21 @@ export function CommandTable() {
     };
   }, [history]);
 
-  const hiddenListed = listed.filter((id) => hidden.has(id)).length;
   const data = snapshot.data;
   return (
     <ToastProvider>
       <div className={styles.page}>
-        <Sidebar
-          id="settings-sidebar"
+        <SidebarPane
           open={sidebar.open}
           overlay={!sidebar.wide}
           onClose={sidebar.close}
           asideRef={sidebar.aside}
           returnFocus={burger}
-          footer={<SidebarAccounts onManage={() => setAccount(true)} />}
-        >
-          <SettingsContent onOpenRules={() => setRules(true)} off={off} onOff={prefs.setOff} />
-        </Sidebar>
+          onManage={openAccounts}
+          onOpenRules={openRules}
+          off={off}
+          onOff={setOff}
+        />
         <div className={styles.main}>
           <Header
             stuck={scrolled}
@@ -107,13 +201,9 @@ export function CommandTable() {
             theme={theme.theme}
             mode={theme.mode}
             onTheme={theme.setTheme}
-            history={{ active: history, onToggle: toggleHistory }}
+            history={historyProp}
             title={history ? HISTORY_TITLE : undefined}
-            compactStats={
-              stats && !history ? (
-                <CompactStats stats={stats} filter={filter} onFilter={prefs.setFilter} />
-              ) : undefined
-            }
+            compactStats={compactStats}
             showCompactStats={strip.out && !history}
           />
           <main className={styles.wrap}>
@@ -124,14 +214,16 @@ export function CommandTable() {
               <>
                 <OrgBanner snapshot={data} />
                 {history ? (
-                  <HistoryView terms={terms} />
+                  <Suspense fallback={null}>
+                    <HistoryView terms={terms} />
+                  </Suspense>
                 ) : (
                   <>
                     {stats && (
                       <StatStrip
                         stats={stats}
                         filter={filter}
-                        onFilter={prefs.setFilter}
+                        onFilter={setFilter}
                         stripRef={strip.ref}
                       />
                     )}
@@ -145,16 +237,12 @@ export function CommandTable() {
                       showCounts={shown}
                       mode={prefs.mode}
                       onMode={prefs.setMode}
-                      counts={{
-                        visible: Math.max(0, listed.length - hiddenListed),
-                        all: listed.length,
-                        hidden: hiddenListed,
-                      }}
+                      counts={counts}
                     />
                     {data.prs.length === 0 && data.sources.github.state === 'pending' ? (
                       <Notice>Loading pull requests</Notice>
                     ) : (
-                      <List prefs={prefs} now={now} />
+                      <List prefs={prefs} now={now} onConnect={openAccounts} />
                     )}
                   </>
                 )}
@@ -163,8 +251,10 @@ export function CommandTable() {
           </main>
           <Footer />
         </div>
-        {account && <AccountsModal onClose={() => setAccount(false)} />}
-        {rules && <RulesModal onClose={() => setRules(false)} />}
+        <Suspense fallback={null}>
+          {account && <AccountsModal onClose={closeAccounts} />}
+          {rules && <RulesModal onClose={closeRules} />}
+        </Suspense>
       </div>
     </ToastProvider>
   );

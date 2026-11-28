@@ -233,16 +233,46 @@ describe('hide animations', () => {
 });
 
 describe('list messages', () => {
-  it('says "Nothing here" in its own surface when no pull request matches', async () => {
+  it('says what emptied the list, with the button that undoes it', async () => {
     await show([pr('a', 1, { title: 'Only one' })]);
+    // A search that matches nothing.
     fireEvent.change(screen.getByPlaceholderText('Title, repo, PR or Jira key'), {
       target: { value: 'zzz' },
     });
+    expect(screen.getByText('No matches')).toBeInTheDocument();
+    expect(document.querySelector('article')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(card('a')).not.toBeNull();
+
+    // A filter that hides everything.
+    fireEvent.click(screen.getByRole('button', { name: /^Stacks/ }));
     expect(screen.getByText('Nothing here')).toBeInTheDocument();
     expect(
       screen.getByText('No open pull requests match these switches and filters.'),
     ).toBeInTheDocument();
-    expect(document.querySelector('article')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset filters' }));
+    expect(card('a')).not.toBeNull();
+  });
+
+  it('says there are no open pull requests when the snapshot has none', async () => {
+    api.getSnapshot.mockResolvedValue(snapshot([]));
+    renderWithClient(<CommandTable />);
+    expect(await screen.findByText('No open pull requests')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reset filters' })).toBeNull();
+  });
+
+  it('offers to connect GitHub, in the Accounts dialog, when it is not connected', async () => {
+    const base = snapshot([]);
+    api.getSnapshot.mockResolvedValue(
+      snapshot([], {
+        sources: { ...base.sources, github: { ...base.sources.github, state: 'disconnected' } },
+      }),
+    );
+    renderWithClient(<CommandTable />);
+    expect(await screen.findByText('GitHub is not connected')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Connect GitHub' }));
+    expect(await screen.findByRole('dialog', { name: /accounts/i })).toBeInTheDocument();
   });
 
   it('says so, as an alert, when the dashboard cannot load', async () => {

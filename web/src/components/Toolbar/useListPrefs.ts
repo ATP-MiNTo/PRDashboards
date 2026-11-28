@@ -81,59 +81,96 @@ export function useListPrefs(existing: readonly string[]) {
 
   const terms = useMemo(() => searchTerms(query), [query]);
 
-  return {
-    filter,
-    query,
-    terms,
-    sort,
-    reversed,
-    mode,
-    show,
-    pageSize,
-    page,
-    hidden,
-    notes,
-    setNote,
-    off,
-    setOff: (next: ReadonlySet<string>) => {
-      setOffState(next);
-      writeStored(OFF_KEY, JSON.stringify([...next]));
-      setPage(0);
-    },
-    toggleHidden,
-    setPage,
-    setFilter: (f: Filter) => {
-      setFilterState(f);
-      setPage(0);
-    },
-    setQuery: (q: string) => {
-      setQueryState(q);
-      setPage(0);
-    },
-    setSort: (s: SortKey) => {
-      setSortState(s);
-      setPage(0);
-    },
-    reverse: () => {
-      setReversed((r) => !r);
-      setPage(0);
-    },
-    setMode: (m: HideMode) => {
-      setModeState(m);
-      writeStored(HIDE_MODE_KEY, m);
-      setPage(0);
-    },
-    setShow: (m: ShowMode) => {
-      setShowState(m);
-      writeStored(SHOW_KEY, m);
-      setPage(0);
-    },
-    setPageSize: (n: number) => {
-      setPageSizeState(n);
-      writeStored(PAGE_SIZE_KEY, String(n));
-      setPage(0);
-    },
-  };
+  // The setters never change, so a component that takes only these does not render for a change in
+  // the others, and `prefs` itself changes only when a value does.
+  const setOff = useCallback((next: ReadonlySet<string>) => {
+    setOffState(next);
+    writeStored(OFF_KEY, JSON.stringify([...next]));
+    setPage(0);
+  }, []);
+  const setFilter = useCallback((f: Filter) => {
+    setFilterState(f);
+    setPage(0);
+  }, []);
+  const setQuery = useCallback((q: string) => {
+    setQueryState(q);
+    setPage(0);
+  }, []);
+  const setSort = useCallback((s: SortKey) => {
+    setSortState(s);
+    setPage(0);
+  }, []);
+  const reverse = useCallback(() => {
+    setReversed((r) => !r);
+    setPage(0);
+  }, []);
+  const setMode = useCallback((m: HideMode) => {
+    setModeState(m);
+    writeStored(HIDE_MODE_KEY, m);
+    setPage(0);
+  }, []);
+  const setShow = useCallback((m: ShowMode) => {
+    setShowState(m);
+    writeStored(SHOW_KEY, m);
+    setPage(0);
+  }, []);
+  const setPageSize = useCallback((n: number) => {
+    setPageSizeState(n);
+    writeStored(PAGE_SIZE_KEY, String(n));
+    setPage(0);
+  }, []);
+
+  return useMemo(
+    () => ({
+      filter,
+      query,
+      terms,
+      sort,
+      reversed,
+      mode,
+      show,
+      pageSize,
+      page,
+      hidden,
+      notes,
+      setNote,
+      off,
+      setOff,
+      toggleHidden,
+      setPage,
+      setFilter,
+      setQuery,
+      setSort,
+      reverse,
+      setMode,
+      setShow,
+      setPageSize,
+    }),
+    [
+      filter,
+      query,
+      terms,
+      sort,
+      reversed,
+      mode,
+      show,
+      pageSize,
+      page,
+      hidden,
+      notes,
+      setNote,
+      off,
+      setOff,
+      toggleHidden,
+      setFilter,
+      setQuery,
+      setSort,
+      reverse,
+      setMode,
+      setShow,
+      setPageSize,
+    ],
+  );
 }
 
 export type ListPrefs = ReturnType<typeof useListPrefs>;

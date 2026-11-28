@@ -229,6 +229,33 @@ describe('filters and groups', () => {
     ]);
   });
 
+  it('orders the groups by the position of their first member in the snapshot', () => {
+    const stack = (id: string, position: number, size: number) => ({
+      id,
+      position,
+      size,
+      parentId: null,
+      parentNumber: null,
+    });
+    const many = snapshot([
+      pr('p1', 1),
+      pr('s2b', 2, { stack: stack('s2', 2, 2) }),
+      pr('p3', 3),
+      pr('s1b', 4, { stack: stack('s1', 2, 3) }),
+      pr('s1a', 5, { stack: stack('s1', 1, 3) }),
+      pr('p6', 6),
+      pr('s2a', 7, { stack: stack('s2', 1, 2) }),
+      pr('s1c', 8, { stack: stack('s1', 3, 3) }),
+      pr('p9', 9),
+    ]);
+    const groups = groupsOf(many, 'all');
+    // The first member of a group (in stack order) decides: s1a is at 4, s2a at 6 in the snapshot.
+    const at = (g: { ids: string[] }) => many.prs.findIndex((p) => p.id === g.ids[0]);
+    expect(groups.map((g) => g.key)).toEqual(['p1', 'p3', 's1', 'p6', 's2', 'p9']);
+    expect(groups.map(at)).toEqual([...groups.map(at)].sort((a, b) => a - b));
+    expect(groups.find((g) => g.key === 's1')?.ids).toEqual(['s1a', 's1b', 's1c']);
+  });
+
   it('drops the pull requests of a repository that is switched off', () => {
     const repo = snap.prs[0]?.repo.id ?? '';
     expect(groupsOf(snap, 'all', 'all', [], new Set([repo]))).toEqual([]);

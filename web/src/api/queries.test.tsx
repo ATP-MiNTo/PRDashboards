@@ -12,6 +12,11 @@ const api = vi.hoisted(() => ({
   putRepo: vi.fn(),
   getSnapshot: vi.fn(),
   getRepos: vi.fn(),
+  putGithubPat: vi.fn(),
+  putSetupClient: vi.fn(),
+  putSettings: vi.fn(),
+  revokeAllSessions: vi.fn(),
+  deleteGithubToken: vi.fn(),
 }));
 
 vi.mock('@/api/client', async (importOriginal) => ({
@@ -24,8 +29,13 @@ import {
   keys,
   useApprove,
   useMarkReady,
+  useRemoveToken,
   useRequestChanges,
+  useRevokeAll,
   useSaveApprovals,
+  useSaveClient,
+  useSavePat,
+  useSaveSettings,
 } from './queries';
 
 const sha = '0123456789abcdef0123456789abcdef01234567';
@@ -121,5 +131,64 @@ describe('approvals setting', () => {
     await act(() => result.current.mutateAsync({ repo, approvalsRequired: 2 }));
     expect(api.putRepo).toHaveBeenCalledWith('R1', approvalsUpdate(repo, 2));
     expect(invalidated(spy)).toEqual([JSON.stringify(keys.repos), JSON.stringify(keys.snapshot)]);
+  });
+});
+
+describe('account and settings actions', () => {
+  async function run<T>(
+    use: () => { mutateAsync: (v: never) => Promise<unknown> },
+    vars: T,
+    seed?: (c: ReturnType<typeof setup>['client']) => void,
+  ) {
+    const { client, spy, wrapper } = setup();
+    seed?.(client);
+    const { result } = renderHook(use, { wrapper });
+    await act(() => result.current.mutateAsync(vars as never));
+    return { client, spy };
+  }
+
+  it('invalidates only the keys the change touches, never the sync status or the session', async () => {
+    api.putGithubPat.mockResolvedValue({});
+    const { spy } = await run(useSavePat, 'ghp_x');
+    const got = invalidated(spy);
+    expect(got).toEqual(
+      [keys.accounts, keys.settings, keys.snapshot, keys.repos, keys.assigned].map((k) =>
+        JSON.stringify(k),
+      ),
+    );
+    expect(got).not.toContain(JSON.stringify(keys.syncStatus));
+    expect(got).not.toContain(JSON.stringify(keys.session));
+  });
+
+  it('saves the client credentials and refreshes the setup and the accounts only', async () => {
+    api.putSetupClient.mockResolvedValue(undefined);
+    const { spy } = await run(useSaveClient, {
+      provider: 'github',
+      clientId: 'a',
+      clientSecret: 'b',
+    });
+    expect(invalidated(spy)).toEqual([JSON.stringify(keys.setup), JSON.stringify(keys.accounts)]);
+  });
+
+  it('keeps the sync status on a settings save, and refetches nothing for revoking sessions', async () => {
+    api.putSettings.mockResolvedValue({});
+    api.revokeAllSessions.mockResolvedValue(undefined);
+    const status = { running: false } as never;
+    const seeded = (c: ReturnType<typeof setup>['client']) =>
+      c.setQueryData(keys.syncStatus, status);
+    const saved = await run(useSaveSettings, {}, seeded);
+    expect(invalidated(saved.spy)).not.toContain(JSON.stringify(keys.syncStatus));
+    expect(saved.client.getQueryData(keys.syncStatus)).toBe(status);
+    expect(api.getSnapshot).not.toHaveBeenCalled();
+    const revoked = await run(useRevokeAll, undefined);
+    expect(invalidated(revoked.spy)).toEqual([]);
+  });
+
+  it('a removed token refreshes the snapshot but leaves the sync status alone', async () => {
+    api.deleteGithubToken.mockResolvedValue(undefined);
+    const { client } = await run(useRemoveToken, 't1', (c) =>
+      c.setQueryData(keys.syncStatus, { running: true }),
+    );
+    expect(client.getQueryData(keys.syncStatus)).toEqual({ running: true });
   });
 });

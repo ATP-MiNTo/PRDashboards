@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import type { Snapshot, SyncStatus } from '@/api/client';
 import type { Mode, ThemeSetting } from '@/theme/theme';
@@ -41,7 +42,7 @@ const NAME = 'PRDashboards';
  * the left, search and the refresh, history and theme circles on the right), over a glass title
  * bar that scrolls away. The pills are transparent until the page scrolls.
  */
-export function Header({
+export const Header = memo(function Header({
   stuck,
   sidebarOpen,
   sidebarId,
@@ -109,4 +110,4 @@ export function Header({
       </div>
     </>
   );
-}
+});

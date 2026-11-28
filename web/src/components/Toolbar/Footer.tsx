@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import styles from './Footer.module.css';
 
 export const REPO_URL = 'https://github.com/ATP-MiNTo/PRDashboards';
@@ -37,7 +37,7 @@ function GithubMark() {
 }
 
 /** The page footer and the GitHub button that floats until the footer scrolls into view. */
-export function Footer() {
+export const Footer = memo(function Footer() {
   const footer = useRef<HTMLElement>(null);
   const slot = useRef<HTMLSpanElement>(null);
   const fab = useRef<HTMLAnchorElement>(null);
@@ -112,4 +112,4 @@ export function Footer() {
       </a>
     </>
   );
-}
+});

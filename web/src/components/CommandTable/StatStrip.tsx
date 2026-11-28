@@ -1,4 +1,4 @@
-import type { Ref } from 'react';
+import { memo, useCallback, type Ref } from 'react';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot } from '@/api/queries';
 import type { Filter } from '@/lib/snapshot';
@@ -43,7 +43,13 @@ function tileClass(
 
 /** The numbers of the tiles for what the list shows, or undefined before the snapshot is there. */
 export function useListStats(view: ListView): ListStats | undefined {
-  return useSnapshot((s: Snapshot) => listStats(s, view)).data;
+  return useSnapshot(useCallback((s: Snapshot) => listStats(s, view), [view])).data;
+}
+
+/** The name of a compact button: the visible word first, then the number, then what the tile counts. */
+export function tileName(t: Tile, n: number): string {
+  const long = t.label === t.short ? '' : `, ${t.label.charAt(0).toLowerCase()}${t.label.slice(1)}`;
+  return `${t.short}: ${n}${long}`;
 }
 
 interface TilesProps {
@@ -58,7 +64,7 @@ interface TilesProps {
  * search switches leave. A tile is a button that filters the list to its pull requests ("Showing"
  * lifts the filter). The strip wraps onto more rows when it is narrow.
  */
-export function StatStrip({
+export const StatStrip = memo(function StatStrip({
   stats,
   filter,
   onFilter,
@@ -85,13 +91,13 @@ export function StatStrip({
       })}
     </div>
   );
-}
+});
 
 /**
  * The same tiles in a line, for the header pill once the strip has scrolled out of view. The same
  * buttons with the same filters; the name of each one says its number.
  */
-export function CompactStats({ stats, filter, onFilter }: TilesProps) {
+export const CompactStats = memo(function CompactStats({ stats, filter, onFilter }: TilesProps) {
   return (
     <>
       {TILES.map((t) => {
@@ -102,7 +108,7 @@ export function CompactStats({ stats, filter, onFilter }: TilesProps) {
             type="button"
             className={tileClass(styles.cs, styles.csOn, styles.csBlocked, t, on)}
             aria-pressed={on}
-            aria-label={`${t.label}: ${stats[t.key]}`}
+            aria-label={tileName(t, stats[t.key])}
             onClick={() => onFilter(t.filter)}
           >
             <span className={styles.csLabel} aria-hidden="true">
@@ -119,4 +125,4 @@ export function CompactStats({ stats, filter, onFilter }: TilesProps) {
       })}
     </>
   );
-}
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSaveSettings, useSettings } from '@/api/queries';
 import { reducedMotion } from '@/lib/storage';
 import { daisyTheme, msUntilSwitch, resolveMode, type Mode, type ThemeSetting } from './theme';
@@ -32,8 +32,13 @@ export function useTheme(): {
     return () => clearTimeout(timer);
   }, [theme]);
 
-  const setTheme = (t: ThemeSetting) => {
-    if (settings.data) save.mutate({ ...settings.data, theme: t });
-  };
+  const { mutate } = save;
+  const current = settings.data;
+  const setTheme = useCallback(
+    (t: ThemeSetting) => {
+      if (current) mutate({ ...current, theme: t });
+    },
+    [current, mutate],
+  );
   return { theme, mode: theme === undefined ? undefined : resolved, setTheme };
 }

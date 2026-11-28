@@ -60,6 +60,7 @@ import {
   type Settings,
 } from './client';
 import { repoTokensOf } from '@/lib/accounts';
+import { prsById } from '@/lib/snapshot';
 
 export const keys = {
   session: ['session'],
@@ -89,40 +90,62 @@ export const useAccounts = () => useQuery({ queryKey: keys.accounts, queryFn: ge
 export const useSettings = () => useQuery({ queryKey: keys.settings, queryFn: getSettings });
 export const useSetup = () => useQuery({ queryKey: keys.setup, queryFn: getSetup });
 
-/** A mutation that refetches everything the page shows once it succeeds. */
-function useAction<TVars, TResult>(fn: (vars: TVars) => Promise<TResult>) {
+type QueryKey = readonly string[];
+
+/**
+ * A mutation that refetches the queries it changes once it succeeds, and no others. The sync status
+ * has no fetcher (the event stream feeds it), so it is never listed here.
+ */
+function useAction<TVars, TResult>(
+  fn: (vars: TVars) => Promise<TResult>,
+  affects: readonly QueryKey[],
+) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (vars: TVars) => fn(vars),
-    onSuccess: () =>
-      client.invalidateQueries({
-        predicate: (q) => q.queryKey[0] !== 'session' && q.queryKey[0] !== keys.jiraOptions[0],
-      }),
+    onSuccess: () => Promise.all(affects.map((queryKey) => client.invalidateQueries({ queryKey }))),
   });
 }
 
+/** What a change of the connected accounts or tokens shows in: the accounts, the settings (a disconnected Jira site is dropped), the sources and repositories of the snapshot, and the Jira lists. */
+const ACCOUNT_CHANGE = [
+  keys.accounts,
+  keys.settings,
+  keys.snapshot,
+  keys.repos,
+  keys.assigned,
+] as const;
+/** A check of a token or an account refreshes its status and the sources of the snapshot. */
+const ACCOUNT_CHECK = [keys.accounts, keys.snapshot] as const;
+
 export const useSaveClient = () =>
-  useAction(({ provider, ...credentials }: ClientCredentials & { provider: Provider }) =>
-    putSetupClient(provider, credentials),
+  useAction(
+    ({ provider, ...credentials }: ClientCredentials & { provider: Provider }) =>
+      putSetupClient(provider, credentials),
+    [keys.setup, keys.accounts],
   );
-export const useSavePat = () => useAction(putGithubPat);
-export const useAddToken = () => useAction(addGithubToken);
-export const useRenameToken = () => useAction(renameGithubToken);
-export const useRemoveToken = () => useAction(deleteGithubToken);
-export const useCheckToken = () => useAction(checkGithubToken);
-export const useDisconnect = () => useAction(disconnectAccount);
-export const useCheck = () => useAction(checkAccount);
-export const useSaveSettings = () => useAction((settings: Settings) => putSettings(settings));
-export const useRevokeAll = () => useAction(revokeAllSessions);
+export const useSavePat = () => useAction(putGithubPat, ACCOUNT_CHANGE);
+export const useAddToken = () => useAction(addGithubToken, ACCOUNT_CHANGE);
+export const useRenameToken = () => useAction(renameGithubToken, [keys.accounts, keys.snapshot]);
+export const useRemoveToken = () => useAction(deleteGithubToken, ACCOUNT_CHANGE);
+export const useCheckToken = () => useAction(checkGithubToken, ACCOUNT_CHECK);
+export const useDisconnect = () => useAction(disconnectAccount, ACCOUNT_CHANGE);
+export const useCheck = () => useAction(checkAccount, ACCOUNT_CHECK);
+/** The settings, and what they decide: the repositories' default method, the Jira site (the accounts say which one is selected) and the excluded statuses. */
+export const useSaveSettings = () =>
+  useAction(
+    (settings: Settings) => putSettings(settings),
+    [keys.settings, keys.accounts, keys.repos, keys.snapshot, keys.assigned, keys.activity],
+  );
+/** Every session is gone, so there is nothing to refetch. */
+export const useRevokeAll = () => useAction(revokeAllSessions, []);
 
 export const useSnapshot = <T = Snapshot>(select?: (s: Snapshot) => T) =>
   useQuery({ queryKey: keys.snapshot, queryFn: getSnapshot, select });
 
 /** One pull request of the snapshot. The component re-renders only when this row changes. */
 export const useSnapshotPr = (id: string) =>
-  useSnapshot<SnapshotPr | undefined>(
-    useCallback((s: Snapshot) => s.prs.find((p) => p.id === id), [id]),
-  ).data;
+  useSnapshot<SnapshotPr | undefined>(useCallback((s: Snapshot) => prsById(s).get(id), [id])).data;
 
 /** Which token reads each repository, from the snapshot the page already has (no call of its own). */
 export const useRepoTokens = () => useSnapshot(repoTokensOf);

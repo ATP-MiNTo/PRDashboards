@@ -1,10 +1,11 @@
+import { memo } from 'react';
 import Link from 'next/link';
 import type { Snapshot } from '@/api/client';
 import { orgSsoUrl } from '@/lib/snapshot';
 import { RelativeTime } from './RelativeTime';
 import styles from './CommandTable.module.css';
 
-export function OrgBanner({ snapshot }: { snapshot: Snapshot }) {
+export const OrgBanner = memo(function OrgBanner({ snapshot }: { snapshot: Snapshot }) {
   const { github, jira, blockedOrgs } = snapshot.sources;
   return (
     <>
@@ -55,4 +56,4 @@ export function OrgBanner({ snapshot }: { snapshot: Snapshot }) {
       )}
     </>
   );
-}
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import { DARK_FROM_HOUR, LIGHT_FROM_HOUR, type Mode, type ThemeSetting } from '@/theme/theme';
 import { useToast } from '../Toast/Toast';
 import styles from './Header.module.css';
@@ -37,7 +37,7 @@ const AUTO = (
  * was chosen before. The icon is the mode a click would switch to: a sun in the dark, a moon in the
  * light, and a half-filled circle in Auto.
  */
-export function ThemeButton({
+export const ThemeButton = memo(function ThemeButton({
   theme,
   mode,
   onTheme,
@@ -85,4 +85,4 @@ export function ThemeButton({
       </span>
     </button>
   );
-}
+});

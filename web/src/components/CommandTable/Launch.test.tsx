@@ -1,5 +1,5 @@
 import { act, fireEvent, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, type MergeResult, type SnapshotPr } from '@/api/client';
 import { pr, snapshot } from '@/test-fixtures';
 import { renderWithClient } from '@/test-utils';
@@ -54,10 +54,15 @@ const tick = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
 /** Opens the dialog of the first card, confirms and merges. The server answers with `result`. */
 async function mergeFirst() {
   fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+  // The dialog is a separate chunk: give it a moment to load.
+  await tick(50);
   fireEvent.click(screen.getByRole('checkbox', { name: 'Merge without moving any ticket' }));
   fireEvent.click(screen.getByRole('button', { name: 'Merge without ticket' }));
   await tick(50);
 }
+
+// The merge dialog is a separate chunk. Loading the module up front keeps the fake timers out of it.
+beforeAll(() => import('./MergeDialog'));
 
 beforeEach(async () => {
   Object.values(api).forEach((f) => f.mockReset());
