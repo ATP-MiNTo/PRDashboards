@@ -100,15 +100,7 @@ export function Sidebar({
         aria-label="Settings"
         {...(overlay ? { role: 'dialog', 'aria-modal': true, tabIndex: -1 } : {})}
       >
-        <button
-          type="button"
-          className={styles.head}
-          aria-label="Collapse sidebar"
-          aria-expanded={open}
-          aria-controls={id}
-          title="Collapse sidebar"
-          onClick={onClose}
-        >
+        <div className={styles.head}>
           <span className={styles.gear} aria-hidden="true">
             <svg
               viewBox="0 0 24 24"
@@ -122,25 +114,33 @@ export function Sidebar({
               {GEAR}
             </svg>
           </span>
-          <span className={`display ${styles.headTitle}`} aria-hidden="true">
-            Settings
-          </span>
-          <svg
-            className={styles.headChevron}
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-            focusable="false"
+          <h2 className={`display ${styles.headTitle}`}>Settings</h2>
+          <button
+            type="button"
+            className={styles.headButton}
+            aria-label="Collapse sidebar"
+            aria-expanded={open}
+            aria-controls={id}
+            title="Collapse sidebar"
+            onClick={onClose}
           >
-            <path d="m15 6-6 6 6 6" />
-          </svg>
-        </button>
+            <svg
+              className={styles.headChevron}
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="m15 6-6 6 6 6" />
+            </svg>
+          </button>
+        </div>
         <div className={styles.sidebarBody}>{seen && children}</div>
         {footer}
       </aside>
