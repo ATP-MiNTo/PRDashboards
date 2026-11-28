@@ -1,5 +1,5 @@
 /* The Accounts dialog, as the approved design draws it (daisyUI sizes): bordered cards in a column,
-   two small cards for how GitHub is connected, the repository table, Jira and the browsers. */
+   the GitHub tokens with the add form and the repository table, Jira and the browsers. */
 
 .stack {
   display: flex;
@@ -23,6 +23,8 @@
 }
 
 .name {
+  margin: 0;
+  font-size: inherit;
   font-weight: 600;
 }
 
@@ -34,37 +36,6 @@
 
 .sub a {
   color: var(--link);
-}
-
-.pair {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-}
-
-@media (min-width: 640px) {
-  .pair {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-.inner {
-  padding: 0.75rem;
-  border: 1px solid oklch(var(--bc) / 0.15);
-  border-radius: var(--radius-box);
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.innerHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.inner .sub {
-  margin-top: 0.25rem;
 }
 
 .actions {
@@ -173,12 +144,6 @@ a.sm:hover {
   border-bottom: 1px solid oklch(var(--bc) / 0.05);
 }
 
-.why {
-  color: var(--sub);
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
 .problem {
   margin: 0.5rem 0 0;
   color: var(--bad);
@@ -197,24 +162,109 @@ a.sm:hover {
   font-size: 0.875rem;
 }
 
-/* The inline form that replaces the token. */
+/* The stored tokens, one bordered row each (daisyUI sizes). */
+.tokens {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.token {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid oklch(var(--bc) / 0.15);
+  border-radius: var(--radius-box);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.token .sub {
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.tokenHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tokenName {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tokenTitle {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.count {
+  margin-left: 0.5rem;
+  color: var(--sub);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.addForm {
+  margin-top: 0.75rem;
+}
+
+.field {
+  composes: ui-input from global;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 8rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* The badge in the Source column carries the token name, so it may be cut with an ellipsis. */
+.source {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.5rem;
-}
-
-.token {
-  composes: ui-input from global;
-  box-sizing: border-box;
-  flex: 1;
-  min-width: 10rem;
-  height: 1.5rem;
-  min-height: 1.5rem;
-  padding: 0 0.5rem;
-  font-size: 0.75rem;
 }
 
 .site {

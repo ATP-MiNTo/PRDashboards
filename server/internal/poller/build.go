@@ -16,6 +16,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/stacks"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/tokenpick"
 )
 
 // linked is a pull request with its resolved tickets.
@@ -58,6 +59,8 @@ type buildInput struct {
 	Issues  map[string]jira.Issue
 	Site    jira.Site
 	GitHub  gen.SourceStatus
+	// RepoTokens maps a repository id to the GitHub token it was read with.
+	RepoTokens map[string]tokenpick.Token
 	// RateLimit is the GitHub budget the last refresh saw; the zero value (no data) leaves it out.
 	RateLimit github.RateLimit
 	Jira      gen.SourceStatus
@@ -93,6 +96,16 @@ func rateLimitOf(u *gen.RateLimitUsage) github.RateLimit {
 		rl.ResetAt = *u.ResetAt
 	}
 	return rl
+}
+
+// viewerPermission is the account's role on the repository as the snapshot carries it. A role the
+// contract does not know (GitHub may add one) is left out, so the web gates nothing on it.
+func viewerPermission(role string) *gen.SnapshotRepoViewerPermission {
+	p := gen.SnapshotRepoViewerPermission(role)
+	if !p.Valid() {
+		return nil
+	}
+	return &p
 }
 
 func ptr[T comparable](v T) *T {
@@ -194,6 +207,8 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 		Repo: gen.SnapshotRepo{
 			Id: pr.Repo.ID, NameWithOwner: pr.Repo.NameWithOwner, IsNew: repo.IsNew,
 			SquashAllowed: pr.Repo.SquashAllowed, MergeAllowed: pr.Repo.MergeAllowed, RebaseAllowed: pr.Repo.RebaseAllowed,
+			ViewerPermission: viewerPermission(pr.Repo.ViewerPermission),
+			TokenId:          ptr(in.RepoTokens[pr.Repo.ID].ID), TokenName: ptr(in.RepoTokens[pr.Repo.ID].Name),
 		},
 		IsDraft:          pr.Draft,
 		Roles:            rolesOf(pr.Roles),
@@ -236,19 +251,23 @@ func snapshotPR(l linked, in buildInput, stackOf map[string]stacks.Info) gen.Sna
 }
 
 // rolesOf maps the roles the search recorded. A pull request without any (a refresh that predates
-// roles) counts for both, so the dashboard still lists it under every Show state.
+// roles) counts for assigned and authored, so the dashboard still lists it under the Mine Show
+// state; it never counts as review requested, which only the review search can say.
 func rolesOf(roles []string) []gen.SnapshotPrRoles {
-	out := make([]gen.SnapshotPrRoles, 0, 2)
-	for _, r := range []string{github.RoleAssigned, github.RoleAuthored} {
-		if len(roles) == 0 || slices.Contains(roles, r) {
+	out := make([]gen.SnapshotPrRoles, 0, 3)
+	if len(roles) == 0 {
+		roles = []string{github.RoleAssigned, github.RoleAuthored}
+	}
+	for _, r := range []string{github.RoleAssigned, github.RoleAuthored, github.RoleReviewer} {
+		if slices.Contains(roles, r) {
 			out = append(out, gen.SnapshotPrRoles(r))
 		}
 	}
 	return out
 }
 
-// fillRoles gives every pull request of a snapshot stored before roles existed both roles. It
-// reports whether it changed anything.
+// fillRoles gives every pull request of a snapshot stored before roles existed assigned and
+// authored. It reports whether it changed anything.
 func fillRoles(s *gen.Snapshot) bool {
 	changed := false
 	for i := range s.Prs {
@@ -259,15 +278,15 @@ func fillRoles(s *gen.Snapshot) bool {
 	return changed
 }
 
-// fillApprovals gives every pull request of a snapshot stored before approvals existed the tally
-// of its stored reviews against need(repoID), which is the repository's setting (1 when unknown).
-// It reports whether it changed anything. The next refresh replaces them.
+// fillApprovals gives every pull request of a stored snapshot the tally of its stored reviews
+// against need(repoID), which is the repository's setting now (0, nothing required, when unknown).
+// It does not look at what the snapshot holds, because 0 is a real value of Need: a snapshot stored
+// before approvals existed, or before the setting changed (migration 0007 turned the old default of
+// 1 into 0), gets the same fresh tally as any other. It reports whether it changed anything. The
+// next refresh replaces them.
 func fillApprovals(s *gen.Snapshot, need func(repoID string) int) bool {
 	changed := false
 	for i := range s.Prs {
-		if s.Prs[i].Approvals.Need != 0 {
-			continue
-		}
 		reviews := make([]github.Review, len(s.Prs[i].Reviews))
 		for j, r := range s.Prs[i].Reviews {
 			reviews[j] = github.Review{ID: r.Id, State: r.State}
@@ -275,7 +294,10 @@ func fillApprovals(s *gen.Snapshot, need func(repoID string) int) bool {
 				reviews[j].Author = *r.Author
 			}
 		}
-		s.Prs[i].Approvals, changed = approvalsOf(merge.CountApprovals(reviews, need(s.Prs[i].Repo.Id))), true
+		tally := approvalsOf(merge.CountApprovals(reviews, need(s.Prs[i].Repo.Id)))
+		if s.Prs[i].Approvals != tally {
+			s.Prs[i].Approvals, changed = tally, true
+		}
 	}
 	return changed
 }

@@ -6,11 +6,11 @@ Technical design: [TECH_SPEC.md](TECH_SPEC.md)
 
 ## 1. Overview
 
-A local web dashboard that lists every open pull request assigned to me or opened by me, across all GitHub repositories, with review status, CI status and a merge button. Each PR is linked to its Jira ticket. Merging a PR also moves the ticket to a Jira status chosen by configurable rules, or picked by me when no rule matches.
+A local web dashboard that lists every open pull request assigned to me, opened by me or waiting on my review, across all GitHub repositories, with review status, CI status and a merge button. Each PR is linked to its Jira ticket. Merging a PR also moves the ticket to a Jira status chosen by configurable rules, or picked by me when no rule matches.
 
 ## 2. Goals
 
-- See all open PRs assigned to me or opened by me in one place, regardless of repository or organization.
+- See all open PRs assigned to me, opened by me or waiting on my review in one place, regardless of repository or organization.
 - Know at a glance whether a PR is ready to merge (review, CI, conflicts).
 - Link each PR to the Jira ticket I am working on.
 - Merge and update the ticket status in one action.
@@ -136,7 +136,7 @@ Matching:
 
 ### 6.1 Performance
 
-- Fetch the full PR list with two paginated GitHub GraphQL search queries (`is:pr is:open assignee:@me` and `is:pr is:open author:@me`), run in parallel and merged by PR, so a PR that is both assigned and authored is one row. The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
+- Fetch the full PR list with three paginated GitHub GraphQL search queries (`is:pr is:open assignee:@me`, `is:pr is:open author:@me` and `is:pr is:open review-requested:@me`), run in parallel and merged by PR, so a PR that is both assigned and authored is one row. The query returns repo, branches, review decision, CI rollup, commit time, draft and mergeable state per PR. No per-PR follow-up calls.
 - Resolve all Jira tickets with one batched JQL query. No per-PR Jira calls.
 - Cache Jira transition lists per ticket and fetch them only when needed.
 - Respect GitHub and Atlassian rate limits. Back off on 403 and 429 responses.

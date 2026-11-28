@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -179,6 +180,32 @@ func TestPermissionErrorMessageIsCut(t *testing.T) {
 	}
 }
 
+const oneOwner = "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner. Add one in Accounts."
+
+func TestWithRepoNamesTheRepositoryOnlyOnPermissionErrors(t *testing.T) {
+	perm := &github.PermissionError{Accepted: []string{"contents=write"}}
+	wrapped := fmt.Errorf("wrapped: %w", perm)
+	if got := github.WithRepo(wrapped, "acme/web", "merge in"); got != wrapped || perm.Repo != "acme/web" || perm.Action != "merge in" {
+		t.Fatalf("%#v", perm)
+	}
+	other := errors.New("boom")
+	if github.WithRepo(other, "acme/web", "") != other || github.WithRepo(nil, "acme/web", "") != nil {
+		t.Fatal("other errors pass through")
+	}
+}
+
+func TestWithTokenNamesTheTokenOnlyOnPermissionErrors(t *testing.T) {
+	perm := &github.PermissionError{Message: "x"}
+	wrapped := fmt.Errorf("merge: %w", perm)
+	if got := github.WithToken(wrapped, "Work"); got != wrapped || perm.Token != "Work" {
+		t.Fatalf("%v %+v", got, perm)
+	}
+	other := errors.New("boom")
+	if github.WithToken(other, "Work") != other || github.WithToken(nil, "Work") != nil {
+		t.Fatal("other errors pass through")
+	}
+}
+
 func TestPermissionErrorDetail(t *testing.T) {
 	cases := []struct {
 		perm github.PermissionError
@@ -187,6 +214,22 @@ func TestPermissionErrorDetail(t *testing.T) {
 		{github.PermissionError{Accepted: []string{"contents=write"}}, "The token needs the GitHub permission contents: write"},
 		{github.PermissionError{Accepted: []string{"pull_requests=write", "contents=write"}}, "The token needs one of these GitHub permissions: pull_requests: write or contents: write"},
 		{github.PermissionError{Message: "Nope"}, "The token lacks a GitHub permission this action needs: Nope"},
+		{github.PermissionError{Accepted: []string{"pull_requests=write"}, Repo: "ATP-MiNTo/PRDashboards"},
+			"This token can't write to ATP-MiNTo/PRDashboards: it needs the GitHub permission pull_requests: write. " + oneOwner},
+		{github.PermissionError{Accepted: []string{"contents=write"}, Repo: "acme/web", Action: "merge in"},
+			"This token can't merge in acme/web: it needs the GitHub permission contents: write. " + oneOwner},
+		{github.PermissionError{Accepted: []string{"pull_requests=write", "contents=write"}, Repo: "acme/web"},
+			"This token can't write to acme/web: it needs one of these GitHub permissions: pull_requests: write or contents: write. " + oneOwner},
+		{github.PermissionError{Message: "Resource not accessible.", Repo: "acme/web"},
+			"This token can't write to acme/web (GitHub says: Resource not accessible). " + oneOwner},
+		{github.PermissionError{Repo: "acme/web"}, "This token can't write to acme/web. " + oneOwner},
+		// A named token reads as such, with and without a repository.
+		{github.PermissionError{Accepted: []string{"pull_requests=write"}, Repo: "ATP-MiNTo/PRDashboards", Token: "Work"},
+			`The token "Work" can't write to ATP-MiNTo/PRDashboards: it needs the GitHub permission pull_requests: write. ` + oneOwner},
+		{github.PermissionError{Accepted: []string{"contents=write"}, Repo: "acme/web", Action: "merge in", Token: "OSS (hubot)"},
+			`The token "OSS (hubot)" can't merge in acme/web: it needs the GitHub permission contents: write. ` + oneOwner},
+		{github.PermissionError{Accepted: []string{"contents=write"}, Token: "Work"}, `The token "Work" needs the GitHub permission contents: write`},
+		{github.PermissionError{Message: "Nope", Token: "Work"}, `The token "Work" lacks a GitHub permission this action needs: Nope`},
 	}
 	for _, tc := range cases {
 		if got := tc.perm.Detail(); got != tc.want {
@@ -292,12 +335,12 @@ func TestSearchErrorsAroundHiddenChecks(t *testing.T) {
 	cases := []struct {
 		name        string
 		errs        string
-		wantErrors  int // two searches (assigned and authored) each report the error once
+		wantErrors  int // three searches (assigned, authored, review requested) each report the error once
 		wantBlocked int
 	}{
 		{"hidden checks only", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `}]`, 0, 0},
-		{"permission error off the check path stays", `[{"type":"FORBIDDEN","path":["search","nodes",1],` + flags + `,` + msg + `}]`, 2, 0},
-		{"hidden check next to a real error", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `},{"type":"INTERNAL","message":"boom"}]`, 2, 0},
+		{"permission error off the check path stays", `[{"type":"FORBIDDEN","path":["search","nodes",1],` + flags + `,` + msg + `}]`, 3, 0},
+		{"hidden check next to a real error", `[{"type":"FORBIDDEN",` + check + `,` + flags + `,` + msg + `},{"type":"INTERNAL","message":"boom"}]`, 3, 0},
 		{"saml flag on a check path is SSO", `[{"type":"FORBIDDEN",` + check + `,"extensions":{"saml_failure":true,"ip_allow_list_failure":false},"message":"Resource protected by organization SAML enforcement. You must grant your token access to \"acme\""}]`, 0, 1},
 	}
 	for _, tc := range cases {

@@ -1,9 +1,10 @@
 import { useId, useMemo, useState } from 'react';
-import type { MergeMethodName, RepoSettings } from '@/api/client';
-import { useAccounts, useRepos, useSaveSettings, useSettings } from '@/api/queries';
-import { SOURCE_SHORT, sourceOf } from '@/lib/accounts';
+import type { MergeMethodName, MultiPrMode, RepoSettings } from '@/api/client';
+import { useAccounts, useRepoTokens, useRepos, useSaveSettings, useSettings } from '@/api/queries';
+import { SOURCE_SHORT, repoTokenTip, sourceOf, tokenOfRepo } from '@/lib/accounts';
 import { METHOD_NAMES, METHOD_ORDER } from '@/lib/merge';
 import { isCustom } from '@/lib/repoSettings';
+import { MULTI_PR_CHOICES } from '@/lib/rules';
 import { InfoTip } from '../InfoTip/InfoTip';
 import { Marquee } from '../Marquee/Marquee';
 import { RollSwitch } from '../Toolbar/RollSwitch';
@@ -21,12 +22,16 @@ const TIP_DELETE =
 const TIP_REPOSITORY =
   'Blue gear: this repository has its own settings. Outline gear: it follows the defaults above.';
 
-/** The defaults every repository follows until it says otherwise: delete branch and the merge method. */
+/**
+ * The defaults every repository follows until it says otherwise: delete branch and the merge method,
+ * and the global "Multi-PR tickets move when" that the rules in mode Default follow.
+ */
 function Defaults() {
   const settings = useSettings();
   const save = useSaveSettings();
   const current = settings.data;
   const methodId = useId();
+  const multiPrId = useId();
   if (!current) return null;
   return (
     <div className={styles.defaults}>
@@ -65,6 +70,24 @@ function Defaults() {
           ))}
         </select>
       </div>
+      <div>
+        <label className={styles.fieldLabel} htmlFor={multiPrId}>
+          Multi-PR tickets move when
+        </label>
+        <select
+          id={multiPrId}
+          value={current.multiPrTickets}
+          onChange={(e) =>
+            save.mutate({ ...current, multiPrTickets: e.target.value as MultiPrMode })
+          }
+        >
+          {MULTI_PR_CHOICES.map((m) => (
+            <option key={m.value} value={m.value}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {save.isError && (
         <p className={styles.error} role="alert">
           Could not save the settings.
@@ -72,6 +95,12 @@ function Defaults() {
       )}
     </div>
   );
+}
+
+/** The VIA badge: the name of the token that fetches the repository, and the hint that says more. */
+interface Via {
+  label: string;
+  tip: string | null;
 }
 
 function RepoRow({
@@ -83,7 +112,7 @@ function RepoRow({
 }: {
   repo: RepoSettings;
   shown: boolean;
-  via: string | null;
+  via: Via | null;
   onToggle: () => void;
   onGear: () => void;
 }) {
@@ -99,8 +128,13 @@ function RepoRow({
           onChange={onToggle}
         />
         <Marquee className={styles.repoName}>{repo.nameWithOwner}</Marquee>
-        {via && <span className={styles.via}>{via}</span>}
+        {via && <span className={styles.via}>{via.label}</span>}
       </label>
+      {via?.tip && (
+        <span className={styles.tip}>
+          <InfoTip tip={via.tip} label={`About the token of ${repo.nameWithOwner}`} />
+        </span>
+      )}
       <button
         type="button"
         className={custom ? `${styles.gear} ${styles.gearOn}` : styles.gear}
@@ -119,7 +153,7 @@ function RepoRow({
  * The Repositories block of the sidebar: a fold header (the eyebrow, how many repositories the list
  * shows and a chevron), and when open the defaults, Select all and Clear, and one row per
  * repository with a checkbox that shows or hides its pull requests, the way GitHub is connected
- * (the VIA badge) and a gear that opens the repository's settings dialog. A blue gear means the
+ * (the VIA badge with the token name) and a gear that opens the repository's settings dialog. A blue gear means the
  * repository has settings of its own.
  */
 export function RepositoriesSection({
@@ -132,13 +166,21 @@ export function RepositoriesSection({
 }) {
   const repos = useRepos();
   const accounts = useAccounts().data;
+  const repoTokens = useRepoTokens().data;
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const panelId = useId();
   const list = useMemo(() => repos.data?.repos ?? [], [repos.data]);
   const shown = list.filter((r) => !off.has(r.id)).length;
   const source = accounts ? sourceOf(accounts.github) : null;
-  const via = source ? SOURCE_SHORT[source] : null;
+  const tokens = accounts?.githubTokens ?? [];
+  // A repository the snapshot has no token for (no open pull request, or a snapshot from before
+  // several tokens) keeps the generic label of how GitHub is connected.
+  const viaOf = (id: string): Via | null => {
+    const ref = tokenOfRepo(repoTokens?.[id], tokens);
+    if (ref) return { label: ref.name, tip: repoTokenTip(ref, repoTokens?.[id]?.viewerPermission) };
+    return source ? { label: SOURCE_SHORT[source], tip: null } : null;
+  };
   const repo = editing === null ? undefined : list.find((r) => r.id === editing);
 
   const toggle = (id: string) => {
@@ -229,7 +271,7 @@ export function RepositoriesSection({
                 key={r.id}
                 repo={r}
                 shown={!off.has(r.id)}
-                via={via}
+                via={viaOf(r.id)}
                 onToggle={() => toggle(r.id)}
                 onGear={() => setEditing(r.id)}
               />

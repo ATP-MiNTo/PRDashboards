@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
@@ -29,19 +30,23 @@ type fakeGitHub struct {
 	merges    []mergeCall
 	deletes   []string
 	mergeSHA  string
+	// tokens lists the token of every call, "pull:", "merge:" or "delete:" first.
+	tokens []string
 }
 
 type mergeCall struct{ repo, method, sha string }
 
-func (f *fakeGitHub) PullRequest(context.Context, string, string) (github.PR, error) {
+func (f *fakeGitHub) PullRequest(_ context.Context, token, _ string) (github.PR, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.tokens = append(f.tokens, "pull:"+token)
 	f.pullCalls++
 	return f.pr, f.prErr
 }
 
-func (f *fakeGitHub) Merge(_ context.Context, _, repo string, _ int, method, sha string) (github.MergeResult, error) {
+func (f *fakeGitHub) Merge(_ context.Context, token, repo string, _ int, method, sha string) (github.MergeResult, error) {
 	f.mu.Lock()
+	f.tokens = append(f.tokens, "merge:"+token)
 	gate := f.mergeGate
 	f.mu.Unlock()
 	if gate != nil {
@@ -56,9 +61,10 @@ func (f *fakeGitHub) Merge(_ context.Context, _, repo string, _ int, method, sha
 	return github.MergeResult{SHA: f.mergeSHA}, nil
 }
 
-func (f *fakeGitHub) DeleteBranch(_ context.Context, _, repo, branch string) error {
+func (f *fakeGitHub) DeleteBranch(_ context.Context, token, repo, branch string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.tokens = append(f.tokens, "delete:"+token)
 	f.deletes = append(f.deletes, repo+":"+branch)
 	return f.deleteErr
 }
@@ -139,9 +145,17 @@ func (s *fakeSnapshot) MergedFirings(_ context.Context, pr string, tickets []str
 
 type fakeAccounts struct {
 	tokenErr, siteErr error
+	// creds are the credentials by id; any other id (and the empty one) is the primary token "tok"
+	// called "Main", like a snapshot stored before several tokens.
+	creds map[string]auth.GitHubCredential
 }
 
-func (a fakeAccounts) GitHubToken(context.Context) (string, error) { return "tok", a.tokenErr }
+func (a fakeAccounts) GitHubToken(_ context.Context, id string) (auth.GitHubCredential, error) {
+	if c, ok := a.creds[id]; ok {
+		return c, a.tokenErr
+	}
+	return auth.GitHubCredential{ID: "main0000", Name: "Main", Login: "octocat", Token: "tok"}, a.tokenErr
+}
 func (a fakeAccounts) JiraSite(context.Context) (jira.Site, error) {
 	return jira.Site{ID: "cloud-1"}, a.siteErr
 }

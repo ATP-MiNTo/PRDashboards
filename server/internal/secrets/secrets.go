@@ -8,8 +8,12 @@ import (
 
 // Item names kept in a Store.
 const (
-	GitHubClient    = "github.oauth.client"
-	GitHubToken     = "github.token"
+	GitHubClient = "github.oauth.client"
+	// GitHubToken is the single credential of versions before several tokens. The first start
+	// that reads the list moves it into GitHubTokens and deletes it.
+	GitHubToken = "github.token"
+	// GitHubTokens is the JSON array of the GitHub credentials, primary first.
+	GitHubTokens    = "github.tokens" //nolint:gosec // keychain entry name, not a credential
 	AtlassianClient = "atlassian.oauth.client"
 	AtlassianToken  = "atlassian.token"
 	SessionKey      = "session.key"

@@ -1,6 +1,6 @@
 # Storage and secrets
 
-Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 6.1 and 6.2. Related: [auth.md](auth.md), [security.md](security.md), [app-shell.md](app-shell.md).
+Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) sections 6.1 and 6.2. Related: [auth.md](auth.md), [github-tokens.md](github-tokens.md), [security.md](security.md), [app-shell.md](app-shell.md).
 
 ## Purpose
 
@@ -28,7 +28,8 @@ Secrets, kept in `vault.enc` (or the same names in `secrets.enc`):
 | --- | --- |
 | `session.key` | 32 random bytes, HMAC key of the session cookie and CSRF token |
 | `github.oauth.client`, `atlassian.oauth.client` | JSON `{clientId, clientSecret}`, and `appSlug` (GitHub App URL name, optional) for GitHub |
-| `github.token` | JSON `{token, method (app, pat, or legacy oauth), login, warning, refreshToken, expiresAt, needsReconnect}`. Without `expiresAt` the token does not expire |
+| `github.tokens` | JSON array, at most 10 entries, primary first: `{id, name, token, method (app, pat, or legacy oauth), fineGrained, login, warning, refreshToken, expiresAt, needsReconnect}`. Without `expiresAt` the token does not expire. See [github-tokens.md](github-tokens.md) |
+| `github.token` | Legacy, before several tokens: one object without `id` and `name`. The first read of the list (and the start) moves it into `github.tokens` and deletes it |
 | `atlassian.token` | JSON `{accessToken, refreshToken, expiresAt, sites, needsReconnect}` |
 
 Keychain, service `prdashboards`: one item, `vault.key`, 32 random bytes (base64 as every keychain
@@ -45,7 +46,7 @@ nonce on every write. The magic differs from `secrets.enc`, so neither file open
 nonce, then the AES-256-GCM ciphertext of a JSON map. The whole header is the additional data.
 Argon2id with time 3, 64 MiB, 4 threads, 32-byte key. A fresh salt and nonce on every write.
 
-SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md); [migration 0004](../../server/internal/store/migrations/0004_approvals.sql) adds `repos.approvals_required` (1 to 10, default 1), see [review-actions.md](review-actions.md); [migration 0005](../../server/internal/store/migrations/0005_repo_prefs.sql) adds `repos.method_inherit` (the repository follows the default method; new repositories start with it) and `repos.delete_branch` (`default`, `yes` or `no`), see [merge-method.md](merge-method.md) and [settings.md](settings.md)):
+SQLite (`<data-dir>/data.db`, [migration 0001](../../server/internal/store/migrations/0001_init.sql); [migration 0002](../../server/internal/store/migrations/0002_merge.sql) adds the `idempotency` table, `pending_retries.pr_id` and `to_status`, and `activity.summary`, see [merge-and-transition.md](merge-and-transition.md); [migration 0004](../../server/internal/store/migrations/0004_approvals.sql) adds `repos.approvals_required` (1 to 10, default 1), see [review-actions.md](review-actions.md); [migration 0005](../../server/internal/store/migrations/0005_repo_prefs.sql) adds `repos.method_inherit` (the repository follows the default method; new repositories start with it) and `repos.delete_branch` (`default`, `yes` or `no`), see [merge-method.md](merge-method.md) and [settings.md](settings.md); [migration 0007](../../server/internal/store/migrations/0007_approvals_zero.sql) rebuilds `repos` (SQLite cannot change a CHECK or a DEFAULT in place) so `approvals_required` is 0 to 10 with a default of 0, and turns the stored 1, which was only ever the default, into 0. Foreign keys are on inside the migration transaction, so it defers them to the commit (`PRAGMA defer_foreign_keys`) for the references from `prs`, and puts the `repo_branch_rules` rows, which the `DROP` would cascade away, back from a temporary copy; [migration 0006](../../server/internal/store/migrations/0006_rule_mode_default.sql) lets `sync_rules.mode` be `default` (a rule that follows `multiPrTickets`) by rebuilding `sync_rules` and `rule_firings` with their rows, see [status-sync-rules.md](status-sync-rules.md)):
 `schema_migrations`, `settings`, `repos`, `repo_branch_rules`, `prs`, `ticket_links`, `sync_rules`,
 `rule_firings`, `activity`, `pending_retries`, `snapshot`, `sessions` (hashed id, created, last
 issued, expires) and `oauth_states` (hashed state, provider, session key, PKCE verifier, expiry).
@@ -53,7 +54,7 @@ All tables are `STRICT`. Times are Unix seconds.
 
 Settings (`GET/PUT /api/settings`, schema `Settings` in [api/openapi.yaml](../../api/openapi.yaml)):
 `polling {githubSec, jiraSec}` (each a multiple of 15 from 30 to 3600; the five values older versions offered are still valid), `theme`,
-`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `jiraSiteId` (nullable), `excludedStatuses`
+`defaultMethodForNewRepos`, `deleteBranchAfterMerge`, `multiPrTickets` (`all` or `any`, default `all`, also for installs that never wrote it), `jiraSiteId` (nullable), `excludedStatuses`
 (array of up to 50 status names, default `["Done"]`, also for installs that never wrote it). Stored as typed JSON
 values per key in one transaction.
 
@@ -134,7 +135,7 @@ None. The keychain is a local call to the OS.
 
 - [server/internal/secrets/vault_test.go](../../server/internal/secrets/vault_test.go): a keychain mock with the macOS size limit, a 22 KB token round trip with only `vault.key` in the keychain, migration (and a second start), missing key, wrong key, tampering, foreign files, passphrase and key files not interchangeable, mode, fresh nonce, batch rollback.
 - [server/internal/secrets/secrets_test.go](../../server/internal/secrets/secrets_test.go): memory and file stores, round trip, wrong passphrase, tampered header and ciphertext, fresh nonce and salt per write, file mode, atomic rewrite, backend choice, passphrase confirmation, no terminal.
-- [server/internal/store/store_test.go](../../server/internal/store/store_test.go): migrations from empty and again, every table, STRICT and constraints, concurrent writers, reader pool is read-only, settings round trip, sessions, `oauth_states` single use and expiry.
+- [server/internal/store/store_test.go](../../server/internal/store/store_test.go): migrations from empty and again, every table, STRICT and constraints, concurrent writers, reader pool is read-only, settings round trip, sessions, `oauth_states` single use and expiry. [repos_test.go](../../server/internal/store/repos_test.go) `TestMigration0007RebuildsReposAndKeepsEverythingAroundIt` builds a version 5 database with rows (repos, branch rules, pull requests), opens it and checks that 1 became 0, 2 to 10 stayed, the other columns, the branch rules and the foreign keys survived, and the new range and default hold.
 - [server/internal/auth/persist_test.go](../../server/internal/auth/persist_test.go) and [session_test.go](../../server/internal/auth/session_test.go): persisted sessions across a restart, revoke all, legacy key import.
 - [server/internal/api/auth_api_test.go](../../server/internal/api/auth_api_test.go): settings and revoke-all over HTTP.
 - [server/cmd/prdash/main_test.go](../../server/cmd/prdash/main_test.go): file mode refusal (including `vault.enc`), legacy key import into the vault, sessions across a restart, file backend with a passphrase, no-terminal exit.

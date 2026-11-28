@@ -19,7 +19,7 @@ func client(srv *httptest.Server) *github.Client {
 const nodeOK = `{"data":{"rateLimit":{"limit":5000,"remaining":4999},"node":{"__typename":"PullRequest","id":"PR_1","number":7,"state":"OPEN",
 "isCrossRepository":true,"isDraft":false,"mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED",
 "headRefName":"feat/x","headRefOid":"sha1","baseRefName":"main",
-"repository":{"id":"R1","nameWithOwner":"acme/web","squashMergeAllowed":true,"mergeCommitAllowed":false,"rebaseMergeAllowed":true}}}}`
+"repository":{"id":"R1","nameWithOwner":"acme/web","squashMergeAllowed":true,"mergeCommitAllowed":false,"rebaseMergeAllowed":true,"viewerPermission":"READ"}}}}`
 
 func TestPullRequestFetchesOneNodeWithTheSearchFields(t *testing.T) {
 	var query, auth string
@@ -33,7 +33,7 @@ func TestPullRequestFetchesOneNodeWithTheSearchFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pr.ID != "PR_1" || pr.State != "OPEN" || !pr.CrossRepo || pr.HeadSHA != "sha1" || pr.Repo.MergeAllowed || !pr.Repo.SquashAllowed || pr.Mergeable != "MERGEABLE" {
+	if pr.ID != "PR_1" || pr.State != "OPEN" || !pr.CrossRepo || pr.HeadSHA != "sha1" || pr.Repo.MergeAllowed || !pr.Repo.SquashAllowed || pr.Repo.ViewerPermission != "READ" || pr.Mergeable != "MERGEABLE" {
 		t.Fatalf("%+v", pr)
 	}
 	if auth != "Bearer tok" || !strings.Contains(query, "node(id: $id)") || !strings.Contains(query, "fragment PullRequestFields on PullRequest") ||

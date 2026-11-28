@@ -7,6 +7,7 @@ import {
   fakeState,
   resetFakes,
   signIn,
+  useOnlyGitHubToken,
 } from "./helpers";
 
 // Review actions: approve, request changes and mark ready, with the approvals required per
@@ -146,7 +147,7 @@ test("a repository that needs two approvals blocks the merge until the second on
   page,
   request,
 }) => {
-  // The setting is stored with the app, not with the fakes: start from the default.
+  // The setting is stored with the app, not with the fakes: start from one approval.
   expect((await setApprovals(page, 1)).status).toBe(200);
   expect((await snapshotPr(page, 31))?.approvals).toEqual({
     have: 1,
@@ -317,16 +318,14 @@ test("GitHub does not let the viewer review their own pull request", async ({
   // The author may take their own draft out of draft: ready ignores who opened it.
 });
 
+const ownerNote =
+  "A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner. Add one in Accounts.";
+
 test("a token without Pull requests write is told which permission to add", async ({
   page,
   request,
 }) => {
-  const useToken = async (token: string) => {
-    await page.goto(APP + "/setup/");
-    await page.getByLabel("Personal access token").fill(token);
-    await page.getByRole("button", { name: "Validate and save" }).click();
-    await expect(page.getByText("Connected as octocat")).toBeVisible();
-  };
+  const useToken = (token: string) => useOnlyGitHubToken(page, token);
   await useToken("github_pat_pulls_read");
   try {
     await page.goto(APP + "/");
@@ -336,7 +335,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(review.status).toBe(403);
     expect(review.body).toMatchObject({
       code: "missing_permission",
-      detail: "The token needs the GitHub permission pull_requests: write",
+      detail: `The token "Token (octocat)" can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const ready = await call(page, "POST", `/api/prs/${idOf(32)}/ready`, {
       expectedHeadSha: headOf(32),
@@ -344,7 +343,7 @@ test("a token without Pull requests write is told which permission to add", asyn
     expect(ready.status).toBe(403);
     expect(ready.body).toMatchObject({
       code: "missing_permission",
-      detail: "The token needs the GitHub permission pull_requests: write",
+      detail: `The token "Token (octocat)" can't write to acme/review: it needs the GitHub permission pull_requests: write. ${ownerNote}`,
     });
     const github = await fakeState<GitHubState>(request, "github");
     expect(github.reviews ?? []).toEqual([]);
@@ -477,4 +476,37 @@ test("marks a draft ready from its card", async ({ page, request }) => {
     card.getByRole("button", { name: "Merge", exact: true }),
   ).toHaveAccessibleDescription("Checks restart after leaving draft.");
   await pollSnapshot(page, 32, (p) => p.isDraft).toBe(false);
+});
+
+test("a repository where the account can only read blocks Merge up front but keeps the review actions", async ({
+  page,
+  request,
+}) => {
+  await configure(request, "github", { review: true, readOnly: true });
+  const title = "RO-41 Someone else's repository";
+  const card = cardOf(page, title);
+  await expect(async () => {
+    if (!(await card.isVisible())) {
+      expect((await call(page, "POST", "/api/sync")).status).toBe(202);
+    }
+    await expect(card).toBeVisible({ timeout: 3000 });
+  }).toPass({ intervals: [500, 1500], timeout: 15_000 });
+
+  const merge = card.getByRole("button", { name: "Merge", exact: true });
+  await expect(merge).toHaveAttribute("aria-disabled", "true");
+  await expect(merge).toHaveAccessibleDescription(
+    "Read-only here: Token (octocat) can't write to oss/lib",
+  );
+  expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
+  // Reviewing needs no write role: the Action menu stays.
+  await expect(
+    card.getByRole("button", { name: "Review action for #41" }),
+  ).toBeVisible();
+  // The other repositories keep their Merge button.
+  await expect(
+    cardOf(page, "REV-31 Needs two approvals").getByRole("button", {
+      name: "Merge",
+      exact: true,
+    }),
+  ).toBeVisible();
 });

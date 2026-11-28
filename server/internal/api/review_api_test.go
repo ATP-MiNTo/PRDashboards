@@ -193,6 +193,8 @@ func TestReviewProviderFailuresNameTheMissingPermission(t *testing.T) {
 	}{
 		{&github.PermissionError{Message: "Resource not accessible by personal access token", Accepted: []string{"pull_requests=write"}},
 			http.StatusForbidden, "missing_permission", "The token needs the GitHub permission pull_requests: write"},
+		{&github.PermissionError{Message: "Nope", Accepted: []string{"pull_requests=write"}, Repo: "ATP-MiNTo/PRDashboards"},
+			http.StatusForbidden, "missing_permission", "This token can't write to ATP-MiNTo/PRDashboards: it needs the GitHub permission pull_requests: write. A fine-grained token works for one owner only, so a repository of another owner needs a token from that owner."},
 		{&github.PermissionError{Message: "Nope"}, http.StatusForbidden, "missing_permission", "The token lacks a GitHub permission this action needs: Nope"},
 		{&github.OrgBlocked{Org: "acme", Reason: "sso"}, http.StatusForbidden, "org_blocked", "An organization has not authorized the token"},
 		{&github.OrgBlocked{Org: "acme", Reason: "policy", Message: "secret wording"}, http.StatusForbidden, "org_blocked", "The acme organization policy does not allow this token"},

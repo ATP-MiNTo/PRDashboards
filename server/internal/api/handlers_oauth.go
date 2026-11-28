@@ -103,6 +103,8 @@ func (h *handlers) CompleteOAuth(ctx context.Context, req gen.CompleteOAuthReque
 		return nil, problem(http.StatusBadRequest, codeInvalidState, "the authorization expired or was already used; start again")
 	case errors.Is(err, auth.ErrNotConfigured):
 		return nil, problem(http.StatusConflict, codeNotConfigured, "")
+	case errors.Is(err, auth.ErrTokenLimit):
+		return nil, tokenProblem(err)
 	case errors.Is(err, auth.ErrExchange):
 		h.cfg.Log.ErrorContext(ctx, "oauth exchange failed", "provider", string(p), "err", err)
 		return nil, problem(http.StatusBadGateway, codeExchangeFailed, "the provider did not accept the authorization")

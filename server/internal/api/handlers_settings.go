@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/rules"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
 )
 
@@ -16,6 +17,7 @@ func toGenSettings(s store.Settings) gen.Settings {
 	out.Theme = gen.SettingsTheme(s.Theme)
 	out.DefaultMethodForNewRepos = gen.SettingsDefaultMethodForNewRepos(s.DefaultMethod)
 	out.DeleteBranchAfterMerge = s.DeleteBranchAfterMerge
+	out.MultiPrTickets = gen.SettingsMultiPrTickets(s.MultiPrTickets)
 	out.JiraSiteId = s.JiraSiteID
 	out.ExcludedStatuses = append([]string{}, s.ExcludedStatuses...)
 	return out
@@ -28,6 +30,7 @@ func fromGenSettings(s gen.Settings) store.Settings {
 		Theme:                  string(s.Theme),
 		DefaultMethod:          string(s.DefaultMethodForNewRepos),
 		DeleteBranchAfterMerge: s.DeleteBranchAfterMerge,
+		MultiPrTickets:         string(s.MultiPrTickets),
 		JiraSiteID:             s.JiraSiteId,
 		ExcludedStatuses:       s.ExcludedStatuses,
 	}
@@ -71,8 +74,16 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 	} else {
 		h.kick()
 	}
-	if !slices.Equal(prev.ExcludedStatuses, saved.ExcludedStatuses) && h.cfg.Poller != nil {
-		// The hints and plans on the dashboard depend on the excluded statuses, so evaluate again from cached data.
+	modeChanged := prev.MultiPrTickets != saved.MultiPrTickets
+	if modeChanged && h.cfg.Poller != nil {
+		// Rules that follow the default run with the new mode. Like a mode change of one rule, it must not
+		// move tickets that already hold, so record what holds now first.
+		if err := h.baselineDefaultRules(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if (modeChanged || !slices.Equal(prev.ExcludedStatuses, saved.ExcludedStatuses)) && h.cfg.Poller != nil {
+		// The hints and plans on the dashboard depend on the excluded statuses and the multi-PR mode, so evaluate again from cached data.
 		if err := h.cfg.Poller.Reevaluate(ctx); err != nil {
 			return nil, err
 		}
@@ -84,6 +95,28 @@ func (h *handlers) PutSettings(ctx context.Context, req gen.PutSettingsRequestOb
 		}
 	}
 	return gen.PutSettings200JSONResponse(toGenSettings(saved)), nil
+}
+
+// baselineDefaultRules records the fingerprints that hold now for the rules in mode "default".
+func (h *handlers) baselineDefaultRules(ctx context.Context) error {
+	list, err := h.cfg.Store.Rules(ctx)
+	if err != nil {
+		return err
+	}
+	var follow []rules.Rule
+	for _, r := range list {
+		if r.Mode == string(rules.Default) {
+			follow = append(follow, toEngine(r))
+		}
+	}
+	if len(follow) == 0 {
+		return nil
+	}
+	hold, err := h.cfg.Poller.Baseline(ctx, follow)
+	if err != nil {
+		return err
+	}
+	return h.cfg.Store.RecordFirings(ctx, hold, h.cfg.Clock())
 }
 
 func sameSite(a, b *string) bool {

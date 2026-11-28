@@ -66,15 +66,47 @@ export interface Block {
 
 /**
  * Why the approvals alone keep a pull request from merging, or null. The words are the server's
- * (`merge.Approvals.Block` in Go), which refuses the merge with the same text.
+ * (`merge.Approvals.Block` in Go), which refuses the merge with the same text. A repository that
+ * requires none (0) never blocks.
  */
 export function approvalsBlock(a: Approvals): string | null {
-  const need = a.need >= 1 && a.need <= 10 ? a.need : 1;
+  const need = a.need >= 0 && a.need <= 10 ? a.need : 0;
   return a.have >= need ? null : `Needs ${need} approvals, has ${a.have}`;
+}
+
+/**
+ * Why the connected account cannot write to the repository of a pull request, or null. It reads the
+ * account's role on the repository (`repo.viewerPermission`): read and triage cannot merge or take
+ * a draft out of draft, and GitHub would refuse. A snapshot stored before the role was carried has
+ * none, and then nothing is blocked. The role is the account's, not the token's: a token without
+ * Pull requests: write still fails at click time with the server's message. With several tokens
+ * the text names the one the repository is written with (`repo.tokenName`).
+ */
+export function readOnlyReason(pr: SnapshotPr): string | null {
+  const role = pr.repo.viewerPermission;
+  if (role !== 'READ' && role !== 'TRIAGE') return null;
+  const { tokenName, nameWithOwner } = pr.repo;
+  return tokenName
+    ? `Read-only here: ${tokenName} can't write to ${nameWithOwner}`
+    : `Read-only here: your token's account can't write to ${nameWithOwner}`;
+}
+
+/**
+ * Why a draft cannot be marked ready by the connected account, or null. The author may mark their
+ * own draft ready even without write access; anyone else needs it. `login` is the connected GitHub
+ * login, undefined while it is not known (the `authored` role still says it is the viewer's).
+ */
+export function readyBlockOf(pr: SnapshotPr, login: string | undefined): string | null {
+  const own =
+    pr.roles.includes('authored') ||
+    (login !== undefined && pr.author?.toLowerCase() === login.toLowerCase());
+  return own ? null : readOnlyReason(pr);
 }
 
 export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   if (pr.isDraft) return { readiness: 'draft', reason: 'Draft' };
+  const readOnly = readOnlyReason(pr);
+  if (readOnly) return { readiness: 'blocked', reason: readOnly };
   const parent = parentNumber ?? pr.stack?.parentNumber ?? null;
   if (pr.stack?.parentId && parent !== null) {
     return { readiness: 'blocked', reason: `Merge after #${parent}` };
@@ -94,19 +126,36 @@ export function blockOf(pr: SnapshotPr, parentNumber?: number | null): Block {
   return { readiness: 'ready', reason: null };
 }
 
-/** What the stat tiles filter the list by: everything, ready to merge, running CI, or stacks only. */
-export type Filter = 'all' | 'ready' | 'running' | 'stacks';
+/** A pull request is stale when its last commit is older than this. */
+export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
-export const FILTERS: Filter[] = ['all', 'ready', 'running', 'stacks'];
+/** Whether the last commit is older than three days. No commit time means not stale. */
+export function isStale(pr: SnapshotPr, now: number): boolean {
+  if (!pr.committedAt) return false;
+  return now - Date.parse(pr.committedAt) > STALE_AFTER_MS;
+}
 
-export function matches(pr: SnapshotPr, filter: Filter): boolean {
+/**
+ * What the stat tiles filter the list by: everything, ready to merge, running CI, blocked, draft,
+ * stale, or stacks only.
+ */
+export type Filter = 'all' | 'ready' | 'running' | 'blocked' | 'draft' | 'stale' | 'stacks';
+
+export const FILTERS: Filter[] = ['all', 'ready', 'running', 'blocked', 'draft', 'stale', 'stacks'];
+
+/** Whether a pull request is in a filter. `now` (ms) is the clock that "stale" reads. */
+export function matches(pr: SnapshotPr, filter: Filter, now: number = Date.now()): boolean {
   switch (filter) {
     case 'all':
       return true;
     case 'ready':
-      return blockOf(pr).readiness === 'ready';
+    case 'blocked':
+    case 'draft':
+      return blockOf(pr).readiness === filter;
     case 'running':
       return pr.ci.state === 'running';
+    case 'stale':
+      return isStale(pr, now);
     case 'stacks':
       return pr.stack !== null;
   }
@@ -125,13 +174,15 @@ const NO_REPOS: ReadonlySet<string> = new Set();
  * Groups the filtered pull requests into rows: stacks stay together, in stack order, and everything
  * else is its own group. Only pull requests the Show mode lists, the search terms match and a repository
  * that is not switched off (`off`, repository ids) has are kept. The result holds ids only, so a row's data changing leaves it equal.
+ * `now` (ms) is the clock of the "stale" filter.
  */
 export function groupsOf(
   s: Snapshot,
   filter: Filter,
-  show: ShowMode = 'everything',
+  show: ShowMode = 'all',
   terms: readonly string[] = [],
   off: ReadonlySet<string> = NO_REPOS,
+  now: number = Date.now(),
 ): Group[] {
   const groups: Group[] = [];
   const byStack = new Map<string, Group>();
@@ -140,7 +191,10 @@ export function groupsOf(
     rows
       .filter(
         (p) =>
-          !off.has(p.repo.id) && matches(p, filter) && inShow(p, show) && matchesSearch(p, terms),
+          !off.has(p.repo.id) &&
+          matches(p, filter, now) &&
+          inShow(p, show) &&
+          matchesSearch(p, terms),
       )
       .map((p) => p.id),
   );

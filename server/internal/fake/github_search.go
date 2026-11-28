@@ -3,6 +3,7 @@
 package fake
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -25,11 +26,15 @@ type fixturePR struct {
 	totalChecks    int
 	reviewApproved bool
 	requested      bool
-	// authored and unassigned say how the viewer relates to the pull request. By default it is
-	// assigned to the viewer and opened by someone else. authored marks one the viewer opened
-	// (assignee:@me and author:@me both match when it is also assigned), and unassigned drops
-	// the assignment (only author:@me matches).
-	authored, unassigned bool
+	// authored, unassigned and reviewer say how the viewer relates to the pull request. By
+	// default it is assigned to the viewer and opened by someone else. authored marks one the
+	// viewer opened (assignee:@me and author:@me both match when it is also assigned), unassigned
+	// drops the assignment (only author:@me matches) and reviewer marks one the viewer is asked to
+	// review (review-requested:@me matches; with unassigned it is the only search that does).
+	authored, unassigned, reviewer bool
+	// viewerPermission is the viewer's role on the repository (ADMIN, MAINTAIN, WRITE, TRIAGE or
+	// READ); empty means WRITE.
+	viewerPermission string
 	// stacked marks the bottom pull request of a GitHub-native stack: the synchronous merge refuses it.
 	stacked bool
 	// author, updatedAgo, additions and deletions fill the author, updatedAt and diff size. Left
@@ -45,19 +50,21 @@ type fixturePR struct {
 // viewerOpened reports whether the viewer (octocat) opened the pull request.
 func (p fixturePR) viewerOpened() bool { return p.authored }
 
+// openedBy reports whether the account with the given login opened the pull request.
+func (p fixturePR) openedBy(login string) bool { return p.authored && login == defaultLogin }
+
 // matchesViewer reports whether the search query selects the pull request for the viewer.
-// A query with neither assignee:@me nor author:@me matches everything.
-func (p fixturePR) matchesViewer(query string) bool {
-	assignee, author := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me")
-	switch {
-	case assignee && author:
-		return !p.unassigned || p.authored
-	case assignee:
-		return !p.unassigned
-	case author:
-		return p.authored
+// A query with none of assignee:@me, author:@me and review-requested:@me matches everything.
+func (p fixturePR) matchesViewer(query string) bool { return p.matchesViewerAs(query, defaultLogin) }
+
+// matchesViewerAs is matchesViewer for the account with the given login. The pull requests the
+// viewer opened were opened by defaultLogin, so author:@me finds them only for that account.
+func (p fixturePR) matchesViewerAs(query, login string) bool {
+	assignee, author, review := strings.Contains(query, "assignee:@me"), strings.Contains(query, "author:@me"), strings.Contains(query, "review-requested:@me")
+	if !assignee && !author && !review {
+		return true
 	}
-	return true
+	return (assignee && !p.unassigned) || (author && p.authored && login == defaultLogin) || (review && p.reviewer)
 }
 
 func checkRun(name, app, status, conclusion, url string, started, completed time.Time) map[string]any {
@@ -124,6 +131,16 @@ func reviewPRs() []fixturePR {
 	}
 }
 
+// readOnlyPRs is one pull request in a repository where the viewer can only read (a public
+// repository of another owner). It is approved and green, so only the role keeps it from merging.
+func readOnlyPRs() []fixturePR {
+	return []fixturePR{{
+		repo: "oss/lib", org: "oss", number: 41, title: "RO-41 Someone else's repository", head: "feat/ro-41", base: "main",
+		mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "APPROVED", reviewApproved: true, committedAgo: time.Hour, rollup: "SUCCESS",
+		viewerPermission: "READ",
+	}}
+}
+
 // fixturePRs are the pull requests of the fake search, with the approvals and the extra pull
 // requests the config asks for.
 func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
@@ -136,6 +153,9 @@ func fixturePRs(now time.Time, cfg githubConfig) []fixturePR {
 	}
 	if cfg.Review {
 		prs = append(prs, reviewPRs()...)
+	}
+	if cfg.ReadOnly {
+		prs = append(prs, readOnlyPRs()...)
 	}
 	for i, p := range prs {
 		if slices.Contains(cfg.Approved, p.number) {
@@ -175,7 +195,7 @@ func basePRs(now time.Time) []fixturePR {
 		{
 			repo: "acme/web", org: "acme", number: 102, additions: 96, deletions: 12, title: "INP-102 Single sign-on", head: "feat/INP-102-sso", base: "feat/INP-101-login",
 			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 90 * time.Minute, rollup: "SUCCESS", requested: true,
-			authored: true, // assigned and opened by the viewer: both searches find it
+			authored: true, // assigned and opened by the viewer: the assignee and author searches find it
 			checks: []map[string]any{
 				checkRun("build", "GitHub Actions", "COMPLETED", "SUCCESS", run("acme/web", 1002)+"/job/1", ago(30*time.Minute), ago(28*time.Minute)),
 				checkRun("lint", "GitHub Actions", "COMPLETED", "NEUTRAL", run("acme/web", 1002)+"/job/2", ago(30*time.Minute), ago(29*time.Minute)),
@@ -193,6 +213,16 @@ func basePRs(now time.Time) []fixturePR {
 			repo: "acme/api", org: "acme", number: 7, additions: 58, deletions: 61, title: "WIP schema cleanup", head: "chore/schema-cleanup", base: "main", draft: true,
 			mergeable: "UNKNOWN", mergeState: "DRAFT", decision: "", committedAgo: 5 * 24 * time.Hour, rollup: "",
 			authored: true, unassigned: true, // opened by the viewer, assigned to nobody: only author:@me finds it
+		},
+		{
+			repo: "acme/api", org: "acme", number: 10, additions: 31, deletions: 9, title: "Tighten rate limiter", head: "fix/rate-limiter", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 5 * time.Hour, rollup: "SUCCESS",
+			author: "dana", reviewer: true, unassigned: true, // someone else's, I am asked to review: only review-requested:@me finds it
+		},
+		{
+			repo: "acme/web", org: "acme", number: 104, additions: 17, deletions: 2, title: "Fix focus ring on tabs", head: "fix/tab-focus", base: "main",
+			mergeable: "MERGEABLE", mergeState: "CLEAN", decision: "REVIEW_REQUIRED", committedAgo: 2 * time.Hour, rollup: "SUCCESS",
+			author: "eve", reviewer: true, unassigned: true,
 		},
 		{
 			repo: "acme/api", org: "acme", number: 8, additions: 22, deletions: 7, title: "OPS-12 Rotate signing keys", head: "fix/OPS-12-keys", base: "main",
@@ -242,6 +272,11 @@ func findFixture(repo string, number int, cfg githubConfig) (fixturePR, bool) {
 }
 
 func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any {
+	return p.nodeAs(now, moved, state, cmp.Or(p.viewerPermission, "WRITE"))
+}
+
+// nodeAs is node with the viewer's role on the repository, which depends on the token.
+func (p fixturePR) nodeAs(now time.Time, moved bool, state, permission string) map[string]any {
 	total := p.totalChecks
 	if total == 0 {
 		total = len(p.checks)
@@ -298,6 +333,7 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 		"repository": map[string]any{
 			"id": "R_" + strings.ReplaceAll(p.repo, "/", "_"), "nameWithOwner": p.repo,
 			"squashMergeAllowed": true, "mergeCommitAllowed": true, "rebaseMergeAllowed": p.repo != "acme/api",
+			"viewerPermission": permission,
 		},
 		"commits": map[string]any{"nodes": []any{map[string]any{"commit": map[string]any{
 			"committedDate":     now.Add(-p.committedAgo).UTC().Format(time.RFC3339),
@@ -308,25 +344,33 @@ func (p fixturePR) node(now time.Time, moved bool, state string) map[string]any 
 	}
 }
 
-// searchBody answers the open and merged pull request searches, honouring assignee:@me and
-// author:@me, so the dashboard's union of the two searches is exercised. With the sso option the pull
+// searchBody answers the open and merged pull request searches, honouring assignee:@me, author:@me
+// and review-requested:@me, so the dashboard's union of the three searches is exercised. With the sso option the pull
 // requests of acme-corp are left out, as GitHub does for an organization that has not authorized
 // the token, and the answer carries the SAML header and a FORBIDDEN error next to the data.
 func searchBody(query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
+	return searchBodyFor("", query, cfg, merged, now)
+}
+
+// searchBodyFor is searchBody for one token: only the repositories the token sees are searched,
+// with the viewer's role the token has there (see githubTokenAccess).
+func searchBodyFor(token, query string, cfg githubConfig, merged []string, now time.Time) (header map[string]string, body map[string]any) {
 	sso, moved := cfg.SSO, cfg.HeadMoved
+	login := loginOf(token)
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4900, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 	}
 	nodes := []any{}
 	for _, p := range fixturePRs(now, cfg) {
-		if (sso && p.org == "acme-corp") || !p.matchesViewer(query) {
+		perm, sees := permissionOf(token, p)
+		if (sso && p.org == "acme-corp") || !sees || !p.matchesViewerAs(query, login) {
 			continue
 		}
 		switch isMerged := slices.Contains(merged, p.id()); {
 		case strings.Contains(query, "is:merged") && isMerged:
 			nodes = append(nodes, map[string]any{"__typename": "PullRequest", "id": p.id(), "mergedAt": now.UTC().Format(time.RFC3339)})
 		case !strings.Contains(query, "is:merged") && !isMerged:
-			nodes = append(nodes, p.node(now, moved, "OPEN"))
+			nodes = append(nodes, p.nodeAs(now, moved, "OPEN", perm))
 		}
 	}
 	data["search"] = map[string]any{
@@ -347,17 +391,23 @@ func searchBody(query string, cfg githubConfig, merged []string, now time.Time) 
 
 // nodeBody answers the single pull request lookup by node id.
 func nodeBody(id string, cfg githubConfig, merged []string, now time.Time) map[string]any {
+	return nodeBodyFor("", id, cfg, merged, now)
+}
+
+// nodeBodyFor is nodeBody for one token: a pull request of a repository the token does not see is
+// null, as GitHub answers a node the token cannot read.
+func nodeBodyFor(token, id string, cfg githubConfig, merged []string, now time.Time) map[string]any {
 	data := map[string]any{
 		"rateLimit": map[string]any{"limit": 5000, "cost": 1, "remaining": 4899, "resetAt": now.Add(time.Hour).UTC().Format(time.RFC3339)},
 		"node":      nil,
 	}
 	for _, p := range fixturePRs(now, cfg) {
-		if p.id() == id {
+		if perm, sees := permissionOf(token, p); sees && p.id() == id {
 			state := "OPEN"
 			if slices.Contains(merged, id) {
 				state = "MERGED"
 			}
-			data["node"] = p.node(now, cfg.HeadMoved, state)
+			data["node"] = p.nodeAs(now, cfg.HeadMoved, state, perm)
 		}
 	}
 	return map[string]any{"data": data}

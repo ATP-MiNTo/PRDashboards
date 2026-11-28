@@ -81,19 +81,19 @@ func (e CiState) Valid() bool {
 
 // Defines values for DeleteBranchChoice.
 const (
-	Default DeleteBranchChoice = "default"
-	No      DeleteBranchChoice = "no"
-	Yes     DeleteBranchChoice = "yes"
+	DeleteBranchChoiceDefault DeleteBranchChoice = "default"
+	DeleteBranchChoiceNo      DeleteBranchChoice = "no"
+	DeleteBranchChoiceYes     DeleteBranchChoice = "yes"
 )
 
 // Valid indicates whether the value is a known member of the DeleteBranchChoice enum.
 func (e DeleteBranchChoice) Valid() bool {
 	switch e {
-	case Default:
+	case DeleteBranchChoiceDefault:
 		return true
-	case No:
+	case DeleteBranchChoiceNo:
 		return true
-	case Yes:
+	case DeleteBranchChoiceYes:
 		return true
 	default:
 		return false
@@ -102,19 +102,40 @@ func (e DeleteBranchChoice) Valid() bool {
 
 // Defines values for GithubAccountMethod.
 const (
-	App   GithubAccountMethod = "app"
-	Oauth GithubAccountMethod = "oauth"
-	Pat   GithubAccountMethod = "pat"
+	GithubAccountMethodApp   GithubAccountMethod = "app"
+	GithubAccountMethodOauth GithubAccountMethod = "oauth"
+	GithubAccountMethodPat   GithubAccountMethod = "pat"
 )
 
 // Valid indicates whether the value is a known member of the GithubAccountMethod enum.
 func (e GithubAccountMethod) Valid() bool {
 	switch e {
-	case App:
+	case GithubAccountMethodApp:
 		return true
-	case Oauth:
+	case GithubAccountMethodOauth:
 		return true
-	case Pat:
+	case GithubAccountMethodPat:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GithubTokenMethod.
+const (
+	GithubTokenMethodApp   GithubTokenMethod = "app"
+	GithubTokenMethodOauth GithubTokenMethod = "oauth"
+	GithubTokenMethodPat   GithubTokenMethod = "pat"
+)
+
+// Valid indicates whether the value is a known member of the GithubTokenMethod enum.
+func (e GithubTokenMethod) Valid() bool {
+	switch e {
+	case GithubTokenMethodApp:
+		return true
+	case GithubTokenMethodOauth:
+		return true
+	case GithubTokenMethodPat:
 		return true
 	default:
 		return false
@@ -228,16 +249,19 @@ func (e ReviewResultAction) Valid() bool {
 
 // Defines values for RuleMode.
 const (
-	All RuleMode = "all"
-	Any RuleMode = "any"
+	RuleModeAll     RuleMode = "all"
+	RuleModeAny     RuleMode = "any"
+	RuleModeDefault RuleMode = "default"
 )
 
 // Valid indicates whether the value is a known member of the RuleMode enum.
 func (e RuleMode) Valid() bool {
 	switch e {
-	case All:
+	case RuleModeAll:
 		return true
-	case Any:
+	case RuleModeAny:
+		return true
+	case RuleModeDefault:
 		return true
 	default:
 		return false
@@ -304,6 +328,24 @@ func (e SettingsDefaultMethodForNewRepos) Valid() bool {
 	case SettingsDefaultMethodForNewReposRebase:
 		return true
 	case SettingsDefaultMethodForNewReposSquash:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsMultiPrTickets.
+const (
+	SettingsMultiPrTicketsAll SettingsMultiPrTickets = "all"
+	SettingsMultiPrTicketsAny SettingsMultiPrTickets = "any"
+)
+
+// Valid indicates whether the value is a known member of the SettingsMultiPrTickets enum.
+func (e SettingsMultiPrTickets) Valid() bool {
+	switch e {
+	case SettingsMultiPrTicketsAll:
+		return true
+	case SettingsMultiPrTicketsAny:
 		return true
 	default:
 		return false
@@ -380,6 +422,7 @@ func (e SnapshotPrReviewDecision) Valid() bool {
 const (
 	Assigned SnapshotPrRoles = "assigned"
 	Authored SnapshotPrRoles = "authored"
+	Reviewer SnapshotPrRoles = "reviewer"
 )
 
 // Valid indicates whether the value is a known member of the SnapshotPrRoles enum.
@@ -388,6 +431,35 @@ func (e SnapshotPrRoles) Valid() bool {
 	case Assigned:
 		return true
 	case Authored:
+		return true
+	case Reviewer:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SnapshotRepoViewerPermission.
+const (
+	ADMIN    SnapshotRepoViewerPermission = "ADMIN"
+	MAINTAIN SnapshotRepoViewerPermission = "MAINTAIN"
+	READ     SnapshotRepoViewerPermission = "READ"
+	TRIAGE   SnapshotRepoViewerPermission = "TRIAGE"
+	WRITE    SnapshotRepoViewerPermission = "WRITE"
+)
+
+// Valid indicates whether the value is a known member of the SnapshotRepoViewerPermission enum.
+func (e SnapshotRepoViewerPermission) Valid() bool {
+	switch e {
+	case ADMIN:
+		return true
+	case MAINTAIN:
+		return true
+	case READ:
+		return true
+	case TRIAGE:
+		return true
+	case WRITE:
 		return true
 	default:
 		return false
@@ -487,10 +559,14 @@ func (e TicketSummaryStatusCategory) Valid() bool {
 	}
 }
 
-// Accounts defines model for Accounts.
+// Accounts github is the summary of the GitHub connection: connected when any token is stored, login, method and warning of the primary (first) token, needsReconnect when any token needs it. githubTokens lists every token, primary first.
 type Accounts struct {
 	Github GithubAccount `json:"github"`
-	Jira   JiraAccount   `json:"jira"`
+
+	// GithubTokenLimit The most tokens that can be connected (10).
+	GithubTokenLimit int           `json:"githubTokenLimit"`
+	GithubTokens     []GithubToken `json:"githubTokens"`
+	Jira             JiraAccount   `json:"jira"`
 }
 
 // ActivityItem defines model for ActivityItem.
@@ -512,16 +588,23 @@ type ActivityPage struct {
 	NextCursor *int64         `json:"nextCursor"`
 }
 
+// AddTokenRequest defines model for AddTokenRequest.
+type AddTokenRequest struct {
+	// Name The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique.
+	Name  *TokenName `json:"name,omitempty"`
+	Token string     `json:"token"`
+}
+
 // Approvals have counts the distinct reviewers whose latest review is APPROVED, need is the repository's approvalsRequired, and changesRequested counts the reviewers whose latest review requests changes. The merge is refused, here and on the server, while have is below need ("Needs N approvals, has M").
 type Approvals struct {
 	ChangesRequested int `json:"changesRequested"`
 	Have             int `json:"have"`
 
-	// Need Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+	// Need Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required.
 	Need ApprovalsRequired `json:"need"`
 }
 
-// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required.
 type ApprovalsRequired = int
 
 // ApproveRequest defines model for ApproveRequest.
@@ -613,6 +696,27 @@ type GithubAccount struct {
 
 // GithubAccountMethod defines model for GithubAccount.Method.
 type GithubAccountMethod string
+
+// GithubToken One stored GitHub credential, without the token. The first one in the list is the primary one, which wins a tie when several tokens see the same repository.
+type GithubToken struct {
+	// FineGrained A fine-grained personal access token, which works for one owner only.
+	FineGrained bool `json:"fineGrained"`
+
+	// Id Random and stable for the life of the token.
+	Id     string            `json:"id"`
+	Login  string            `json:"login"`
+	Method GithubTokenMethod `json:"method"`
+
+	// Name The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique.
+	Name TokenName `json:"name"`
+
+	// NeedsReconnect GitHub refused to refresh (App or OAuth token) or to accept the token, so the person must sign in again or replace it.
+	NeedsReconnect bool    `json:"needsReconnect"`
+	Warning        *string `json:"warning"`
+}
+
+// GithubTokenMethod defines model for GithubToken.Method.
+type GithubTokenMethod string
 
 // JiraAccount defines model for JiraAccount.
 type JiraAccount struct {
@@ -717,7 +821,9 @@ type OAuthComplete struct {
 
 // PatRequest defines model for PatRequest.
 type PatRequest struct {
-	Token string `json:"token"`
+	// Name The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique.
+	Name  *TokenName `json:"name,omitempty"`
+	Token string     `json:"token"`
 }
 
 // PollingSeconds Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time.
@@ -753,7 +859,7 @@ type ProviderSetup struct {
 	InstallUrl *string `json:"installUrl,omitempty"`
 }
 
-// RateLimitUsage The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
+// RateLimitUsage The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the three searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
 type RateLimitUsage struct {
 	Limit int `json:"limit"`
 
@@ -769,9 +875,15 @@ type ReadyRequest struct {
 	ExpectedHeadSha string `json:"expectedHeadSha"`
 }
 
+// RenameTokenRequest defines model for RenameTokenRequest.
+type RenameTokenRequest struct {
+	// Name The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique.
+	Name TokenName `json:"name"`
+}
+
 // RepoSettings defines model for RepoSettings.
 type RepoSettings struct {
-	// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set.
+	// ApprovalsRequired Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required.
 	ApprovalsRequired ApprovalsRequired `json:"approvalsRequired"`
 	BranchRules       []BranchRule      `json:"branchRules"`
 	DefaultMethod     MergeMethodName   `json:"defaultMethod"`
@@ -869,7 +981,7 @@ type RuleFilters struct {
 	Status    string `json:"status"`
 }
 
-// RuleMode defines model for RuleMode.
+// RuleMode How a ticket with several pull requests meets a rule. "all": when the last pull request meets it. "any": when the first one does. "default" follows Settings.multiPrTickets.
 type RuleMode string
 
 // RuleMove defines model for RuleMove.
@@ -928,7 +1040,10 @@ type Settings struct {
 	// ExcludedStatuses Jira statuses whose tickets no status sync rule ever moves. Compared without regard to case. Defaults to ["Done"].
 	ExcludedStatuses []string `json:"excludedStatuses"`
 	JiraSiteId       *string  `json:"jiraSiteId"`
-	Polling          struct {
+
+	// MultiPrTickets When a ticket linked to several pull requests moves, for the status sync rules whose mode is "default": "all" when the last pull request meets the rule, "any" when the first one does. Defaults to "all".
+	MultiPrTickets SettingsMultiPrTickets `json:"multiPrTickets"`
+	Polling        struct {
 		// GithubSec Seconds between refreshes of one source: any multiple of 15 from 30 to 3600. The 30 second floor keeps the GraphQL budget safe; the poller also honours GitHub's rate limit headers and runs one refresh at a time.
 		GithubSec PollingSeconds `json:"githubSec"`
 
@@ -940,6 +1055,9 @@ type Settings struct {
 
 // SettingsDefaultMethodForNewRepos defines model for Settings.DefaultMethodForNewRepos.
 type SettingsDefaultMethodForNewRepos string
+
+// SettingsMultiPrTickets When a ticket linked to several pull requests moves, for the status sync rules whose mode is "default": "all" when the last pull request meets the rule, "any" when the first one does. Defaults to "all".
+type SettingsMultiPrTickets string
 
 // SettingsTheme defines model for Settings.Theme.
 type SettingsTheme string
@@ -989,7 +1107,7 @@ type SnapshotPr struct {
 	ReviewRequests   []string                  `json:"reviewRequests"`
 	Reviews          []Review                  `json:"reviews"`
 
-	// Roles Why the pull request is listed. Both can be present, and the list is never empty.
+	// Roles Why the pull request is listed: assigned to the user, opened by the user, or waiting for the user's review (reviewer). Several can be present, and the list is never empty.
 	Roles        []SnapshotPrRoles `json:"roles"`
 	Stack        *StackInfo        `json:"stack"`
 	TicketLookup TicketLookup      `json:"ticketLookup"`
@@ -1017,7 +1135,19 @@ type SnapshotRepo struct {
 	NameWithOwner string `json:"nameWithOwner"`
 	RebaseAllowed bool   `json:"rebaseAllowed"`
 	SquashAllowed bool   `json:"squashAllowed"`
+
+	// TokenId The GitHub token this repository is read and written with: among the tokens whose searches returned it, the one with the highest viewerPermission, the first in the list on a tie. Absent in a snapshot stored before several tokens existed, which the merge and review actions then answer with the primary token.
+	TokenId *string `json:"tokenId,omitempty"`
+
+	// TokenName The name of that token (not a secret).
+	TokenName *string `json:"tokenName,omitempty"`
+
+	// ViewerPermission The role of the GitHub account of the chosen token (tokenId) on the repository. It is the account's role, not what the token may do (a fine-grained token can still lack Pull requests: write there). Absent for a snapshot stored before the field existed, and when GitHub did not say; the web then blocks nothing.
+	ViewerPermission *SnapshotRepoViewerPermission `json:"viewerPermission,omitempty"`
 }
+
+// SnapshotRepoViewerPermission The role of the GitHub account of the chosen token (tokenId) on the repository. It is the account's role, not what the token may do (a fine-grained token can still lack Pull requests: write there). Absent for a snapshot stored before the field existed, and when GitHub did not say; the web then blocks nothing.
+type SnapshotRepoViewerPermission string
 
 // SnapshotTicket defines model for SnapshotTicket.
 type SnapshotTicket struct {
@@ -1044,7 +1174,7 @@ type SourceState string
 type SourceStatus struct {
 	Error *string `json:"error"`
 
-	// RateLimit The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
+	// RateLimit The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the three searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed.
 	RateLimit *RateLimitUsage `json:"rateLimit,omitempty"`
 	ResetAt   *time.Time      `json:"resetAt"`
 	State     SourceState     `json:"state"`
@@ -1078,10 +1208,12 @@ type SyncRule struct {
 	Filters RuleFilters `json:"filters"`
 
 	// Hours Age of the latest commit in hours, 1 to 720, for commit_stale. 0 for every other trigger.
-	Hours int      `json:"hours"`
-	Id    string   `json:"id"`
-	Mode  RuleMode `json:"mode"`
-	Name  string   `json:"name"`
+	Hours int    `json:"hours"`
+	Id    string `json:"id"`
+
+	// Mode How a ticket with several pull requests meets a rule. "all": when the last pull request meets it. "any": when the first one does. "default" follows Settings.multiPrTickets.
+	Mode RuleMode `json:"mode"`
+	Name string   `json:"name"`
 
 	// Target The name of the Jira status to move the ticket to.
 	Target  string      `json:"target"`
@@ -1144,6 +1276,9 @@ type TicketWaiting struct {
 	WaitingOn []PrRef `json:"waitingOn"`
 }
 
+// TokenName The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique.
+type TokenName = string
+
 // Transition defines model for Transition.
 type Transition struct {
 	Fields     []TransitionField `json:"fields"`
@@ -1182,6 +1317,9 @@ type RepoId = string
 
 // RetryId defines model for RetryId.
 type RetryId = int64
+
+// TokenId defines model for TokenId.
+type TokenId = string
 
 // BadGateway defines model for BadGateway.
 type BadGateway = Problem
@@ -1229,6 +1367,12 @@ type GetSnapshotParams struct {
 
 // PutGithubPatJSONRequestBody defines body for PutGithubPat for application/json ContentType.
 type PutGithubPatJSONRequestBody = PatRequest
+
+// AddGithubTokenJSONRequestBody defines body for AddGithubToken for application/json ContentType.
+type AddGithubTokenJSONRequestBody = AddTokenRequest
+
+// RenameGithubTokenJSONRequestBody defines body for RenameGithubToken for application/json ContentType.
+type RenameGithubTokenJSONRequestBody = RenameTokenRequest
 
 // CompleteOAuthJSONRequestBody defines body for CompleteOAuth for application/json ContentType.
 type CompleteOAuthJSONRequestBody = OAuthComplete
@@ -1286,6 +1430,18 @@ type ServerInterface interface {
 	// PutGithubPat Validate and store a GitHub personal access token
 	// (PUT /api/github/pat)
 	PutGithubPat(w http.ResponseWriter, r *http.Request)
+	// AddGithubToken Add a GitHub personal access token
+	// (POST /api/github/tokens)
+	AddGithubToken(w http.ResponseWriter, r *http.Request)
+	// DeleteGithubToken Remove a GitHub token
+	// (DELETE /api/github/tokens/{id})
+	DeleteGithubToken(w http.ResponseWriter, r *http.Request, id TokenId)
+	// RenameGithubToken Rename a GitHub token
+	// (PUT /api/github/tokens/{id})
+	RenameGithubToken(w http.ResponseWriter, r *http.Request, id TokenId)
+	// CheckGithubToken Check one GitHub token with GitHub now
+	// (POST /api/github/tokens/{id}/check)
+	CheckGithubToken(w http.ResponseWriter, r *http.Request, id TokenId)
 	// GetJiraOptions The status names and project keys of the connected Jira site, for the rule form
 	// (GET /api/jira/options)
 	GetJiraOptions(w http.ResponseWriter, r *http.Request)
@@ -1498,6 +1654,98 @@ func (siw *ServerInterfaceWrapper) PutGithubPat(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PutGithubPat(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddGithubToken operation middleware
+func (siw *ServerInterfaceWrapper) AddGithubToken(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddGithubToken(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteGithubToken operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGithubToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGithubToken(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenameGithubToken operation middleware
+func (siw *ServerInterfaceWrapper) RenameGithubToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenameGithubToken(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CheckGithubToken operation middleware
+func (siw *ServerInterfaceWrapper) CheckGithubToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id TokenId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CheckGithubToken(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2214,6 +2462,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/setup", wrapper.GetSetup)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/setup/{provider}", wrapper.PutSetupClient)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/github/pat", wrapper.PutGithubPat)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/github/tokens", wrapper.AddGithubToken)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/github/tokens/{id}", wrapper.DeleteGithubToken)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/github/tokens/{id}", wrapper.RenameGithubToken)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/github/tokens/{id}/check", wrapper.CheckGithubToken)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/accounts", wrapper.GetAccounts)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/accounts/{provider}", wrapper.DisconnectAccount)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/accounts/{provider}/check", wrapper.CheckAccount)
@@ -2412,6 +2664,38 @@ func (response PutGithubPat200JSONResponse) VisitPutGithubPatResponse(w http.Res
 	return err
 }
 
+type PutGithubPat403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response PutGithubPat403ApplicationProblemPlusJSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ForbiddenApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PutGithubPat409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response PutGithubPat409ApplicationProblemPlusJSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PutGithubPat422ApplicationProblemPlusJSONResponse struct {
 	UnprocessableApplicationProblemPlusJSONResponse
 }
@@ -2433,6 +2717,265 @@ type PutGithubPat502ApplicationProblemPlusJSONResponse struct {
 }
 
 func (response PutGithubPat502ApplicationProblemPlusJSONResponse) VisitPutGithubPatResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGithubTokenRequestObject struct {
+	Body *AddGithubTokenJSONRequestBody
+}
+
+type AddGithubTokenResponseObject interface {
+	VisitAddGithubTokenResponse(w http.ResponseWriter) error
+}
+
+type AddGithubToken201JSONResponse GithubToken
+
+func (response AddGithubToken201JSONResponse) VisitAddGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGithubToken403ApplicationProblemPlusJSONResponse struct {
+	ForbiddenApplicationProblemPlusJSONResponse
+}
+
+func (response AddGithubToken403ApplicationProblemPlusJSONResponse) VisitAddGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ForbiddenApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGithubToken409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response AddGithubToken409ApplicationProblemPlusJSONResponse) VisitAddGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGithubToken422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response AddGithubToken422ApplicationProblemPlusJSONResponse) VisitAddGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddGithubToken502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response AddGithubToken502ApplicationProblemPlusJSONResponse) VisitAddGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(502)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteGithubTokenRequestObject struct {
+	Id TokenId `json:"id"`
+}
+
+type DeleteGithubTokenResponseObject interface {
+	VisitDeleteGithubTokenResponse(w http.ResponseWriter) error
+}
+
+type DeleteGithubToken204Response struct {
+}
+
+func (response DeleteGithubToken204Response) VisitDeleteGithubTokenResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteGithubToken404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteGithubToken404ApplicationProblemPlusJSONResponse) VisitDeleteGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameGithubTokenRequestObject struct {
+	Id   TokenId `json:"id"`
+	Body *RenameGithubTokenJSONRequestBody
+}
+
+type RenameGithubTokenResponseObject interface {
+	VisitRenameGithubTokenResponse(w http.ResponseWriter) error
+}
+
+type RenameGithubToken200JSONResponse GithubToken
+
+func (response RenameGithubToken200JSONResponse) VisitRenameGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameGithubToken404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response RenameGithubToken404ApplicationProblemPlusJSONResponse) VisitRenameGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameGithubToken409ApplicationProblemPlusJSONResponse struct {
+	ConflictApplicationProblemPlusJSONResponse
+}
+
+func (response RenameGithubToken409ApplicationProblemPlusJSONResponse) VisitRenameGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.ConflictApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameGithubToken422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response RenameGithubToken422ApplicationProblemPlusJSONResponse) VisitRenameGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckGithubTokenRequestObject struct {
+	Id TokenId `json:"id"`
+}
+
+type CheckGithubTokenResponseObject interface {
+	VisitCheckGithubTokenResponse(w http.ResponseWriter) error
+}
+
+type CheckGithubToken200JSONResponse Accounts
+
+func (response CheckGithubToken200JSONResponse) VisitCheckGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckGithubToken404ApplicationProblemPlusJSONResponse struct {
+	NotFoundApplicationProblemPlusJSONResponse
+}
+
+func (response CheckGithubToken404ApplicationProblemPlusJSONResponse) VisitCheckGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.NotFoundApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckGithubToken422ApplicationProblemPlusJSONResponse struct {
+	UnprocessableApplicationProblemPlusJSONResponse
+}
+
+func (response CheckGithubToken422ApplicationProblemPlusJSONResponse) VisitCheckGithubTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response.UnprocessableApplicationProblemPlusJSONResponse); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CheckGithubToken502ApplicationProblemPlusJSONResponse struct {
+	BadGatewayApplicationProblemPlusJSONResponse
+}
+
+func (response CheckGithubToken502ApplicationProblemPlusJSONResponse) VisitCheckGithubTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := runtime.JSONMarshalWrite(&buf, response.BadGatewayApplicationProblemPlusJSONResponse); err != nil {
@@ -3819,6 +4362,18 @@ type StrictServerInterface interface {
 	// PutGithubPat Validate and store a GitHub personal access token
 	// (PUT /api/github/pat)
 	PutGithubPat(ctx context.Context, request PutGithubPatRequestObject) (PutGithubPatResponseObject, error)
+	// AddGithubToken Add a GitHub personal access token
+	// (POST /api/github/tokens)
+	AddGithubToken(ctx context.Context, request AddGithubTokenRequestObject) (AddGithubTokenResponseObject, error)
+	// DeleteGithubToken Remove a GitHub token
+	// (DELETE /api/github/tokens/{id})
+	DeleteGithubToken(ctx context.Context, request DeleteGithubTokenRequestObject) (DeleteGithubTokenResponseObject, error)
+	// RenameGithubToken Rename a GitHub token
+	// (PUT /api/github/tokens/{id})
+	RenameGithubToken(ctx context.Context, request RenameGithubTokenRequestObject) (RenameGithubTokenResponseObject, error)
+	// CheckGithubToken Check one GitHub token with GitHub now
+	// (POST /api/github/tokens/{id}/check)
+	CheckGithubToken(ctx context.Context, request CheckGithubTokenRequestObject) (CheckGithubTokenResponseObject, error)
 	// GetJiraOptions The status names and project keys of the connected Jira site, for the rule form
 	// (GET /api/jira/options)
 	GetJiraOptions(ctx context.Context, request GetJiraOptionsRequestObject) (GetJiraOptionsResponseObject, error)
@@ -4073,6 +4628,122 @@ func (sh *strictHandler) PutGithubPat(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(PutGithubPatResponseObject); ok {
 		if err := validResponse.VisitPutGithubPatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddGithubToken operation middleware
+func (sh *strictHandler) AddGithubToken(w http.ResponseWriter, r *http.Request) {
+	var request AddGithubTokenRequestObject
+
+	var body AddGithubTokenJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.AddGithubToken(ctx, request.(AddGithubTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddGithubToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddGithubTokenResponseObject); ok {
+		if err := validResponse.VisitAddGithubTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteGithubToken operation middleware
+func (sh *strictHandler) DeleteGithubToken(w http.ResponseWriter, r *http.Request, id TokenId) {
+	var request DeleteGithubTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.DeleteGithubToken(ctx, request.(DeleteGithubTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteGithubToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteGithubTokenResponseObject); ok {
+		if err := validResponse.VisitDeleteGithubTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenameGithubToken operation middleware
+func (sh *strictHandler) RenameGithubToken(w http.ResponseWriter, r *http.Request, id TokenId) {
+	var request RenameGithubTokenRequestObject
+
+	request.Id = id
+
+	var body RenameGithubTokenJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.RenameGithubToken(ctx, request.(RenameGithubTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenameGithubToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RenameGithubTokenResponseObject); ok {
+		if err := validResponse.VisitRenameGithubTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CheckGithubToken operation middleware
+func (sh *strictHandler) CheckGithubToken(w http.ResponseWriter, r *http.Request, id TokenId) {
+	var request CheckGithubTokenRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.CheckGithubToken(ctx, request.(CheckGithubTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CheckGithubToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CheckGithubTokenResponseObject); ok {
+		if err := validResponse.VisitCheckGithubTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -4873,176 +5544,202 @@ func (sh *strictHandler) GetTransitions(w http.ResponseWriter, r *http.Request, 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"T2nv1tv79fPt59v/OwA=",
+	"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",
+	"H79+/Pp/BwA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

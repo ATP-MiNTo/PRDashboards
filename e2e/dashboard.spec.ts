@@ -47,9 +47,10 @@ test("an SSO-blocked organization shows the banner while the other rows load", a
   ).toHaveAccessibleDescription("Merge after #101");
 });
 
-// The roles come from which of the two searches found each pull request: #101 is only assigned,
-// #7 only opened by the user and #102 both.
-test("the Show switch follows the roles from the two searches", async ({
+// The roles come from which of the three searches found each pull request: #101 is only assigned,
+// #7 only opened by the user, #102 both, and "Tighten rate limiter" (#10 in acme/api) and "Fix
+// focus ring on tabs" (#104 in acme/web) are only review requested.
+test("the Show switch follows the roles from the three searches", async ({
   page,
 }) => {
   await page.goto(APP + "/setup/");
@@ -62,19 +63,36 @@ test("the Show switch follows the roles from the two searches", async ({
     page.locator("article[data-pr]").filter({ hasText: title });
   await expect(rows("INP-101 Add login")).toBeVisible();
 
-  await page.getByRole("button", { name: /^Show, now Everything/ }).click();
+  // All lists everything the three searches found.
   await expect(
-    page.getByRole("button", { name: /^Show, now Assigned to me/ }),
+    page.getByRole("button", { name: /^Show, now All/ }),
+  ).toBeVisible();
+  await expect(rows("INP-101 Add login")).toBeVisible();
+  await expect(rows("WIP schema cleanup")).toBeVisible();
+  await expect(rows("Tighten rate limiter")).toBeVisible();
+  await expect(rows("Fix focus ring on tabs")).toBeVisible();
+
+  // Mine: assigned to the user or opened by the user, never a review-only pull request.
+  await page.getByRole("button", { name: /^Show, now All/ }).click();
+  await expect(
+    page.getByRole("button", { name: /^Show, now Mine/ }),
   ).toBeVisible();
   await expect(rows("INP-101 Add login")).toBeVisible();
   await expect(rows("INP-102 Single sign-on")).toBeVisible();
-  await expect(rows("WIP schema cleanup")).toHaveCount(0);
-
-  await page.getByRole("button", { name: /^Show, now Assigned to me/ }).click();
-  await expect(
-    page.getByRole("button", { name: /^Show, now Opened by me/ }),
-  ).toBeVisible();
   await expect(rows("WIP schema cleanup")).toBeVisible();
-  await expect(rows("INP-102 Single sign-on")).toBeVisible();
+  await expect(rows("Tighten rate limiter")).toHaveCount(0);
+  await expect(rows("Fix focus ring on tabs")).toHaveCount(0);
+
+  // To review: only the pull requests the user is asked to review.
+  await page.getByRole("button", { name: /^Show, now Mine/ }).click();
+  await expect(
+    page.getByRole("button", { name: /^Show, now To review/ }),
+  ).toBeVisible();
+  await expect(rows("Tighten rate limiter")).toBeVisible();
+  await expect(rows("Fix focus ring on tabs")).toBeVisible();
   await expect(rows("INP-101 Add login")).toHaveCount(0);
+  await expect(rows("WIP schema cleanup")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Summary" })).toContainText(
+    "Showing2",
+  );
 });

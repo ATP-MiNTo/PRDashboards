@@ -24,6 +24,7 @@ const settings: Settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: null,
   excludedStatuses: ['Done'],
 };
@@ -33,6 +34,8 @@ const setup = (g: boolean, a: boolean): Setup => ({
 });
 const accounts = (over: Partial<Accounts> = {}): Accounts => ({
   github: { connected: false },
+  githubTokens: [],
+  githubTokenLimit: 10,
   jira: { connected: false, sites: [], selectedSiteId: null, needsReconnect: false },
   ...over,
 });

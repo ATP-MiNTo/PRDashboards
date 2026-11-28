@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/api/gen"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/backoff"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/events"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
@@ -19,6 +20,7 @@ import (
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/linking"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/merge"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/tokenpick"
 )
 
 // Store is the part of the database the poller uses.
@@ -34,7 +36,7 @@ type Store interface {
 	UserLinks(ctx context.Context) (map[string]store.UserLinks, error)
 }
 
-// GitHub is the search client.
+// GitHub is the search client. The token is the value of one credential.
 type GitHub interface {
 	SearchOpen(ctx context.Context, token string) (github.SearchResult, error)
 	SearchMerged(ctx context.Context, token string, since time.Time) (github.MergedResult, error)
@@ -48,11 +50,17 @@ type Jira interface {
 	Transition(ctx context.Context, site, key, id string, fields map[string]any) error
 }
 
-// Accounts says who the poller talks as. GitHubToken returns an error that wraps
-// auth.ErrNotConnected when GitHub is not connected. JiraSite returns one that wraps
+// Accounts says who the poller talks as. GitHubTokens lists the connected GitHub credentials,
+// primary first, without the token values (nothing is sent to GitHub); no credentials is an empty
+// list or an error that wraps auth.ErrNotConnected. GitHubToken returns one credential with a
+// token that is valid now (refreshed when due), or an error that wraps auth.ErrNeedsReconnect when
+// that credential needs a sign-in again; the error leaves the other credentials alone.
+// GitHubRejected records that GitHub rejected a credential. JiraSite returns an error that wraps
 // auth.ErrNotConnected, auth.ErrNeedsReconnect or ErrNoSite.
 type Accounts interface {
-	GitHubToken(ctx context.Context) (string, error)
+	GitHubTokens(ctx context.Context) ([]auth.GitHubCredential, error)
+	GitHubToken(ctx context.Context, id string) (auth.GitHubCredential, error)
+	GitHubRejected(ctx context.Context, id string)
 	JiraSite(ctx context.Context) (jira.Site, error)
 }
 
@@ -93,7 +101,9 @@ type flight struct {
 }
 
 type ghData struct {
-	prs      []github.PR
+	prs []github.PR
+	// tokens maps a repository id to the credential its pull requests were read with.
+	tokens   map[string]tokenpick.Token
 	blocked  []github.OrgBlocked
 	warnings []gen.Warning
 	loaded   bool
@@ -124,7 +134,9 @@ type Poller struct {
 	ls      []linked
 	jira    jiraData
 	ghSrc   gen.SourceStatus
-	rl      github.RateLimit
+	// rl is the budget with the least remaining over the credentials, which the interval and the
+	// backoff follow. rlShown is the one with the highest share used, which the snapshot shows.
+	rl, rlShown github.RateLimit
 
 	lastGH, lastJira       time.Time
 	nextGH, nextJira       time.Time
@@ -183,10 +195,14 @@ func (p *Poller) Linked(id string) (merge.Linked, bool) {
 	for i, t := range pr.Tickets {
 		keys[i] = t.Key
 	}
-	return merge.Linked{
+	l := merge.Linked{
 		RepoID: pr.Repo.Id, NameWithOwner: pr.Repo.NameWithOwner, Number: pr.Number, Tickets: keys,
 		ApprovalsRequired: pr.Approvals.Need,
-	}, true
+	}
+	if pr.Repo.TokenId != nil {
+		l.TokenID = *pr.Repo.TokenId
+	}
+	return l, true
 }
 
 // Refs lists the branches of the open pull requests of one repository in the current snapshot.
@@ -233,6 +249,7 @@ func (p *Poller) Load(ctx context.Context) error {
 	// The budget of the last refresh before the restart (absent in older snapshots) is kept, so a
 	// build before the first refresh still shows it and the interval still honours a low budget.
 	p.rl = rateLimitOf(p.ghSrc.RateLimit)
+	p.rlShown = p.rl
 	p.ghSrc.RateLimit = nil
 	if t := snap.Sources.Jira.SyncedAt; t != nil {
 		p.jira.syncedAt = *t
@@ -246,7 +263,7 @@ func (p *Poller) Load(ctx context.Context) error {
 }
 
 // approvalsNeeded reads the stored approvals setting of every repo once and returns a lookup that
-// gives 1 for a repo it does not know. A failed read is not an error here: the snapshot only gets
+// gives 0 (nothing required) for a repo it does not know. A failed read is not an error here: the snapshot only gets
 // the default until the next refresh.
 func (p *Poller) approvalsNeeded(ctx context.Context) func(repoID string) int {
 	need := map[string]int{}

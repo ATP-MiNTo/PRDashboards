@@ -7,6 +7,12 @@ describe('describeProblem', () => {
     expect(describeProblem('unknown_site')).toMatch(/not available/);
   });
 
+  it('words the codes of the token list', () => {
+    expect(describeProblem('token_limit')).toBe('You can connect up to 10 tokens.');
+    expect(describeProblem('token_duplicate')).toBe('That token is already connected.');
+    expect(describeProblem('token_name_taken')).toBe('Another token already has that name.');
+  });
+
   it('names both providers when an app is not set up', () => {
     expect(describeProblem('provider_not_configured')).toBe(
       'Set up the GitHub App or the Atlassian app first.',
@@ -23,9 +29,9 @@ describe('describeProblem', () => {
     expect(
       describeProblem(
         'missing_permission',
-        'The token needs the GitHub permission contents: write',
+        "This token can't merge in acme/web: it needs the GitHub permission contents: write.",
       ),
-    ).toBe('The token needs the GitHub permission contents: write');
+    ).toBe("This token can't merge in acme/web: it needs the GitHub permission contents: write.");
     expect(describeProblem('missing_permission')).toBe(
       'The token lacks a GitHub permission this action needs.',
     );

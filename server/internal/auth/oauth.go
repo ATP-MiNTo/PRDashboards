@@ -211,10 +211,14 @@ func (o *OAuth) Complete(ctx context.Context, p Provider, code, state, sessionKe
 	return o.completeAtlassian(ctx, cred, code)
 }
 
-// Disconnect removes the stored tokens of p. The client credentials stay.
+// Disconnect removes the stored tokens of p, every GitHub token for GitHub. The client credentials
+// stay.
 func (o *OAuth) Disconnect(p Provider) error {
 	o.tokenMu.Lock()
 	defer o.tokenMu.Unlock()
+	if p == GitHub {
+		return o.saveTokens(nil)
+	}
 	if err := o.cfg.Secrets.Delete(p.tokenItem()); err != nil && !errors.Is(err, secrets.ErrNotFound) {
 		return err
 	}

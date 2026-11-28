@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/github"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/store"
@@ -75,9 +76,12 @@ type Linked struct {
 	NameWithOwner string
 	Number        int
 	Tickets       []string
-	// ApprovalsRequired is the repository's approvals setting as the current snapshot has it; a
-	// value outside 1 to 10 counts as the default of 1 (NeedOf).
+	// ApprovalsRequired is the repository's approvals setting as the current snapshot has it, 0 to
+	// 10; 0 means nothing is required and a value outside the range means the same (NeedOf).
 	ApprovalsRequired int
+	// TokenID is the id of the GitHub token the repository is read and written with, as the
+	// current snapshot has it. Empty in a snapshot stored before several tokens: the primary token.
+	TokenID string
 }
 
 // Ticket is one linked ticket as confirmed in the merge panel. An empty TransitionID leaves the
@@ -163,7 +167,9 @@ type Snapshot interface {
 // Accounts says who the merge acts as. Both methods return errors that wrap auth.ErrNotConnected
 // (or auth.ErrNeedsReconnect, poller.ErrNoSite) when the account cannot be used.
 type Accounts interface {
-	GitHubToken(ctx context.Context) (string, error)
+	// GitHubToken returns the GitHub token with the id, the primary one for an empty id or an id
+	// that is gone.
+	GitHubToken(ctx context.Context, tokenID string) (auth.GitHubCredential, error)
 	JiraSite(ctx context.Context) (jira.Site, error)
 }
 

@@ -5,7 +5,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../server"
 
 threshold=90
 pkgs=()
-for name in rules linking stacks merge; do
+for name in rules linking stacks merge tokenpick; do
   [ -d "internal/$name" ] && pkgs+=("./internal/$name")
 done
 

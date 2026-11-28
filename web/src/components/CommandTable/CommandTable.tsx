@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot, useSyncStatus } from '@/api/queries';
@@ -10,7 +10,7 @@ import { reducedMotion } from '@/lib/storage';
 import { useTheme } from '@/theme/useTheme';
 import styles from './CommandTable.module.css';
 import { OrgBanner } from './OrgBanner';
-import { StatStrip } from './StatStrip';
+import { CompactStats, StatStrip, useListStats } from './StatStrip';
 import { List, Notice } from './List';
 import { AccountsModal } from '../Accounts/AccountsModal';
 import { HistoryView } from '../History/HistoryView';
@@ -25,12 +25,14 @@ import { Sidebar } from '../Shell/Sidebar';
 import { SidebarAccounts } from '../Shell/SidebarAccounts';
 import { useScrolled, useSidebar } from '../Shell/useSidebar';
 import { ToastProvider } from '../Toast/Toast';
+import { useNow } from './useNow';
 import { useSnapshotEvents } from './useSnapshotEvents';
+import { useStripOut } from './useStripOut';
 
 const NO_IDS: string[] = [];
 const selectIds = (s: Snapshot) => s.prs.map((p) => p.id);
 const HISTORY_TITLE = 'PRDashboards · History';
-const NO_SHOW_COUNTS = { everything: 0, assigned: 0, authored: 0 };
+const NO_SHOW_COUNTS = { all: 0, mine: 0, review: 0 };
 
 export function CommandTable() {
   const snapshot = useSnapshot();
@@ -50,13 +52,30 @@ export function CommandTable() {
   const scrolled = useScrolled();
   const burger = useRef<HTMLButtonElement>(null);
   useSnapshotEvents();
+  // The clock of the Stale filter: a minute is fine for a three day limit.
+  const now = useNow(60_000);
   const view = useMemo(
-    () => ({ filter, show, terms, hidden, mode, off }),
-    [filter, show, terms, hidden, mode, off],
+    () => ({ filter, show, terms, hidden, mode, off, now }),
+    [filter, show, terms, hidden, mode, off, now],
   );
+  const stats = useListStats(view);
+  // Once the strip has scrolled away, the same tiles show in the right header pill.
+  const strip = useStripOut();
   // The History view replaces the list with a cross-fade of the whole page (0.9s).
   const toggleHistory = () =>
     crossfade(document, () => flushSync(() => setHistory((h) => !h)), reducedMotion());
+
+  // The History view re-tints the whole page, light and dark, through a `data-view` on <html>
+  // (the warm palette of the design, in globals.css). Set in the same commit as the view, so the
+  // cross-fade of the toggle carries it.
+  useLayoutEffect(() => {
+    if (!history) return;
+    const root = document.documentElement;
+    root.dataset.view = 'history';
+    return () => {
+      delete root.dataset.view;
+    };
+  }, [history]);
 
   const hiddenListed = listed.filter((id) => hidden.has(id)).length;
   const data = snapshot.data;
@@ -90,6 +109,12 @@ export function CommandTable() {
             onTheme={theme.setTheme}
             history={{ active: history, onToggle: toggleHistory }}
             title={history ? HISTORY_TITLE : undefined}
+            compactStats={
+              stats && !history ? (
+                <CompactStats stats={stats} filter={filter} onFilter={prefs.setFilter} />
+              ) : undefined
+            }
+            showCompactStats={strip.out && !history}
           />
           <main className={styles.wrap}>
             <SearchBox value={prefs.query} onChange={prefs.setQuery} variant="page" />
@@ -102,7 +127,14 @@ export function CommandTable() {
                   <HistoryView terms={terms} />
                 ) : (
                   <>
-                    <StatStrip view={view} onFilter={prefs.setFilter} />
+                    {stats && (
+                      <StatStrip
+                        stats={stats}
+                        filter={filter}
+                        onFilter={prefs.setFilter}
+                        stripRef={strip.ref}
+                      />
+                    )}
                     <Toolbar
                       sort={prefs.sort}
                       reversed={prefs.reversed}
@@ -122,7 +154,7 @@ export function CommandTable() {
                     {data.prs.length === 0 && data.sources.github.state === 'pending' ? (
                       <Notice>Loading pull requests</Notice>
                     ) : (
-                      <List prefs={prefs} />
+                      <List prefs={prefs} now={now} />
                     )}
                   </>
                 )}

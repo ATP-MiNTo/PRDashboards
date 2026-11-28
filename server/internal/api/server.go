@@ -39,6 +39,11 @@ type Jira interface {
 	Statuses(ctx context.Context, site string) ([]string, error)
 }
 
+// Accounts is what the handlers need from the connected accounts: the selected Jira site.
+type Accounts interface {
+	JiraSite(ctx context.Context) (jira.Site, error)
+}
+
 // Config holds what the handler needs.
 type Config struct {
 	Port     int
@@ -51,7 +56,7 @@ type Config struct {
 	Merger   Merger
 	Reviewer Reviewer
 	Jira     Jira
-	Accounts poller.Accounts
+	Accounts Accounts
 	// Events serves GET /events, the server-sent events stream.
 	Events http.Handler
 	// Web is the exported UI. It may be empty when the UI has not been built.

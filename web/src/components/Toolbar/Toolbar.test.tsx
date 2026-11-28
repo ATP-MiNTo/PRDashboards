@@ -2,20 +2,23 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Toolbar, type ToolbarProps } from './Toolbar';
 
-function setup(over: Partial<ToolbarProps> = {}) {
-  const props: ToolbarProps = {
+function base(): ToolbarProps {
+  return {
     sort: 'updated',
     reversed: false,
     onSort: vi.fn(),
     onReverse: vi.fn(),
-    show: 'everything',
+    show: 'all',
     onShow: vi.fn(),
-    showCounts: { everything: 5, assigned: 3, authored: 2 },
+    showCounts: { all: 5, mine: 3, review: 2 },
     mode: 'visible',
     onMode: vi.fn(),
     counts: { visible: 4, all: 5, hidden: 1 },
-    ...over,
   };
+}
+
+function setup(over: Partial<ToolbarProps> = {}) {
+  const props = { ...base(), ...over };
   render(<Toolbar {...props} />);
   return props;
 }
@@ -60,7 +63,7 @@ describe('Toolbar', () => {
 
   it('shows the two roll switches with their counts, Show before Hidden PRs', () => {
     setup();
-    const show = screen.getByRole('button', { name: /^Show, now Everything, 5/ });
+    const show = screen.getByRole('button', { name: /^Show, now All, 5/ });
     const hidden = screen.getByRole('button', { name: /^Hidden PRs, now Visible, 4/ });
     expect(show.compareDocumentPosition(hidden) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -81,9 +84,9 @@ describe('Toolbar', () => {
     setup();
     act(() => screen.getByText('Show', { selector: 'span[tabindex]' }).focus());
     const tip = screen.getByRole('tooltip');
-    expect(tip).toHaveTextContent('Everything Assigned to you and opened by you.');
-    expect(tip).toHaveTextContent('Assigned to me Assigned to you.');
-    expect(tip).toHaveTextContent('Opened by me Opened by you.');
+    expect(tip).toHaveTextContent('All Everything.');
+    expect(tip).toHaveTextContent('Mine Assigned to you or opened by you.');
+    expect(tip).toHaveTextContent('To review Waiting on your review.');
   });
 
   it('ends with the legend of the role colours and the stack mark', () => {
@@ -93,6 +96,50 @@ describe('Toolbar', () => {
       within(legend)
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Assigned', 'Opened by me', 'Stack']);
+    ).toEqual(['Mine', 'Review requested', 'Stack']);
+  });
+
+  it('gives Mine the green dot and a hint, and Review requested the red dot', () => {
+    setup();
+    const dot = (name: string) =>
+      within(screen.getByRole('list', { name: 'Legend' }))
+        .getByText(name)
+        .querySelector('span')!.className;
+    expect(dot('Mine')).toMatch(/dot_mine/);
+    expect(screen.getByText('Mine', { selector: 'li' })).toHaveAttribute(
+      'title',
+      'Assigned to you or opened by you',
+    );
+    expect(dot('Review requested')).toMatch(/dot_reviewer/);
+  });
+
+  it.each([
+    ['all', /^Show, now All, 5\./, null],
+    ['mine', /^Show, now Mine, 3\./, /rollDot_green/],
+    ['review', /^Show, now To review, 2\./, /rollDot_red/],
+  ] as const)('names the %s mode and draws its dot only when it is coloured', (show, name, dot) => {
+    setup({ show });
+    const button = screen.getByRole('button', { name });
+    const dots = button.querySelectorAll('[class*="rollDot"]');
+    if (dot === null) expect(dots).toHaveLength(0);
+    else {
+      expect(dots).toHaveLength(1);
+      expect(dots[0]!.className).toMatch(dot);
+    }
+  });
+
+  it('cycles All, Mine, To review and back with a click', () => {
+    const onShow = vi.fn();
+    const { rerender } = render(<Toolbar {...base()} show="all" onShow={onShow} />);
+    const steps = [
+      ['all', 'mine'],
+      ['mine', 'review'],
+      ['review', 'all'],
+    ] as const;
+    for (const [now, next] of steps) {
+      rerender(<Toolbar {...base()} show={now} onShow={onShow} />);
+      fireEvent.click(screen.getByRole('button', { name: /^Show, now/ }));
+      expect(onShow).toHaveBeenLastCalledWith(next);
+    }
   });
 });

@@ -87,6 +87,8 @@ func TestTriggers(t *testing.T) {
 		{"waiting for approvals with none yet", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsNeed = 2 }), "", false},
 		{"waiting for approvals with enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 2 }), "", false},
 		{"waiting for approvals with more than enough", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 3, 2 }), "", false},
+		{"waiting for approvals with nothing required", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave, p.ApprovalsNeed = 2, 0 }), "", false},
+		{"waiting for approvals with nothing required and none given", rule("r", rules.WaitingApprovals), pr("A"), "", false},
 		{"waiting for approvals with an unknown need", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.ApprovalsHave = 1 }), "", false},
 		{"waiting for approvals for a draft", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.Draft, p.ApprovalsHave, p.ApprovalsNeed = true, 1, 2 }), "", false},
 		{"waiting for approvals without a head", rule("r", rules.WaitingApprovals), pr("A", func(p *rules.PR) { p.HeadSHA, p.ApprovalsHave, p.ApprovalsNeed = "", 1, 2 }), "", false},
@@ -279,7 +281,7 @@ func TestApprovalTriggersFollowFiltersExclusionsModeAndPreview(t *testing.T) {
 	if res := rules.Evaluate(excl); len(res.Firings) != 0 {
 		t.Errorf("excluded: %+v", res)
 	}
-	if pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", a)}, nil); len(pv.Moves) != 1 {
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", a)}, nil, rules.All); len(pv.Moves) != 1 {
 		t.Errorf("preview: %+v", pv)
 	}
 }
@@ -419,7 +421,7 @@ func TestDisabledRulesAndEmptyInput(t *testing.T) {
 func TestPreviewIgnoresWhatFiredBeforeAndTheEnabledFlag(t *testing.T) {
 	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
 	r := rule("r", rules.Merged, func(r *rules.Rule) { r.Enabled = false })
-	pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", merged), ticket("INP-2", pr("B"), merged)}, nil)
+	pv := rules.PreviewRule(r, now, []rules.Ticket{ticket("INP-1", merged), ticket("INP-2", pr("B"), merged)}, nil, rules.All)
 	if len(pv.Moves) != 1 || pv.Moves[0].Ticket != "INP-1" || len(pv.Waiting) != 1 || pv.Waiting[0].Ticket != "INP-2" {
 		t.Fatalf("%+v", pv)
 	}
@@ -451,6 +453,9 @@ func TestValidate(t *testing.T) {
 		{"valid", func(*rules.Rule) {}, false},
 		{"unknown trigger", func(r *rules.Rule) { r.Trigger = "x" }, true},
 		{"unknown mode", func(r *rules.Rule) { r.Mode = "some" }, true},
+		{"mode any", func(r *rules.Rule) { r.Mode = rules.Any }, false},
+		{"mode default", func(r *rules.Rule) { r.Mode = rules.Default }, false},
+		{"empty mode", func(r *rules.Rule) { r.Mode = "" }, true},
 		{"empty target", func(r *rules.Rule) { r.Target = "  " }, true},
 		{"long target", func(r *rules.Rule) { r.Target = string(make([]byte, 101)) }, true},
 		{"long name", func(r *rules.Rule) { r.Name = string(make([]byte, 101)) }, true},
@@ -479,15 +484,15 @@ func TestAfterMerge(t *testing.T) {
 	toDone := rule("done", rules.Merged, func(r *rules.Rule) { r.Filters.Repo = "acme/*" })
 	toQA := rule("qa", rules.Merged, func(r *rules.Rule) { r.Target = "QA"; r.Mode = rules.Any })
 
-	plan, ok := rules.AfterMerge([]rules.Rule{approved, toDone, toQA}, ticket("INP-1", fe, be, merged, closed), "FE", now, nil)
+	plan, ok := rules.AfterMerge([]rules.Rule{approved, toDone, toQA}, ticket("INP-1", fe, be, merged, closed), "FE", now, nil, rules.All)
 	if !ok || plan.Rule != "done" || plan.Target != "Done" || plan.Total != 3 || len(plan.WaitingOn) != 1 || plan.WaitingOn[0].Number != 12 {
 		t.Fatalf("first applicable rule waits for the backend PR: %+v", plan)
 	}
-	plan, ok = rules.AfterMerge([]rules.Rule{toDone}, ticket("INP-1", fe, merged), "FE", now, nil)
+	plan, ok = rules.AfterMerge([]rules.Rule{toDone}, ticket("INP-1", fe, merged), "FE", now, nil, rules.All)
 	if !ok || len(plan.WaitingOn) != 0 || plan.Total != 2 {
 		t.Fatalf("the last open PR does not wait: %+v", plan)
 	}
-	plan, ok = rules.AfterMerge([]rules.Rule{toQA}, ticket("INP-1", fe, be), "FE", now, nil)
+	plan, ok = rules.AfterMerge([]rules.Rule{toQA}, ticket("INP-1", fe, be), "FE", now, nil, rules.All)
 	if !ok || plan.Target != "QA" || len(plan.WaitingOn) != 0 {
 		t.Fatalf("mode any never waits: %+v", plan)
 	}
@@ -511,7 +516,7 @@ func TestAfterMerge(t *testing.T) {
 		"closed pr":          {[]rules.Rule{toDone}, ticket("INP-1", closed), "GONE"},
 		"unavailable ticket": {[]rules.Rule{toDone}, func() rules.Ticket { t := ticket("INP-1", fe); t.Available = false; return t }(), "FE"},
 	} {
-		if _, ok := rules.AfterMerge(tc.rs, tc.t, tc.prID, now, nil); ok {
+		if _, ok := rules.AfterMerge(tc.rs, tc.t, tc.prID, now, nil, rules.All); ok {
 			t.Errorf("%s: a plan was made", name)
 		}
 	}
@@ -545,16 +550,16 @@ func TestPreviewAndAfterMergeSkipExcludedStatuses(t *testing.T) {
 	tk := ticket("INP-1", merged, pr("B"))
 	tk.Status = "Done"
 	r := rule("r", rules.Merged, func(r *rules.Rule) { r.Target = "QA" })
-	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, []string{"done"}); len(pv.Moves)+len(pv.Waiting) != 0 {
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, []string{"done"}, rules.All); len(pv.Moves)+len(pv.Waiting) != 0 {
 		t.Fatalf("%+v", pv)
 	}
-	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, nil); len(pv.Waiting) != 1 {
+	if pv := rules.PreviewRule(r, now, []rules.Ticket{tk}, nil, rules.All); len(pv.Waiting) != 1 {
 		t.Fatalf("%+v", pv)
 	}
-	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"Done"}); ok {
+	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"Done"}, rules.All); ok {
 		t.Fatal("an excluded ticket has no merge plan")
 	}
-	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"QA"}); !ok {
+	if _, ok := rules.AfterMerge([]rules.Rule{r}, tk, "B", now, []string{"QA"}, rules.All); !ok {
 		t.Fatal("another status does not exclude it")
 	}
 }
@@ -610,4 +615,91 @@ func TestStatusesCompareByKey(t *testing.T) {
 	if res := rules.Evaluate(in); len(res.Firings) != 0 {
 		t.Fatalf("a near-duplicate of an excluded status is excluded: %+v", res.Firings)
 	}
+}
+
+func TestModeResolve(t *testing.T) {
+	tests := []struct {
+		mode, global, want rules.Mode
+	}{
+		{rules.All, rules.Any, rules.All},
+		{rules.Any, rules.All, rules.Any},
+		{rules.Default, rules.All, rules.All},
+		{rules.Default, rules.Any, rules.Any},
+		{rules.Default, "", rules.All},
+		{rules.Default, rules.Default, rules.All},
+		{"", rules.Any, rules.All},
+	}
+	for _, tt := range tests {
+		if got := tt.mode.Resolve(tt.global); got != tt.want {
+			t.Errorf("%q with global %q = %q, want %q", tt.mode, tt.global, got, tt.want)
+		}
+	}
+}
+
+// A rule in mode Default follows the global mode in every entry point of the engine.
+func TestDefaultModeFollowsTheGlobalMode(t *testing.T) {
+	merged := pr("A", func(p *rules.PR) { p.State = rules.StateMerged })
+	open := pr("B")
+	tk := ticket("INP-1", merged, open)
+	follow := rule("r", rules.Merged, func(r *rules.Rule) { r.Mode = rules.Default })
+	explicitAll := rule("all", rules.Merged)
+	explicitAny := rule("any", rules.Merged, modeAny)
+	eval := func(global rules.Mode, rs ...rules.Rule) rules.Result {
+		return rules.Evaluate(rules.Input{Now: now, Rules: rs, Tickets: []rules.Ticket{tk}, DefaultMode: global})
+	}
+
+	t.Run("global all waits for the last pull request", func(t *testing.T) {
+		res := eval(rules.All, follow)
+		if len(res.Firings) != 0 || len(res.Waiting) != 1 || len(res.Waiting[0].WaitingOn) != 1 || res.Waiting[0].WaitingOn[0].ID != "B" {
+			t.Errorf("result = %+v", res)
+		}
+	})
+	t.Run("global any moves with the first pull request", func(t *testing.T) {
+		res := eval(rules.Any, follow)
+		if len(res.Firings) != 1 || res.Firings[0].Rule != "r" || res.Firings[0].Fingerprint != "A=A" || len(res.Waiting) != 0 {
+			t.Errorf("result = %+v", res)
+		}
+	})
+	t.Run("no global mode counts as all", func(t *testing.T) {
+		if res := eval("", follow); len(res.Firings) != 0 {
+			t.Errorf("fired: %+v", res.Firings)
+		}
+	})
+	t.Run("explicit modes ignore the global one", func(t *testing.T) {
+		if res := eval(rules.Any, explicitAll); len(res.Firings) != 0 {
+			t.Errorf("all rule fired with global any: %+v", res.Firings)
+		}
+		if res := eval(rules.All, explicitAny); len(res.Firings) != 1 {
+			t.Errorf("any rule did not fire with global all: %+v", res.Firings)
+		}
+	})
+	t.Run("the input rules are not changed", func(t *testing.T) {
+		eval(rules.Any, follow)
+		if follow.Mode != rules.Default {
+			t.Errorf("mode = %q", follow.Mode)
+		}
+	})
+	t.Run("preview", func(t *testing.T) {
+		if pv := rules.PreviewRule(follow, now, []rules.Ticket{tk}, nil, rules.Any); len(pv.Moves) != 1 {
+			t.Errorf("global any: %+v", pv)
+		}
+		if pv := rules.PreviewRule(follow, now, []rules.Ticket{tk}, nil, rules.All); len(pv.Moves) != 0 || len(pv.Waiting) != 1 {
+			t.Errorf("global all: %+v", pv)
+		}
+	})
+	t.Run("merge plan", func(t *testing.T) {
+		plan, ok := rules.AfterMerge([]rules.Rule{follow}, tk, "B", now, nil, rules.All)
+		if !ok || len(plan.WaitingOn) != 0 || plan.Total != 2 {
+			t.Errorf("global all, last pr: %+v %v", plan, ok)
+		}
+		two := ticket("INP-1", pr("A"), pr("B"))
+		plan, ok = rules.AfterMerge([]rules.Rule{follow}, two, "A", now, nil, rules.All)
+		if !ok || len(plan.WaitingOn) != 1 {
+			t.Errorf("global all, first pr: %+v %v", plan, ok)
+		}
+		plan, ok = rules.AfterMerge([]rules.Rule{follow}, two, "A", now, nil, rules.Any)
+		if !ok || len(plan.WaitingOn) != 0 {
+			t.Errorf("global any, first pr: %+v %v", plan, ok)
+		}
+	})
 }

@@ -40,7 +40,8 @@
               "nameWithOwner": "acme/web",
               "squashMergeAllowed": true,
               "mergeCommitAllowed": true,
-              "rebaseMergeAllowed": true
+              "rebaseMergeAllowed": true,
+              "viewerPermission": "MAINTAIN"
             },
             "commits": {
               "nodes": [

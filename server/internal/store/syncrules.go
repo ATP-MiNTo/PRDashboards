@@ -57,7 +57,8 @@ type SyncState struct {
 	Merged []MergedPR
 	// ReadySHA maps an open pull request to the head commit it had when it became ready.
 	ReadySHA map[string]string
-	// ApprovalsNeed maps a repository id to the approvals it requires (1 to 10).
+	// ApprovalsNeed maps a repository id to the approvals it requires (0 to 10, 0 when
+	// nothing is required).
 	ApprovalsNeed map[string]int
 }
 
@@ -156,6 +157,12 @@ func (s *Store) PutRules(ctx context.Context, list []SyncRule, reset []string, b
 		}
 		return insertFirings(ctx, tx, now, baseline)
 	})
+}
+
+// RecordFirings stores fingerprints in one transaction without moving anything, for the rules whose
+// effective mode changed and must not fire for tickets that already hold.
+func (s *Store) RecordFirings(ctx context.Context, firings []Firing, now time.Time) error {
+	return s.Write(ctx, func(tx *sql.Tx) error { return insertFirings(ctx, tx, now, firings) })
 }
 
 // insertFirings records fingerprints. A firing for a rule that no longer exists is dropped.

@@ -107,10 +107,71 @@ export interface paths {
         get?: never;
         /**
          * Validate and store a GitHub personal access token
-         * @description Checks the token with viewer { login } and the X-OAuth-Scopes header. Classic tokens need repo and read:org (problem code insufficient_scopes otherwise). Fine-grained tokens are accepted with a warning.
+         * @description Checks the token with viewer { login } and the X-OAuth-Scopes header. Classic tokens need repo and read:org (problem code insufficient_scopes otherwise). Fine-grained tokens are accepted with a warning. This is the setup flow: with no GitHub token stored the token becomes the primary one, and with tokens already stored it is added like POST /api/github/tokens does (the optional name, the limit of 10 and the duplicate check apply). The answer is the summary of the connection, not the token.
          */
         put: operations["putGithubPat"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a GitHub personal access token
+         * @description Up to 10 tokens can be connected, each with its own name, so one dashboard can read and operate on repositories of different owners (a fine-grained token belongs to one owner). The token is validated like PUT /api/github/pat. Problem codes: token_limit (409, the 10th token is stored, an 11th is refused), token_duplicate (409, the same token string is already stored), token_name_taken (409, names are unique ignoring case), invalid_token, insufficient_scopes, org_blocked and upstream_error as for the PAT.
+         */
+        post: operations["addGithubToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Rename a GitHub token */
+        put: operations["renameGithubToken"];
+        post?: never;
+        /**
+         * Remove a GitHub token
+         * @description Removing the last token disconnects GitHub, like DELETE /api/accounts/github. The refresh that follows leaves out the repositories only that token could see.
+         */
+        delete: operations["deleteGithubToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/github/tokens/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check one GitHub token with GitHub now
+         * @description A user action. Refreshes a GitHub App token when it is due, asks who the token belongs to and updates the stored login. A token that needs a sign-in again answers with the accounts instead of an error.
+         */
+        post: operations["checkGithubToken"];
         delete?: never;
         options?: never;
         head?: never;
@@ -147,7 +208,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Remove the stored tokens of a provider */
+        /**
+         * Remove the stored tokens of a provider
+         * @description For GitHub it removes every token (DELETE /api/github/tokens/{id} removes one).
+         */
         delete: operations["disconnectAccount"];
         options?: never;
         head?: never;
@@ -165,7 +229,7 @@ export interface paths {
         put?: never;
         /**
          * Check a connection with the provider now
-         * @description A user action. GitHub: asks who the token belongs to. Atlassian: refreshes the access token when needed and reloads the site list. A refresh that Atlassian rejects sets needsReconnect.
+         * @description A user action. GitHub: asks who each stored token belongs to (POST /api/github/tokens/{id}/check checks one). Atlassian: refreshes the access token when needed and reloads the site list. A refresh that Atlassian rejects sets needsReconnect.
          */
         post: operations["checkAccount"];
         delete?: never;
@@ -562,6 +626,11 @@ export interface components {
             /** @enum {string} */
             defaultMethodForNewRepos: "squash" | "merge" | "rebase";
             deleteBranchAfterMerge: boolean;
+            /**
+             * @description When a ticket linked to several pull requests moves, for the status sync rules whose mode is "default": "all" when the last pull request meets the rule, "any" when the first one does. Defaults to "all".
+             * @enum {string}
+             */
+            multiPrTickets: "all" | "any";
             jiraSiteId: string | null;
             /** @description Jira statuses whose tickets no status sync rule ever moves. Compared without regard to case. Defaults to ["Done"]. */
             excludedStatuses: string[];
@@ -584,6 +653,16 @@ export interface components {
         };
         PatRequest: {
             token: string;
+            name?: components["schemas"]["TokenName"];
+        };
+        /** @description The person's name for a token: 1 to 40 characters after trimming, without control characters, unique among the tokens ignoring case. A PAT added without a name is called Token (login), made unique. */
+        TokenName: string;
+        AddTokenRequest: {
+            token: string;
+            name?: components["schemas"]["TokenName"];
+        };
+        RenameTokenRequest: {
+            name: components["schemas"]["TokenName"];
         };
         OAuthComplete: {
             provider: components["schemas"]["Provider"];
@@ -599,6 +678,20 @@ export interface components {
             /** @description GitHub refused to refresh the token, so the person must sign in again. */
             needsReconnect?: boolean;
         };
+        /** @description One stored GitHub credential, without the token. The first one in the list is the primary one, which wins a tie when several tokens see the same repository. */
+        GithubToken: {
+            /** @description Random and stable for the life of the token. */
+            id: string;
+            name: components["schemas"]["TokenName"];
+            /** @enum {string} */
+            method: "app" | "oauth" | "pat";
+            /** @description A fine-grained personal access token, which works for one owner only. */
+            fineGrained: boolean;
+            login: string;
+            warning: string | null;
+            /** @description GitHub refused to refresh (App or OAuth token) or to accept the token, so the person must sign in again or replace it. */
+            needsReconnect: boolean;
+        };
         JiraSite: {
             id: string;
             name: string;
@@ -610,8 +703,12 @@ export interface components {
             selectedSiteId: string | null;
             needsReconnect: boolean;
         };
+        /** @description github is the summary of the GitHub connection: connected when any token is stored, login, method and warning of the primary (first) token, needsReconnect when any token needs it. githubTokens lists every token, primary first. */
         Accounts: {
             github: components["schemas"]["GithubAccount"];
+            githubTokens: components["schemas"]["GithubToken"][];
+            /** @description The most tokens that can be connected (10). */
+            githubTokenLimit: number;
             jira: components["schemas"]["JiraAccount"];
         };
         TicketKey: string;
@@ -641,7 +738,7 @@ export interface components {
             resetAt: string | null;
             rateLimit?: components["schemas"]["RateLimitUsage"];
         };
-        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the two searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
+        /** @description The GitHub GraphQL budget as the last refresh left it, taken from the rateLimit field of the three searches (no extra call). Only the github source has it. Absent before the first refresh, after the connection is lost, and in snapshots stored before it existed. */
         RateLimitUsage: {
             /** @description Points spent in the current window (limit minus remaining). */
             used: number;
@@ -681,6 +778,15 @@ export interface components {
             squashAllowed: boolean;
             mergeAllowed: boolean;
             rebaseAllowed: boolean;
+            /** @description The GitHub token this repository is read and written with: among the tokens whose searches returned it, the one with the highest viewerPermission, the first in the list on a tie. Absent in a snapshot stored before several tokens existed, which the merge and review actions then answer with the primary token. */
+            tokenId?: string;
+            /** @description The name of that token (not a secret). */
+            tokenName?: string;
+            /**
+             * @description The role of the GitHub account of the chosen token (tokenId) on the repository. It is the account's role, not what the token may do (a fine-grained token can still lack Pull requests: write there). Absent for a snapshot stored before the field existed, and when GitHub did not say; the web then blocks nothing.
+             * @enum {string}
+             */
+            viewerPermission?: "ADMIN" | "MAINTAIN" | "WRITE" | "TRIAGE" | "READ";
         };
         /** @enum {string} */
         CheckState: "passing" | "failing" | "running" | "pending" | "skipped" | "neutral" | "cancelled";
@@ -762,8 +868,8 @@ export interface components {
             additions: number | null;
             /** @description Lines removed by the pull request. Null for a snapshot stored before the field existed. */
             deletions: number | null;
-            /** @description Why the pull request is listed. Both can be present, and the list is never empty. */
-            roles: ("assigned" | "authored")[];
+            /** @description Why the pull request is listed: assigned to the user, opened by the user, or waiting for the user's review (reviewer). Several can be present, and the list is never empty. */
+            roles: ("assigned" | "authored" | "reviewer")[];
             isDraft: boolean;
             /** @enum {string} */
             mergeable: "MERGEABLE" | "CONFLICTING" | "UNKNOWN";
@@ -831,7 +937,7 @@ export interface components {
             pattern: string;
             method: components["schemas"]["MergeMethodName"];
         };
-        /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 1 when never set. */
+        /** @description Approvals a pull request of the repository needs before the dashboard lets it merge, counted as distinct reviewers whose latest review is an approval. 0 when never set: nothing is required. */
         ApprovalsRequired: number;
         /**
          * @description Whether the merge dialog starts with "Delete branch after merge" ticked for the repository: "default" follows Settings.deleteBranchAfterMerge.
@@ -876,8 +982,11 @@ export interface components {
         };
         /** @enum {string} */
         RuleTrigger: "review_submitted" | "review_approved" | "changes_requested" | "review_requested" | "ready_for_review" | "commit_stale" | "ci_failing" | "ci_passing" | "merged" | "no_review_yet" | "waiting_approvals";
-        /** @enum {string} */
-        RuleMode: "all" | "any";
+        /**
+         * @description How a ticket with several pull requests meets a rule. "all": when the last pull request meets it. "any": when the first one does. "default" follows Settings.multiPrTickets.
+         * @enum {string}
+         */
+        RuleMode: "all" | "any" | "default";
         /** @description Every filter is optional (an empty string is no filter) and they combine with AND. */
         RuleFilters: {
             repo: string;
@@ -1073,7 +1182,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description The current state does not allow it (for example not_connected or provider_not_configured). */
+        /** @description The current state does not allow it (for example not_connected, provider_not_configured, token_limit, token_duplicate or token_name_taken). */
         Conflict: {
             headers: {
                 [name: string]: unknown;
@@ -1082,7 +1191,7 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description No such pull request. */
+        /** @description No such pull request, repository or GitHub token. */
         NotFound: {
             headers: {
                 [name: string]: unknown;
@@ -1143,6 +1252,7 @@ export interface components {
         RepoId: string;
         RetryId: number;
         Provider: components["schemas"]["Provider"];
+        TokenId: string;
     };
     requestBodies: never;
     headers: never;
@@ -1326,6 +1436,111 @@ export interface operations {
                     "application/json": components["schemas"]["GithubAccount"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    addGithubToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description The token is stored. The answer never carries the token. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubToken"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            502: components["responses"]["BadGateway"];
+        };
+    };
+    renameGithubToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description The token with its new name. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GithubToken"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+        };
+    };
+    deleteGithubToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    checkGithubToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["TokenId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The accounts after the check. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accounts"];
+                };
+            };
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             502: components["responses"]["BadGateway"];
         };

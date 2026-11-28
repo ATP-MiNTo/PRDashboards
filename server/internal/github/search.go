@@ -41,11 +41,13 @@ var mergedPRsQuery string
 
 const (
 	// OpenAssignedQuery is the search for open pull requests assigned to the viewer. With
-	// OpenAuthoredQuery it makes the two searches of TECH_SPEC 10.2, and the dashboard lists the
-	// union.
+	// OpenAuthoredQuery and OpenReviewQuery it makes the three searches of TECH_SPEC 10.2, and the
+	// dashboard lists the union.
 	OpenAssignedQuery = "is:pr is:open assignee:@me archived:false"
 	// OpenAuthoredQuery is the search for open pull requests opened by the viewer.
 	OpenAuthoredQuery = "is:pr is:open author:@me archived:false"
+	// OpenReviewQuery is the search for open pull requests the viewer is asked to review.
+	OpenReviewQuery = "is:pr is:open review-requested:@me archived:false"
 	// SearchCap is the number of results GitHub's search returns at most.
 	SearchCap = 1000
 
@@ -111,15 +113,20 @@ type Repo struct {
 	SquashAllowed bool
 	MergeAllowed  bool
 	RebaseAllowed bool
+	// ViewerPermission is the account's role on the repository: ADMIN, MAINTAIN, WRITE, TRIAGE or
+	// READ. It is the role, not what the token may do. Empty when GitHub did not say.
+	ViewerPermission string
 }
 
 // Roles say why a pull request is listed.
 const (
 	RoleAssigned = "assigned"
 	RoleAuthored = "authored"
+	RoleReviewer = "reviewer"
 )
 
-// PR is an open pull request assigned to the viewer or opened by the viewer.
+// PR is an open pull request assigned to the viewer, opened by the viewer or waiting for the
+// viewer's review.
 type PR struct {
 	ID               string
 	Number           int
@@ -146,8 +153,9 @@ type PR struct {
 	UpdatedAt *time.Time
 	Additions int
 	Deletions int
-	// Roles holds RoleAssigned when the assigned search returned the pull request and RoleAuthored
-	// when the authored search did. SearchOpen sets it; it is never empty there.
+	// Roles holds RoleAssigned when the assigned search returned the pull request, RoleAuthored
+	// when the authored search did and RoleReviewer when the review requested search did.
+	// SearchOpen sets it; it is never empty there.
 	Roles []string
 }
 
@@ -232,6 +240,7 @@ type rawPR struct {
 		SquashMergeAllowed bool   `json:"squashMergeAllowed"`
 		MergeCommitAllowed bool   `json:"mergeCommitAllowed"`
 		RebaseMergeAllowed bool   `json:"rebaseMergeAllowed"`
+		ViewerPermission   string `json:"viewerPermission"`
 	} `json:"repository"`
 	Commits struct {
 		Nodes []struct {
@@ -291,20 +300,22 @@ type rawCheck struct {
 	CreatedAt *time.Time `json:"createdAt"`
 }
 
-// SearchOpen runs the open pull request searches, assigned to the token's user and opened by the
-// token's user, concurrently (two requests in flight), and merges them. Each search is paginated,
-// 50 per page, following the cursor until the last page or the 1,000 result cap. Pull requests
-// of organizations that blocked the token are left out and listed in Blocked.
+// SearchOpen runs the open pull request searches, assigned to the token's user, opened by the
+// token's user and review requested from the token's user, concurrently (three requests in
+// flight), and merges them. Each search is paginated, 50 per page, following the cursor until the
+// last page or the 1,000 result cap. Pull requests of organizations that blocked the token are
+// left out and listed in Blocked.
 //
-// A pull request found by both searches appears once, in the position of the assigned search.
-// Total is the larger of the unique pull requests returned and the biggest count GitHub reported
-// for either search, so it is never below what the dashboard shows. Capped is set when either
-// search is capped. If a search fails on its first page, SearchOpen returns that error.
+// A pull request found by several searches appears once, in the position of the first one that
+// found it (assigned, then authored, then review requested). Total is the larger of the unique
+// pull requests returned and the biggest count GitHub reported for any search, so it is never
+// below what the dashboard shows. Capped is set when any search is capped. If a search fails on
+// its first page, SearchOpen returns that error.
 func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, error) {
-	var res [2]SearchResult
-	var errs [2]error
+	var res [3]SearchResult
+	var errs [3]error
 	var wg sync.WaitGroup
-	for i, q := range []string{OpenAssignedQuery, OpenAuthoredQuery} {
+	for i, q := range []string{OpenAssignedQuery, OpenAuthoredQuery, OpenReviewQuery} {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -315,7 +326,7 @@ func (c *Client) SearchOpen(ctx context.Context, token string) (SearchResult, er
 	if err := pickError(errs[:]); err != nil {
 		return SearchResult{}, err
 	}
-	return mergeSearches(res[0], res[1]), nil
+	return mergeSearches(res[0], res[1], res[2]), nil
 }
 
 // searchOpenQuery runs one paginated open pull request search.
@@ -360,23 +371,24 @@ func pickError(errs []error) error {
 	return nil
 }
 
-// mergeSearches unions the assigned (a) and authored (b) results in one pass, deduplicating pull
-// requests by node id in O(n) and recording in Roles which search found each.
-func mergeSearches(a, b SearchResult) SearchResult {
+// mergeSearches unions the assigned (a), authored (b) and review requested (r) results in one
+// pass, deduplicating pull requests by node id in O(n) and recording in Roles which search found
+// each.
+func mergeSearches(a, b, r SearchResult) SearchResult {
 	out := SearchResult{
-		PRs:        make([]PR, 0, len(a.PRs)+len(b.PRs)),
-		Capped:     a.Capped || b.Capped,
-		Incomplete: a.Incomplete || b.Incomplete,
-		Requests:   a.Requests + b.Requests,
-		Errors:     append(slices.Clone(a.Errors), b.Errors...),
-		Blocked:    mergeBlocked(slices.Clone(a.Blocked), b.Blocked),
-		RateLimit:  mergeRateLimit(a.RateLimit, b.RateLimit),
+		PRs:        make([]PR, 0, len(a.PRs)+len(b.PRs)+len(r.PRs)),
+		Capped:     a.Capped || b.Capped || r.Capped,
+		Incomplete: a.Incomplete || b.Incomplete || r.Incomplete,
+		Requests:   a.Requests + b.Requests + r.Requests,
+		Errors:     slices.Concat(a.Errors, b.Errors, r.Errors),
+		Blocked:    mergeBlocked(mergeBlocked(slices.Clone(a.Blocked), b.Blocked), r.Blocked),
+		RateLimit:  mergeRateLimit(mergeRateLimit(a.RateLimit, b.RateLimit), r.RateLimit),
 	}
-	at := make(map[string]int, len(a.PRs)+len(b.PRs))
+	at := make(map[string]int, len(a.PRs)+len(b.PRs)+len(r.PRs))
 	for _, src := range []struct {
 		prs  []PR
 		role string
-	}{{a.PRs, RoleAssigned}, {b.PRs, RoleAuthored}} {
+	}{{a.PRs, RoleAssigned}, {b.PRs, RoleAuthored}, {r.PRs, RoleReviewer}} {
 		for _, p := range src.prs {
 			if i, dup := at[p.ID]; dup {
 				if !slices.Contains(out.PRs[i].Roles, src.role) {
@@ -389,7 +401,7 @@ func mergeSearches(a, b SearchResult) SearchResult {
 			out.PRs = append(out.PRs, p)
 		}
 	}
-	out.Total = max(len(out.PRs), a.Total, b.Total)
+	out.Total = max(len(out.PRs), a.Total, b.Total, r.Total)
 	return out
 }
 
@@ -404,15 +416,17 @@ func mergeRateLimit(a, b RateLimit) RateLimit {
 	return out
 }
 
-// SearchMerged finds pull requests assigned to the token's user or opened by the token's user that
-// were merged since the given time, with two concurrent searches. One pair of searches resolves
-// every pull request that left the open list. Either search failing is an error.
+// SearchMerged finds pull requests assigned to the token's user, opened by the token's user or
+// review requested from the token's user that were merged since the given time, with three
+// concurrent searches. One set of searches resolves every pull request that left the open list.
+// Any search failing is an error.
 func (c *Client) SearchMerged(ctx context.Context, token string, since time.Time) (MergedResult, error) {
 	stamp := " is:merged updated:>=" + since.UTC().Format("2006-01-02T15:04:05Z")
-	var res [2]MergedResult
-	var errs [2]error
+	queries := []string{"is:pr assignee:@me" + stamp, "is:pr author:@me" + stamp, "is:pr review-requested:@me" + stamp}
+	res := make([]MergedResult, len(queries))
+	errs := make([]error, len(queries))
 	var wg sync.WaitGroup
-	for i, q := range []string{"is:pr assignee:@me" + stamp, "is:pr author:@me" + stamp} {
+	for i, q := range queries {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -420,11 +434,15 @@ func (c *Client) SearchMerged(ctx context.Context, token string, since time.Time
 		}()
 	}
 	wg.Wait()
-	if err := pickError(errs[:]); err != nil {
+	if err := pickError(errs); err != nil {
 		return MergedResult{}, err
 	}
-	out := MergedResult{Merged: res[0].Merged, RateLimit: mergeRateLimit(res[0].RateLimit, res[1].RateLimit), Requests: res[0].Requests + res[1].Requests}
-	maps.Copy(out.Merged, res[1].Merged)
+	out := MergedResult{Merged: res[0].Merged, RateLimit: res[0].RateLimit, Requests: res[0].Requests}
+	for _, r := range res[1:] {
+		maps.Copy(out.Merged, r.Merged)
+		out.RateLimit = mergeRateLimit(out.RateLimit, r.RateLimit)
+		out.Requests += r.Requests
+	}
 	return out, nil
 }
 
@@ -653,7 +671,7 @@ func (n rawPR) pr() PR {
 		Repo: Repo{
 			ID: n.Repository.ID, NameWithOwner: n.Repository.NameWithOwner,
 			SquashAllowed: n.Repository.SquashMergeAllowed, MergeAllowed: n.Repository.MergeCommitAllowed,
-			RebaseAllowed: n.Repository.RebaseMergeAllowed,
+			RebaseAllowed: n.Repository.RebaseMergeAllowed, ViewerPermission: n.Repository.ViewerPermission,
 		},
 		UpdatedAt: n.UpdatedAt, Additions: n.Additions, Deletions: n.Deletions,
 		CI: CI{State: CINone},

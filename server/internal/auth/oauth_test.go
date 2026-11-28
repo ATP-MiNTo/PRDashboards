@@ -54,6 +54,8 @@ type provider struct {
 	ghRefreshAnswer   atomic.Value // string
 	ghRefreshForms    chan url.Values
 	sites             atomic.Value // string JSON
+	viewerCalls       atomic.Int32
+	longLogin         string
 }
 
 func newProvider(t *testing.T) *provider {
@@ -89,8 +91,15 @@ func newProvider(t *testing.T) *provider {
 		_, _ = io.WriteString(w, p.githubTokenAnswer.Load().(string))
 	})
 	mux.HandleFunc("POST /graphql", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Header.Get("Authorization") {
-		case "Bearer ghu_1", "Bearer ghu_2", "Bearer gho_legacy", "Bearer ghp_pat", "Bearer github_pat_x":
+		p.viewerCalls.Add(1)
+		login := "octocat"
+		if p.longLogin != "" {
+			login = p.longLogin
+		}
+		switch tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "); {
+		case tok == "ghu_1", tok == "ghu_2", tok == "gho_legacy", tok == "ghp_pat", tok == "github_pat_x", strings.HasPrefix(tok, "ghp_extra"):
+		case tok == "ghp_hubot":
+			login = "hubot"
 		default:
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -98,7 +107,7 @@ func newProvider(t *testing.T) *provider {
 		if s := p.githubScopes.Load().(string); s != "" {
 			w.Header().Set("X-OAuth-Scopes", s)
 		}
-		_, _ = io.WriteString(w, `{"data":{"viewer":{"login":"octocat"}}}`)
+		_, _ = io.WriteString(w, `{"data":{"viewer":{"login":"`+login+`"}}}`)
 	})
 	mux.HandleFunc("POST /atl/token", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
@@ -198,6 +207,32 @@ func tokenJSON(t *testing.T, sec secrets.Store, name string, v any) {
 		t.Fatalf("%s: %v", name, err)
 	}
 	if err := json.Unmarshal(raw, v); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// firstGitHub is the primary entry of the stored list of GitHub tokens.
+func firstGitHub(t *testing.T, sec secrets.Store) auth.GitHubToken {
+	t.Helper()
+	var list []auth.GitHubToken
+	tokenJSON(t, sec, secrets.GitHubTokens, &list)
+	if len(list) == 0 {
+		t.Fatal("empty list of GitHub tokens")
+	}
+	return list[0]
+}
+
+// setGitHub stores one GitHub token, given in the JSON of the legacy item, as the only entry of
+// the list.
+func setGitHub(t *testing.T, sec secrets.Store, legacy string) {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(legacy), &m); err != nil {
+		t.Fatal(err)
+	}
+	m["id"], m["name"] = "a1b2c3d4", "Token"
+	raw, _ := json.Marshal([]any{m})
+	if err := sec.Set(secrets.GitHubTokens, raw); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -305,8 +340,7 @@ func TestCompleteGitHubSendsVerifierAndStoresToken(t *testing.T) {
 		form.Get("redirect_uri") != "http://127.0.0.1:4317/oauth/github/callback" || form.Get("code_verifier") != r.rec.rows[0].Verifier {
 		t.Fatalf("form %v", form)
 	}
-	var tok auth.GitHubToken
-	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+	tok := firstGitHub(t, r.sec)
 	if tok.Token != "ghu_1" || tok.Method != "app" || tok.Login != "octocat" || tok.RefreshToken != "ghr_1" ||
 		!tok.ExpiresAt.Equal(r.clock.Now().Add(8*time.Hour)) || tok.NeedsReconnect {
 		t.Fatalf("%+v", tok)
@@ -351,7 +385,7 @@ func TestStateRejections(t *testing.T) {
 		if r.prov.githubTokenForm.Load() != nil || len(r.prov.atlassianBodies) != 0 {
 			t.Errorf("%s: the provider was called", tc.name)
 		}
-		if _, err := r.sec.Get(secrets.GitHubToken); err == nil {
+		if _, err := r.sec.Get(secrets.GitHubTokens); err == nil {
 			t.Errorf("%s: token stored", tc.name)
 		}
 	}
@@ -393,7 +427,7 @@ func TestCompleteExchangeFailures(t *testing.T) {
 	if err := complete(auth.GitHub, "c"); !errors.Is(err, auth.ErrExchange) {
 		t.Fatalf("token GitHub rejects: %v", err)
 	}
-	for _, name := range []string{secrets.GitHubToken, secrets.AtlassianToken} {
+	for _, name := range []string{secrets.GitHubTokens, secrets.AtlassianToken} {
 		if _, err := r.sec.Get(name); err == nil {
 			t.Errorf("%s stored after a failed exchange", name)
 		}
@@ -661,13 +695,12 @@ func TestCompleteGitHubWithoutExpiryStoresANonExpiringToken(t *testing.T) {
 	r := newOAuthRig(t)
 	r.prov.githubTokenAnswer.Store(`{"access_token":"ghu_1","token_type":"bearer"}`)
 	connectGitHub(t, r)
-	var tok auth.GitHubToken
-	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+	tok := firstGitHub(t, r.sec)
 	if !tok.ExpiresAt.IsZero() || tok.RefreshToken != "" {
 		t.Fatalf("%+v", tok)
 	}
 	r.clock.Advance(1000 * time.Hour)
-	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_1" || r.prov.ghRefreshCalls.Load() != 0 {
+	if got, err := r.o.GitHubAccess(ctx, ""); err != nil || got.Token != "ghu_1" || r.prov.ghRefreshCalls.Load() != 0 {
 		t.Fatalf("%q %v", got, err)
 	}
 }
@@ -676,14 +709,14 @@ func TestGitHubAccessDoesNotRefreshWhileValid(t *testing.T) {
 	r := newOAuthRig(t)
 	connectGitHub(t, r)
 	r.clock.Advance(8*time.Hour - 2*time.Minute)
-	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_1" {
+	if got, err := r.o.GitHubAccess(ctx, ""); err != nil || got.Token != "ghu_1" {
 		t.Fatalf("%q %v", got, err)
 	}
 	if r.prov.ghRefreshCalls.Load() != 0 {
 		t.Fatal("refreshed while the token was valid")
 	}
 	r.clock.Advance(90 * time.Second) // inside the skew window
-	if got, err := r.o.GitHubAccess(ctx); err != nil || got != "ghu_2" {
+	if got, err := r.o.GitHubAccess(ctx, ""); err != nil || got.Token != "ghu_2" {
 		t.Fatalf("%q %v", got, err)
 	}
 	form := <-r.prov.ghRefreshForms
@@ -691,8 +724,7 @@ func TestGitHubAccessDoesNotRefreshWhileValid(t *testing.T) {
 		form.Get("refresh_token") != "ghr_1" || form.Get("grant_type") != "refresh_token" {
 		t.Fatalf("form %v", form)
 	}
-	var tok auth.GitHubToken
-	tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+	tok := firstGitHub(t, r.sec)
 	if tok.Token != "ghu_2" || tok.RefreshToken != "ghr_2" || tok.Login != "octocat" || tok.Method != "app" ||
 		!tok.ExpiresAt.Equal(r.clock.Now().Add(8*time.Hour)) {
 		t.Fatalf("rotated token not stored: %+v", tok)
@@ -711,8 +743,8 @@ func TestGitHubRefreshOnceForConcurrentCallers(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			tok, err := r.o.GitHubAccess(ctx)
-			got <- tok
+			tok, err := r.o.GitHubAccess(ctx, "")
+			got <- tok.Token
 			errs <- err
 		}()
 	}
@@ -749,14 +781,14 @@ func TestGitHubRefreshRejection(t *testing.T) {
 		r.prov.ghRefreshStatus.Store(int32(tc.status))
 		r.prov.ghRefreshAnswer.Store(tc.answer)
 		r.clock.Advance(9 * time.Hour)
-		if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNeedsReconnect) {
+		if _, err := r.o.GitHubAccess(ctx, ""); !errors.Is(err, auth.ErrNeedsReconnect) {
 			t.Fatalf("%s: got %v", tc.name, err)
 		}
 		acc, ok, _ := r.o.GitHubAccount()
 		if !ok || !acc.NeedsReconnect {
 			t.Fatalf("%s: %+v", tc.name, acc)
 		}
-		if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNeedsReconnect) || r.prov.ghRefreshCalls.Load() != 1 {
+		if _, err := r.o.GitHubAccess(ctx, ""); !errors.Is(err, auth.ErrNeedsReconnect) || r.prov.ghRefreshCalls.Load() != 1 {
 			t.Fatalf("%s: a flagged token must not call GitHub again", tc.name)
 		}
 		if _, err := r.o.CheckGitHub(ctx); !errors.Is(err, auth.ErrNeedsReconnect) {
@@ -785,12 +817,11 @@ func TestGitHubTransientRefreshFailureKeepsTheToken(t *testing.T) {
 		r.prov.ghRefreshStatus.Store(int32(tc.status))
 		r.prov.ghRefreshAnswer.Store(tc.answer)
 		r.clock.Advance(9 * time.Hour)
-		_, err := r.o.GitHubAccess(ctx)
+		_, err := r.o.GitHubAccess(ctx, "")
 		if err == nil || errors.Is(err, auth.ErrNeedsReconnect) {
 			t.Fatalf("%s: got %v", tc.name, err)
 		}
-		var tok auth.GitHubToken
-		tokenJSON(t, r.sec, secrets.GitHubToken, &tok)
+		tok := firstGitHub(t, r.sec)
 		if tok.NeedsReconnect || tok.RefreshToken != "ghr_1" || tok.Token != "ghu_1" {
 			t.Fatalf("%s: %+v", tc.name, tok)
 		}
@@ -799,7 +830,7 @@ func TestGitHubTransientRefreshFailureKeepsTheToken(t *testing.T) {
 	connectGitHub(t, r)
 	r.clock.Advance(9 * time.Hour)
 	r.prov.srv.Close()
-	if _, err := r.o.GitHubAccess(ctx); err == nil || errors.Is(err, auth.ErrNeedsReconnect) {
+	if _, err := r.o.GitHubAccess(ctx, ""); err == nil || errors.Is(err, auth.ErrNeedsReconnect) {
 		t.Fatalf("network down: %v", err)
 	}
 	if acc, _, _ := r.o.GitHubAccount(); acc.NeedsReconnect || acc.RefreshToken != "ghr_1" {
@@ -812,7 +843,7 @@ func TestGitHubRefreshKeepsOldRefreshTokenWhenNoneIsReturned(t *testing.T) {
 	connectGitHub(t, r)
 	r.prov.ghRefreshAnswer.Store(`{"access_token":"ghu_2","expires_in":60}`)
 	r.clock.Advance(9 * time.Hour)
-	if _, err := r.o.GitHubAccess(ctx); err != nil {
+	if _, err := r.o.GitHubAccess(ctx, ""); err != nil {
 		t.Fatal(err)
 	}
 	if acc, _, _ := r.o.GitHubAccount(); acc.RefreshToken != "ghr_1" {
@@ -822,17 +853,17 @@ func TestGitHubRefreshKeepsOldRefreshTokenWhenNoneIsReturned(t *testing.T) {
 
 func TestGitHubAccessReturnsPATAndLegacyOAuthTokensAsStored(t *testing.T) {
 	r := newOAuthRig(t)
-	if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNotConnected) {
+	if _, err := r.o.GitHubAccess(ctx, ""); !errors.Is(err, auth.ErrNotConnected) {
 		t.Fatalf("got %v", err)
 	}
 	for _, raw := range []string{
 		`{"token":"gho_legacy","method":"oauth","login":"octocat"}`,
 		`{"token":"ghp_pat","method":"pat","login":"octocat"}`,
 	} {
-		_ = r.sec.Set(secrets.GitHubToken, []byte(raw))
+		setGitHub(t, r.sec, raw)
 		r.clock.Advance(10000 * time.Hour)
-		got, err := r.o.GitHubAccess(ctx)
-		if err != nil || (got != "gho_legacy" && got != "ghp_pat") || r.prov.ghRefreshCalls.Load() != 0 {
+		got, err := r.o.GitHubAccess(ctx, "")
+		if err != nil || (got.Token != "gho_legacy" && got.Token != "ghp_pat") || r.prov.ghRefreshCalls.Load() != 0 {
 			t.Fatalf("%s: %q %v", raw, got, err)
 		}
 	}
@@ -846,7 +877,7 @@ func TestGitHubRefreshNeedsClientCredentials(t *testing.T) {
 	connectGitHub(t, r)
 	_ = r.sec.Delete(secrets.GitHubClient)
 	r.clock.Advance(9 * time.Hour)
-	if _, err := r.o.GitHubAccess(ctx); !errors.Is(err, auth.ErrNotConfigured) {
+	if _, err := r.o.GitHubAccess(ctx, ""); !errors.Is(err, auth.ErrNotConfigured) {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -899,37 +930,38 @@ func TestClientSlugAndInstallURL(t *testing.T) {
 func TestSetPAT(t *testing.T) {
 	r := newOAuthRig(t)
 
-	rec, err := r.o.SetPAT(ctx, "ghp_pat")
+	rec, err := r.o.AddPAT(ctx, "ghp_pat", "")
 	if err != nil || rec.Method != "pat" || rec.Login != "octocat" || rec.Warning != "" {
 		t.Fatalf("classic: %+v %v", rec, err)
 	}
 
 	r.prov.githubScopes.Store("")
-	rec, err = r.o.SetPAT(ctx, "github_pat_x")
+	rec, err = r.o.AddPAT(ctx, "github_pat_x", "")
 	if err != nil || rec.Warning != auth.FineGrainedWarning {
 		t.Fatalf("fine-grained: %+v %v", rec, err)
 	}
 
 	r.prov.githubScopes.Store("repo")
-	_, err = r.o.SetPAT(ctx, "ghp_pat")
+	_ = r.sec.Delete(secrets.GitHubTokens)
+	_, err = r.o.AddPAT(ctx, "ghp_pat", "")
 	var se *auth.ScopeError
 	if !errors.As(err, &se) || !errors.Is(err, auth.ErrInsufficientScope) || len(se.Missing) != 1 || se.Missing[0] != "read:org" || se.Error() == "" {
 		t.Fatalf("missing scope: %v", err)
 	}
 	r.prov.githubScopes.Store("admin:org, repo")
-	if _, err := r.o.SetPAT(ctx, "ghp_pat"); err != nil {
+	if _, err := r.o.AddPAT(ctx, "ghp_pat", ""); err != nil {
 		t.Fatalf("admin:org implies read:org: %v", err)
 	}
 
 	r.prov.githubScopes.Store("read:org")
-	_ = r.sec.Delete(secrets.GitHubToken)
-	if _, err := r.o.SetPAT(ctx, "ghp_pat"); err == nil {
+	_ = r.sec.Delete(secrets.GitHubTokens)
+	if _, err := r.o.AddPAT(ctx, "ghp_pat", ""); err == nil {
 		t.Fatal("token without repo accepted")
 	}
-	if _, err := r.sec.Get(secrets.GitHubToken); err == nil {
+	if _, err := r.sec.Get(secrets.GitHubTokens); err == nil {
 		t.Fatal("rejected token was stored")
 	}
-	if _, err := r.o.SetPAT(ctx, "ghp_unknown"); !errors.Is(err, github.ErrBadCredentials) {
+	if _, err := r.o.AddPAT(ctx, "ghp_unknown", ""); !errors.Is(err, github.ErrBadCredentials) {
 		t.Fatalf("bad token: %v", err)
 	}
 }
@@ -939,8 +971,8 @@ func TestCheckGitHubAndDisconnect(t *testing.T) {
 	if _, err := r.o.CheckGitHub(ctx); !errors.Is(err, auth.ErrNotConnected) {
 		t.Fatalf("got %v", err)
 	}
-	_, _ = r.o.SetPAT(ctx, "ghp_pat")
-	_ = r.sec.Set(secrets.GitHubToken, []byte(`{"token":"ghp_pat","method":"pat","login":"old"}`))
+	_, _ = r.o.AddPAT(ctx, "ghp_pat", "")
+	setGitHub(t, r.sec, `{"token":"ghp_pat","method":"pat","login":"old"}`)
 	tok, err := r.o.CheckGitHub(ctx)
 	if err != nil || tok.Login != "octocat" {
 		t.Fatalf("%+v %v", tok, err)
@@ -949,7 +981,7 @@ func TestCheckGitHubAndDisconnect(t *testing.T) {
 	if stored.Login != "octocat" {
 		t.Fatalf("login not updated: %+v", stored)
 	}
-	_ = r.sec.Set(secrets.GitHubToken, []byte(`{"token":"revoked","method":"pat","login":"x"}`))
+	setGitHub(t, r.sec, `{"token":"revoked","method":"pat","login":"x"}`)
 	if _, err := r.o.CheckGitHub(ctx); !errors.Is(err, github.ErrBadCredentials) {
 		t.Fatalf("got %v", err)
 	}
@@ -967,3 +999,5 @@ func TestCheckGitHubAndDisconnect(t *testing.T) {
 		t.Fatal("disconnect removed the client credentials")
 	}
 }
+
+func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }

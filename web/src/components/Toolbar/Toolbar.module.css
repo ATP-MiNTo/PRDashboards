@@ -70,11 +70,12 @@
   border-radius: 50%;
 }
 
-.dot_assigned {
+/* Mine (assigned or opened by me) is the green; review requested is the red. */
+.dot_mine {
   background: var(--rc-a);
 }
 
-.dot_authored {
+.dot_reviewer {
   background: var(--rc-r);
 }
 
@@ -187,8 +188,27 @@
 }
 
 .rollLine {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   height: 1.25rem;
+}
+
+/* The dot of a coloured Show mode: the green or the red of the cards and the legend. */
+.rollDot {
+  flex: none;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px oklch(var(--bc) / 0.18);
+}
+
+.rollDot_green {
+  background: var(--rc-a);
+}
+
+.rollDot_red {
+  background: var(--rc-r);
 }
 
 .rollGo {

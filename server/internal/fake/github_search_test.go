@@ -32,6 +32,26 @@ func TestSearchHonoursAssigneeAndAuthor(t *testing.T) {
 	}
 }
 
+func TestSearchHonoursReviewRequested(t *testing.T) {
+	review := titles(t, "is:pr is:open review-requested:@me archived:false")
+	assigned := titles(t, "is:pr is:open assignee:@me archived:false")
+	authored := titles(t, "is:pr is:open author:@me archived:false")
+	reviewOnly := []string{"Tighten rate limiter", "Fix focus ring on tabs"}
+	for _, title := range reviewOnly {
+		if !review[title] || assigned[title] || authored[title] {
+			t.Errorf("%q is only in the review requested search: %v / %v / %v", title, review, assigned, authored)
+		}
+	}
+	if len(review) != len(reviewOnly) {
+		t.Errorf("only the review-only pull requests match review-requested:@me: %v", review)
+	}
+	for _, title := range []string{"INP-101 Add login", "INP-102 Single sign-on", "WIP schema cleanup"} {
+		if review[title] {
+			t.Errorf("%q must not be in the review requested search", title)
+		}
+	}
+}
+
 func TestNodesCarryAuthorUpdateTimeAndSize(t *testing.T) {
 	now := time.Now()
 	_, body := searchBody("is:pr is:open assignee:@me archived:false", githubConfig{}, nil, now)
@@ -51,5 +71,29 @@ func TestNodesCarryAuthorUpdateTimeAndSize(t *testing.T) {
 		if m["title"] == "INP-101 Add login" && (m["additions"] != 214 || m["deletions"] != 38) {
 			t.Errorf("fixture size %v +%v -%v", m["title"], m["additions"], m["deletions"])
 		}
+	}
+}
+
+func TestNodesCarryTheViewerRoleOfTheirRepository(t *testing.T) {
+	roles := func(cfg githubConfig) map[string]string {
+		_, body := searchBody("is:pr is:open assignee:@me archived:false", cfg, nil, time.Now())
+		out := map[string]string{}
+		for _, n := range body["data"].(map[string]any)["search"].(map[string]any)["nodes"].([]any) {
+			repo := n.(map[string]any)["repository"].(map[string]any)
+			out[repo["nameWithOwner"].(string)] = repo["viewerPermission"].(string)
+		}
+		return out
+	}
+	base := roles(githubConfig{})
+	if _, ok := base["oss/lib"]; ok {
+		t.Errorf("the read-only repository is only there when asked for: %v", base)
+	}
+	for repo, role := range base {
+		if role != "WRITE" {
+			t.Errorf("%s: %s, want WRITE by default", repo, role)
+		}
+	}
+	if got := roles(githubConfig{ReadOnly: true})["oss/lib"]; got != "READ" {
+		t.Errorf("oss/lib: %q, want READ", got)
 	}
 }

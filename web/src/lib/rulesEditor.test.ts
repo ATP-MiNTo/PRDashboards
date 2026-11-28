@@ -116,14 +116,14 @@ describe('templates', () => {
     expect(new Set(RULE_TEMPLATES.map((t) => t.label)).size).toBe(RULE_TEMPLATES.length);
   });
 
-  it('builds an enabled rule in mode All with no filters, and hours for a stale commit', () => {
+  it('builds an enabled rule that follows the default mode with no filters, and hours for a stale commit', () => {
     const stale = RULE_TEMPLATES.find((t) => t.rule.trigger === 'commit_stale');
     if (!stale) throw new Error('no stale template');
     const r = ruleFromTemplate(stale, [], 'x');
     expect(r).toMatchObject({
       id: 'x',
       enabled: true,
-      mode: 'all',
+      mode: 'default',
       trigger: 'commit_stale',
       hours: 72,
       target: 'To Do',

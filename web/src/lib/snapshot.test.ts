@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { SnapshotPr } from '@/api/client';
 import { NOW, pr, snapshot } from '@/test-fixtures';
 import {
   approvalsBlock,
@@ -8,8 +9,12 @@ import {
   githubChecksUrl,
   githubPrUrl,
   groupsOf,
+  isStale,
   matches,
+  STALE_AFTER_MS,
   orgSsoUrl,
+  readOnlyReason,
+  readyBlockOf,
   relativeTime,
   safeLink,
 } from './snapshot';
@@ -54,11 +59,17 @@ describe('approvalsBlock', () => {
     expect(approvalsBlock({ have: 2, need: 2, changesRequested: 0 })).toBeNull();
   });
 
-  it('treats a need outside 1 to 10 as the default of one', () => {
-    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBe(
+  it('never blocks a repository that requires no approval', () => {
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 0 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: 0, changesRequested: 1 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: 1, changesRequested: 0 })).toBe(
       'Needs 1 approvals, has 0',
     );
-    expect(approvalsBlock({ have: 1, need: 11, changesRequested: 0 })).toBeNull();
+  });
+
+  it('treats a need outside 0 to 10 as the default of none', () => {
+    expect(approvalsBlock({ have: 0, need: 11, changesRequested: 0 })).toBeNull();
+    expect(approvalsBlock({ have: 0, need: -1, changesRequested: 0 })).toBeNull();
   });
 });
 
@@ -99,11 +110,79 @@ describe('blockOf', () => {
     expect(blockOf(pr('a', 1, over))).toEqual({ readiness, reason });
   });
 
+  it.each(['READ', 'TRIAGE'] as const)('blocks a repository the account can only %s', (role) => {
+    const row = pr('a', 1, { repo: { ...pr('a', 1).repo, viewerPermission: role } });
+    expect(blockOf(row)).toEqual({
+      readiness: 'blocked',
+      reason: "Read-only here: your token's account can't write to acme/web",
+    });
+  });
+
+  it('names the token when the repository says which one it is written with', () => {
+    const row = pr('a', 1, {
+      repo: {
+        ...pr('a', 1).repo,
+        viewerPermission: 'READ',
+        tokenName: 'Work',
+        tokenId: 'aaaaaaaa',
+      },
+    });
+    expect(blockOf(row)).toEqual({
+      readiness: 'blocked',
+      reason: "Read-only here: Work can't write to acme/web",
+    });
+  });
+
+  it.each([['WRITE'], ['MAINTAIN'], ['ADMIN'], [undefined]] as const)(
+    'blocks nothing for the role %s (a snapshot without the role gates nothing)',
+    (role) => {
+      const row = pr('a', 1, { repo: { ...pr('a', 1).repo, viewerPermission: role } });
+      expect(blockOf(row)).toEqual({ readiness: 'ready', reason: null });
+    },
+  );
+
+  it('keeps a draft a draft whatever the role, and says read-only before other blocks', () => {
+    const repo = { ...pr('a', 1).repo, viewerPermission: 'READ' as const };
+    expect(blockOf(pr('a', 1, { repo, isDraft: true }))).toEqual({
+      readiness: 'draft',
+      reason: 'Draft',
+    });
+    expect(blockOf(pr('a', 1, { repo, mergeable: 'CONFLICTING' })).reason).toMatch(
+      /^Read-only here/,
+    );
+  });
+
   it('tells a stacked child to merge after its parent', () => {
     const child = pr('b', 2, {
       stack: { id: 'a', position: 2, size: 2, parentId: 'a', parentNumber: 1 },
     });
     expect(blockOf(child).reason).toBe('Merge after #1');
+  });
+});
+
+describe('readOnlyReason and readyBlockOf', () => {
+  const readOnly = (over: Partial<SnapshotPr> = {}) =>
+    pr('a', 1, {
+      isDraft: true,
+      author: 'priya',
+      roles: ['assigned'],
+      repo: { ...pr('a', 1).repo, viewerPermission: 'READ' },
+      ...over,
+    });
+
+  it('names the repository, and is null without a read-only role', () => {
+    expect(readOnlyReason(readOnly())).toBe(
+      "Read-only here: your token's account can't write to acme/web",
+    );
+    expect(readOnlyReason(pr('a', 1))).toBeNull();
+  });
+
+  it('blocks Ready for a draft of someone else, but not for its author', () => {
+    expect(readyBlockOf(readOnly(), 'octocat')).toMatch(/^Read-only here/);
+    expect(readyBlockOf(readOnly(), undefined)).toMatch(/^Read-only here/);
+    expect(readyBlockOf(readOnly({ author: 'OctoCat' }), 'octocat')).toBeNull();
+    expect(readyBlockOf(readOnly({ roles: ['authored'] }), undefined)).toBeNull();
+    expect(readyBlockOf(pr('a', 1, { isDraft: true }), 'octocat')).toBeNull();
   });
 });
 
@@ -120,9 +199,20 @@ describe('filters and groups', () => {
     ['all', ['a', 'c', 'b', 'd']],
     ['ready', ['a']],
     ['running', ['c']],
+    ['blocked', ['c', 'b']],
+    ['draft', ['d']],
+    ['stale', ['d']],
     ['stacks', ['a', 'b']],
   ] as const)('the %s filter matches %j', (filter, ids) => {
-    expect(rows.filter((p) => matches(p, filter)).map((p) => p.id)).toEqual(ids);
+    expect(rows.filter((p) => matches(p, filter, NOW)).map((p) => p.id)).toEqual(ids);
+  });
+
+  it('says a pull request is stale after three days without a commit, by the clock it is given', () => {
+    const p = pr('x', 1, { committedAt: '2026-11-20T00:00:00Z' });
+    const at = Date.parse('2026-11-20T00:00:00Z');
+    expect(isStale(p, at + STALE_AFTER_MS)).toBe(false);
+    expect(isStale(p, at + STALE_AFTER_MS + 1)).toBe(true);
+    expect(isStale(pr('y', 2, { committedAt: null }), at + 99 * STALE_AFTER_MS)).toBe(false);
   });
 
   it('keeps stacks together in stack order and the rest in list order', () => {
@@ -134,12 +224,15 @@ describe('filters and groups', () => {
     expect(groupsOf(snap, 'running')).toEqual([{ key: 'c', ids: ['c'], stacked: false }]);
     expect(groupsOf(snap, 'stacks')).toEqual([{ key: 'a', ids: ['a', 'b'], stacked: true }]);
     expect(groupsOf(snap, 'ready')).toEqual([{ key: 'a', ids: ['a'], stacked: true }]);
+    expect(groupsOf(snap, 'stale', 'all', [], new Set(), NOW)).toEqual([
+      { key: 'd', ids: ['d'], stacked: false },
+    ]);
   });
 
   it('drops the pull requests of a repository that is switched off', () => {
     const repo = snap.prs[0]?.repo.id ?? '';
-    expect(groupsOf(snap, 'all', 'everything', [], new Set([repo]))).toEqual([]);
-    expect(groupsOf(snap, 'all', 'everything', [], new Set(['other']))).toHaveLength(3);
+    expect(groupsOf(snap, 'all', 'all', [], new Set([repo]))).toEqual([]);
+    expect(groupsOf(snap, 'all', 'all', [], new Set(['other']))).toHaveLength(3);
   });
 });
 

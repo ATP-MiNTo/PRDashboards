@@ -8,8 +8,8 @@ import type {
   RepoSettings,
   Snapshot,
 } from '@/api/client';
-import { useAccounts, useSaveRepo, useSettings, useSnapshot } from '@/api/queries';
-import { SOURCE_VIA, sourceOf } from '@/lib/accounts';
+import { useAccounts, useRepoTokens, useSaveRepo, useSettings, useSnapshot } from '@/api/queries';
+import { SOURCE_VIA, repoTokenTip, sourceOf, tokenOfRepo } from '@/lib/accounts';
 import { METHOD_NAMES, METHOD_ORDER } from '@/lib/merge';
 import {
   DELETE_CHOICES,
@@ -18,6 +18,7 @@ import {
   MIN_APPROVALS,
   allowedOf,
   branchesOf,
+  deleteDefaultOf,
   deleteLabel,
   draftOf,
   draftValid,
@@ -26,6 +27,8 @@ import {
   stepApprovals,
   updateOf,
   validPattern,
+  withMethod,
+  type ExplicitDelete,
   type MethodChoice,
   type RepoDraft,
 } from '@/lib/repoSettings';
@@ -179,6 +182,11 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pending = useRef(false);
   const [failed, setFailed] = useState(false);
+  // The delete-branch value the repository had last, for turning "Use default" off again. The server
+  // keeps none while the choice is the default, so it starts from the stored choice when that is a value.
+  const [ownDelete, setOwnDelete] = useState<ExplicitDelete | null>(
+    repo.deleteBranch === 'default' ? null : repo.deleteBranch,
+  );
   const { mutate } = save;
   const id = repo.id;
 
@@ -236,6 +244,10 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
 
   const globalDelete = settings?.deleteBranchAfterMerge;
   const globalMethod = settings?.defaultMethodForNewRepos;
+  const setDelete = (deleteBranch: DeleteBranchChoice) => {
+    if (draft.deleteBranch !== 'default') setOwnDelete(draft.deleteBranch);
+    edit({ ...draft, deleteBranch });
+  };
   const deleteOptions = DELETE_CHOICES.map((c) => ({
     id: c,
     label: deleteLabel(c, globalDelete),
@@ -249,7 +261,14 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
   );
 
   const source = accounts ? sourceOf(accounts.github) : null;
-  const tip = `${source ? `Fetched via ${SOURCE_VIA[source]}. ` : ''}"Use default" follows the Repositories defaults.`;
+  const repoToken = useRepoTokens().data?.[repo.id];
+  const ref = tokenOfRepo(repoToken, accounts?.githubTokens ?? []);
+  const fetched = ref
+    ? `${repoTokenTip(ref, repoToken?.viewerPermission)} `
+    : source
+      ? `Fetched via ${SOURCE_VIA[source]}. `
+      : '';
+  const tip = `${fetched}"Use default" follows the Repositories defaults.`;
   const valid = draftValid(draft);
   const setRules = (rules: BranchRule[]) => edit({ ...draft, rules });
 
@@ -277,7 +296,12 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
             variant="field"
             options={deleteOptions}
             value={draft.deleteBranch}
-            onChange={(deleteBranch) => edit({ ...draft, deleteBranch })}
+            defaultChoice={{
+              id: 'default',
+              resolvesTo: deleteDefaultOf(globalDelete),
+              remembered: ownDelete ?? undefined,
+            }}
+            onChange={setDelete}
           />
         </div>
         <div className={styles.field}>
@@ -287,7 +311,8 @@ export function RepoModal({ repo, onClose }: { repo: RepoSettings; onClose: () =
             variant="field"
             options={methodOptions}
             value={draft.method}
-            onChange={(method) => edit({ ...draft, method })}
+            defaultChoice={{ id: 'default', resolvesTo: globalMethod, remembered: draft.ownMethod }}
+            onChange={(method) => edit(withMethod(draft, method))}
           />
         </div>
         <div className={styles.field}>

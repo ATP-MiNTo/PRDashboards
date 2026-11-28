@@ -541,9 +541,10 @@ func TestNoReviewYetAndWaitingApprovalsUseTheRepoApprovalsSetting(t *testing.T) 
 		t.Fatalf("only the ready pull request nobody reviewed: %v", got)
 	}
 	if got := preview(rules.WaitingApprovals); len(got) != 0 {
-		t.Fatalf("one approval is enough with the default of 1: %v", got)
+		t.Fatalf("a repo that requires nothing never waits: %v", got)
 	}
-	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, 2); err != nil {
+	two := 2
+	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, &two); err != nil {
 		t.Fatal(err)
 	}
 	if got := preview(rules.WaitingApprovals); !slices.Equal(got, []string{"INP-1"}) {
@@ -554,5 +555,139 @@ func TestNoReviewYetAndWaitingApprovalsUseTheRepoApprovalsSetting(t *testing.T) 
 	r.sync()
 	if got := r.jira.moveLog(); !slices.Equal(got, []string{"INP-1:31"}) {
 		t.Fatalf("the engine moves the ticket with the same count: %v", got)
+	}
+}
+
+// putMultiPr sets the global "Multi-PR tickets move when" setting.
+func (r *rig) putMultiPr(mode string) {
+	r.t.Helper()
+	set, err := r.store.GetSettings(context.Background())
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	set.MultiPrTickets = mode
+	if err := r.store.PutSettings(context.Background(), set); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+func TestRuleInModeDefaultFollowsTheGlobalMultiPrSetting(t *testing.T) {
+	fe := pr("PR_fe", 34, "acme/fe", "feat/INP-1-fe", "main", "fe")
+	be := pr("PR_be", 12, "acme/be", "feat/INP-1-be", "main", "be")
+	fe.ReviewDecision, be.ReviewDecision = "APPROVED", "REVIEW_REQUIRED"
+
+	t.Run("all waits for the last PR", func(t *testing.T) {
+		r := newRig(t, fe, be)
+		r.putRules(syncRule("follow", "review_approved", "Done", "default"))
+		r.putMultiPr("all")
+		r.allowTransitions("INP-1")
+		r.sync()
+		if got := r.jira.moveLog(); len(got) != 0 {
+			t.Fatalf("moved with one PR waiting: %v", got)
+		}
+		var hint bool
+		for _, p := range r.snapshot().Prs {
+			hint = hint || p.Tickets[0].Waiting != nil
+		}
+		if !hint {
+			t.Fatal("the ticket cell has no waiting hint")
+		}
+	})
+
+	t.Run("any moves on the first PR", func(t *testing.T) {
+		r := newRig(t, fe, be)
+		r.putRules(syncRule("follow", "review_approved", "Done", "default"))
+		r.putMultiPr("any")
+		r.allowTransitions("INP-1")
+		r.sync()
+		if got := r.jira.moveLog(); !slices.Equal(got, []string{"INP-1:31"}) {
+			t.Fatalf("moves %v", got)
+		}
+		for _, p := range r.snapshot().Prs {
+			if p.Tickets[0].Waiting != nil {
+				t.Fatal("a rule that moves on the first PR has nothing to wait for")
+			}
+		}
+	})
+
+	t.Run("a fresh install follows all", func(t *testing.T) {
+		r := newRig(t, fe, be)
+		r.putRules(syncRule("follow", "review_approved", "Done", "default"))
+		r.allowTransitions("INP-1")
+		r.sync()
+		if len(r.jira.moveLog()) != 0 {
+			t.Fatalf("%v", r.jira.moveLog())
+		}
+	})
+
+	t.Run("explicit modes ignore the global setting", func(t *testing.T) {
+		r := newRig(t, fe, be)
+		r.putRules(syncRule("all", "review_approved", "Done", "all"))
+		r.putMultiPr("any")
+		r.allowTransitions("INP-1")
+		r.sync()
+		if len(r.jira.moveLog()) != 0 {
+			t.Fatalf("%v", r.jira.moveLog())
+		}
+	})
+
+	t.Run("a changed setting applies to the next evaluation from cached data", func(t *testing.T) {
+		r := newRig(t, fe, be)
+		r.putRules(syncRule("follow", "review_approved", "Done", "default"))
+		r.allowTransitions("INP-1")
+		r.sync()
+		r.putMultiPr("any")
+		if err := r.p.Reevaluate(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if got := r.jira.moveLog(); !slices.Equal(got, []string{"INP-1:31"}) {
+			t.Fatalf("moves %v", got)
+		}
+	})
+}
+
+func TestMergePlanPreviewAndBaselineUseTheGlobalMultiPrSetting(t *testing.T) {
+	fe := pr("PR_fe", 34, "acme/fe", "feat/INP-1-fe", "main", "fe")
+	be := pr("PR_be", 12, "acme/be", "feat/INP-1-be", "main", "be")
+	fe.ReviewDecision, be.ReviewDecision = "APPROVED", "REVIEW_REQUIRED"
+	r := newRig(t, fe, be)
+	r.putRules(syncRule("done", "merged", "Done", "default"))
+	waitingOn := func() int {
+		for _, p := range r.snapshot().Prs {
+			if p.Id == "PR_fe" && p.Tickets[0].MergePlan != nil {
+				return len(p.Tickets[0].MergePlan.WaitingOn)
+			}
+		}
+		t.Fatal("no merge plan")
+		return -1
+	}
+	r.putMultiPr("all")
+	r.sync()
+	if n := waitingOn(); n != 1 {
+		t.Fatalf("global all: merging PR_fe waits on %d", n)
+	}
+	r.putMultiPr("any")
+	r.clock.Advance(time.Minute)
+	r.sync()
+	if n := waitingOn(); n != 0 {
+		t.Fatalf("global any: merging PR_fe waits on %d", n)
+	}
+
+	follow := rules.Rule{ID: "x", Name: "x", Enabled: true, Trigger: rules.ReviewApproved, Target: "Done", Mode: rules.Default}
+	pv, err := r.p.Preview(context.Background(), follow)
+	if err != nil || len(pv.Moves) != 1 || pv.Moves[0].Ticket != "INP-1" || len(pv.Waiting) != 0 {
+		t.Fatalf("global any: %+v %v", pv, err)
+	}
+	base, err := r.p.Baseline(context.Background(), []rules.Rule{follow})
+	if err != nil || len(base) != 1 || base[0].Ticket != "INP-1" {
+		t.Fatalf("global any: %+v %v", base, err)
+	}
+	r.putMultiPr("all")
+	pv, err = r.p.Preview(context.Background(), follow)
+	if err != nil || len(pv.Moves) != 0 || len(pv.Waiting) != 1 {
+		t.Fatalf("global all: %+v %v", pv, err)
+	}
+	if base, err = r.p.Baseline(context.Background(), []rules.Rule{follow}); err != nil || len(base) != 0 {
+		t.Fatalf("global all: %+v %v", base, err)
 	}
 }

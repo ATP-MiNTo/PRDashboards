@@ -86,6 +86,25 @@ export async function disconnectAll(page: Page) {
   }
 }
 
+// Makes the token the only GitHub token: with several tokens a new one is added next to the others
+// and the repositories go to the token with the highest role (the first on a tie), so a test of a
+// restricted token disconnects GitHub first, keeping Jira.
+export async function useOnlyGitHubToken(page: Page, token: string) {
+  await page.goto(APP + "/accounts/");
+  const button = page.getByRole("button", { name: "Disconnect GitHub" });
+  await expect(
+    button.or(page.getByRole("link", { name: "Connect GitHub" })),
+  ).toBeVisible();
+  if (await button.isVisible()) {
+    await button.click();
+    await expect(button).toBeHidden();
+  }
+  await page.goto(APP + "/setup/");
+  await page.getByLabel("Personal access token").fill(token);
+  await page.getByRole("button", { name: "Validate and save" }).click();
+  await expect(page.getByText("Connected as octocat")).toBeVisible();
+}
+
 export async function saveClient(
   page: Page,
   title: string,

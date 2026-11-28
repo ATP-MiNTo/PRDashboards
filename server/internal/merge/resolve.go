@@ -78,8 +78,8 @@ type Repo struct {
 	IsNew   bool
 	Follows bool
 	Rules   []Rule
-	// Approvals is how many approvals a pull request needs before it may merge; outside 1 to 10 it
-	// means the default of 1 (NeedOf).
+	// Approvals is how many approvals a pull request needs before it may merge, 0 to 10; 0 means
+	// nothing is required and a value outside the range means the same (NeedOf).
 	Approvals int
 }
 

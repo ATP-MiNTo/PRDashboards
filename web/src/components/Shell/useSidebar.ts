@@ -26,6 +26,9 @@ function writeStored(open: boolean) {
 
 const never = () => () => {};
 
+/** Keys that are not an interaction by themselves. */
+const MODIFIERS = new Set(['Shift', 'Control', 'Alt', 'Meta']);
+
 function subscribeWide(onChange: () => void) {
   if (typeof window.matchMedia !== 'function') return () => {};
   const query = window.matchMedia(WIDE_QUERY);
@@ -75,17 +78,29 @@ export function useSidebar({ hold = false }: { hold?: boolean } = {}) {
   const autoCollapse = wide && wideOpen;
   useEffect(() => {
     if (!autoCollapse) return;
+    // Focus in the sidebar holds it open only for a keyboard user. A button the pointer clicked
+    // keeps the focus after the pointer has left, and that must not keep the sidebar open for good.
+    let keyboard = false;
+    let inside = false;
+    const focusHeld = () => keyboard && !!aside.current?.contains(document.activeElement);
     const timer = createIdleTimer({
       delayMs: AUTO_COLLAPSE_MS,
       onIdle: () => setFolded(true),
       // A dialog over the page (the repository settings, a note, the rules) keeps the sidebar open too.
       isHeld: () =>
         holdRef.current ||
-        !!aside.current?.contains(document.activeElement) ||
+        focusHeld() ||
         document.querySelector('[role="dialog"][aria-modal="true"]') !== null,
     });
-    let inside = false;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!MODIFIERS.has(e.key)) keyboard = true;
+    };
+    const onPointerDown = () => {
+      keyboard = false;
+    };
     const onMove = (e: MouseEvent) => {
+      // A moving pointer is the person at the mouse: focus they left in the sidebar holds nothing.
+      keyboard = false;
       if (aside.current?.contains(e.target as Node)) {
         inside = true;
         timer.cancel();
@@ -99,11 +114,13 @@ export function useSidebar({ hold = false }: { hold?: boolean } = {}) {
       if (!timer.isArmed()) timer.arm();
     };
     const onFocusIn = (e: FocusEvent) => {
-      if (aside.current?.contains(e.target as Node)) timer.cancel();
+      if (keyboard && aside.current?.contains(e.target as Node)) timer.cancel();
     };
     const onFocusOut = () => {
       if (!inside && !timer.isArmed()) timer.arm();
     };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('mousemove', onMove);
     document.documentElement.addEventListener('mouseleave', onLeave);
     document.addEventListener('focusin', onFocusIn);
@@ -111,6 +128,8 @@ export function useSidebar({ hold = false }: { hold?: boolean } = {}) {
     timer.arm();
     return () => {
       timer.cancel();
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('mousemove', onMove);
       document.documentElement.removeEventListener('mouseleave', onLeave);
       document.removeEventListener('focusin', onFocusIn);

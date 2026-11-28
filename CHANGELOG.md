@@ -6,6 +6,60 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.3] - 2026-11-27
+
+### Added
+
+- Up to 10 named GitHub tokens. A fine-grained token belongs to one owner, so each owner can have its own. The poller runs the
+  three searches for every token and uses, for each repository, the token whose account has the highest role there. Merge,
+  Approve, Request changes and Ready use that token. The Accounts dialog lists the tokens (add, rename, check, remove), and the
+  token badge in the repository list shows the token's name with a hint.
+- Merge and Ready are greyed out, with the reason, in a repository where your account can only read.
+
+### Changed
+
+- The permission error names the token and the repository, and says that a fine-grained token works for one owner only.
+- The toasts show at the top right, below the header.
+- The Blocked tile only has its number in red.
+- The legend has one green entry, Mine, instead of Assigned and Opened by me.
+
+## [2.4.2] - 2026-11-27
+
+### Changed
+
+- Pull requests waiting on your review are now listed, in red. A third GitHub search (`review-requested:@me`, still one paginated
+  call per page of results, no per-PR calls) gives them the role "Review requested". Assigned and Opened by me share the same green.
+- The Show roller has three modes: All (default), Mine (green) and To review (red). The stat tiles and the count follow the mode.
+- The Blocked tile and its compact header button have a pastel red tint.
+- "Approvals required to merge" can be 0, and 0 is the default. Repositories that were still at the old default of 1 move to 0;
+  values from 2 to 10 are kept.
+- In the repository dialog, "Delete branch after merge" and "Merge method" open on the default. Click rolls between the choices only;
+  right-click, Shift+click or Shift+Enter switches between the default and a choice.
+- The accounts dialog no longer has the "Why" column.
+
+### Added
+
+- "Multi-PR tickets move when" in the Repositories setting of the sidebar (All PRs are merged, or First PR is merged). Status sync
+  rules can follow it with the new "Default" choice; existing rules keep their own choice.
+
+## [2.4.1] - 2026-11-27
+
+### Fixed
+
+- The Blocked, Draft and Stale tiles are back in the stats strip (with Showing, Ready to merge, Running CI and Stacks), and
+  they filter the list.
+- The stats now stay visible: once the strip scrolls away, a compact summary slides into the floating header pill.
+- The settings sidebar no longer crops its content when a repository name is long, so the merge method select,
+  Select all and the per-repository settings buttons stay visible.
+- The sidebar folds 30 seconds after the pointer leaves it, even when a clicked button still has the focus. Keyboard focus
+  and open dialogs still keep it open.
+- The History view has its warm brown tint again, in light and dark.
+
+### Removed
+
+- The Theme block in the sidebar. The sun and moon button in the header is the only theme control; right-click,
+  Shift+click, Shift+Enter or the Menu key on it switches to Auto.
+
 ## [2.4.0] - 2026-11-27
 
 ### Changed

@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/auth"
 	"github.com/ATP-MiNTo/PRDashboards/server/internal/jira"
@@ -18,16 +20,36 @@ type accounts struct {
 
 var _ poller.Accounts = accounts{}
 
-func (a accounts) GitHubToken(ctx context.Context) (string, error) { return a.oauth.GitHubAccess(ctx) }
-
-// GitHubLogin is the login of the connected GitHub account, empty when there is none. Nothing is
-// sent to GitHub.
-func (a accounts) GitHubLogin(context.Context) string {
-	tok, connected, err := a.oauth.GitHubAccount()
-	if err != nil || !connected {
-		return ""
+// GitHubTokens lists the connected GitHub credentials, primary first, without the token values.
+// Nothing is sent to GitHub.
+func (a accounts) GitHubTokens(context.Context) ([]auth.GitHubCredential, error) {
+	list, err := a.oauth.GitHubTokens()
+	if err != nil {
+		return nil, err
 	}
-	return tok.Login
+	out := make([]auth.GitHubCredential, len(list))
+	for i, t := range list {
+		out[i] = auth.GitHubCredential{ID: t.ID, Name: t.Name, Login: t.Login, Method: t.Method}
+	}
+	return out, nil
+}
+
+// GitHubToken returns a token that is valid now (refreshed when due). The merge and review actions
+// ask for the token of a repository as the snapshot chose it; a snapshot stored before several
+// tokens, and a token removed since, have no usable id and get the primary token.
+func (a accounts) GitHubToken(ctx context.Context, id string) (auth.GitHubCredential, error) {
+	cred, err := a.oauth.GitHubAccess(ctx, id)
+	if errors.Is(err, auth.ErrTokenNotFound) {
+		return a.oauth.GitHubAccess(ctx, "")
+	}
+	return cred, err
+}
+
+// GitHubRejected flags the credential GitHub rejected, so the Accounts dialog shows it.
+func (a accounts) GitHubRejected(ctx context.Context, id string) {
+	if err := a.oauth.MarkGitHubRejected(id); err != nil {
+		slog.WarnContext(ctx, "mark github token rejected", "err", err)
+	}
 }
 
 // JiraSite returns the selected site, or the only one the account can reach.

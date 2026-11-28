@@ -34,6 +34,7 @@ const settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: null,
   excludedStatuses: ['Done'],
 };
@@ -137,62 +138,77 @@ const mixed = () => [
   pr('a2', 2, { title: 'Assigned two', roles: ['assigned'] }),
   pr('o1', 3, { title: 'Opened one', roles: ['authored'] }),
   pr('b1', 4, { title: 'Both one', roles: ['assigned', 'authored'] }),
+  pr('r1', 5, { title: 'Review one', roles: ['reviewer'] }),
+  pr('m1', 6, { title: 'Review and mine', roles: ['authored', 'reviewer'] }),
 ];
 
 describe('show switch', () => {
   const sw = () => screen.getByRole('button', { name: /^Show, now/ });
 
-  it('sits before the Hidden PRs switch and cycles Everything, Assigned to me, Opened by me', async () => {
+  it('sits before the Hidden PRs switch and cycles All, Mine, To review', async () => {
     load(mixed());
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned one');
     const hidden = screen.getByRole('button', { name: /^Hidden PRs, now/ });
     expect(sw().compareDocumentPosition(hidden) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(sw()).toHaveAccessibleName(/now Everything, 4/);
-    expect(rowOrder()).toEqual(['a1', 'a2', 'o1', 'b1']);
+    expect(sw()).toHaveAccessibleName(/now All, 6/);
+    expect(rowOrder()).toEqual(['a1', 'a2', 'o1', 'b1', 'r1', 'm1']);
 
     fireEvent.click(sw());
-    expect(sw()).toHaveAccessibleName(/now Assigned to me, 3/);
-    expect(rowOrder()).toEqual(['a1', 'a2', 'b1']);
-    expect(localStorage.getItem('prd-show')).toBe('assigned');
+    expect(sw()).toHaveAccessibleName(/now Mine, 5/);
+    expect(rowOrder()).toEqual(['a1', 'a2', 'o1', 'b1', 'm1']);
+    expect(localStorage.getItem('prd-show')).toBe('mine');
 
     fireEvent.click(sw());
-    expect(sw()).toHaveAccessibleName(/now Opened by me, 2/);
-    expect(rowOrder()).toEqual(['o1', 'b1']);
-    expect(localStorage.getItem('prd-show')).toBe('authored');
+    expect(sw()).toHaveAccessibleName(/now To review, 2/);
+    expect(rowOrder()).toEqual(['r1', 'm1']);
+    expect(localStorage.getItem('prd-show')).toBe('review');
 
     fireEvent.click(sw());
-    expect(sw()).toHaveAccessibleName(/now Everything, 4/);
+    expect(sw()).toHaveAccessibleName(/now All, 6/);
+    expect(localStorage.getItem('prd-show')).toBe('all');
   });
 
   it('counts the whole snapshot, not the status filter or the hidden pull requests', async () => {
     localStorage.setItem('prd-hidden', JSON.stringify(['a1']));
-    load([...mixed(), pr('d1', 5, { isDraft: true, roles: ['authored'] })]);
+    load([...mixed(), pr('d1', 7, { isDraft: true, roles: ['reviewer'] })]);
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned two');
     fireEvent.click(screen.getByRole('button', { name: /Ready to merge/ }));
-    expect(sw()).toHaveAccessibleName(/now Everything, 5/);
+    expect(sw()).toHaveAccessibleName(/now All, 7/);
     fireEvent.click(sw());
     fireEvent.click(sw());
-    expect(sw()).toHaveAccessibleName(/now Opened by me, 3/);
+    expect(sw()).toHaveAccessibleName(/now To review, 3/);
   });
 
   it('restores the saved state and ignores a bad one', async () => {
-    localStorage.setItem('prd-show', 'authored');
+    localStorage.setItem('prd-show', 'review');
     load(mixed());
     const first = renderWithClient(<CommandTable />);
-    await screen.findByText('Opened one');
-    expect(sw()).toHaveAccessibleName(/now Opened by me/);
-    expect(rowOrder()).toEqual(['o1', 'b1']);
+    await screen.findByText('Review one');
+    expect(sw()).toHaveAccessibleName(/now To review/);
+    expect(rowOrder()).toEqual(['r1', 'm1']);
     first.unmount();
 
     localStorage.setItem('prd-show', 'nope');
     renderWithClient(<CommandTable />);
     await screen.findByText('Opened one');
-    expect(sw()).toHaveAccessibleName(/now Everything/);
+    expect(sw()).toHaveAccessibleName(/now All/);
   });
 
-  it('lists a pull request without roles under every state', async () => {
+  it.each([
+    ['everything', /now All/],
+    ['assigned', /now Mine/],
+    ['authored', /now Mine/],
+  ])('maps the saved value %s of the earlier switch', async (legacy, name) => {
+    localStorage.setItem('prd-show', legacy);
+    load(mixed());
+    renderWithClient(<CommandTable />);
+    await screen.findByText('Assigned one');
+    expect(sw()).toHaveAccessibleName(name);
+  });
+
+  it('lists a pull request without roles under All and Mine, not To review', async () => {
     const old = { ...pr('old', 9, { title: 'Older snapshot' }), roles: undefined };
     load([old as unknown as SnapshotPr]);
     renderWithClient(<CommandTable />);
@@ -200,7 +216,40 @@ describe('show switch', () => {
     fireEvent.click(sw());
     expect(rowOrder()).toEqual(['old']);
     fireEvent.click(sw());
-    expect(rowOrder()).toEqual(['old']);
+    expect(rowOrder()).toEqual([]);
+  });
+
+  describe('the stat tiles', () => {
+    const tiles = () =>
+      within(screen.getByRole('group', { name: 'Summary' }))
+        .getAllByRole('button')
+        .map((b) => b.textContent);
+
+    it('follow the mode: Showing and the status tiles count what the mode lists', async () => {
+      load([
+        ...mixed().slice(0, 4),
+        pr('r1', 5, { title: 'Review one', roles: ['reviewer'], isDraft: true }),
+        pr('r2', 6, { title: 'Review two', roles: ['reviewer'], isDraft: true }),
+        pr('m1', 7, { title: 'Review and mine', roles: ['authored', 'reviewer'] }),
+      ]);
+      renderWithClient(<CommandTable />);
+      await screen.findByText('Assigned one');
+      expect(tiles()[0]).toBe('Showing7');
+      expect(tiles()[4]).toBe('Draft2');
+
+      fireEvent.click(sw());
+      expect(sw()).toHaveAccessibleName(/now Mine, 5/);
+      expect(tiles()[0]).toBe('Showing5');
+      expect(tiles()[4]).toBe('Draft0');
+
+      fireEvent.click(sw());
+      expect(sw()).toHaveAccessibleName(/now To review, 3/);
+      expect(tiles()[0]).toBe('Showing3');
+      expect(tiles()[4]).toBe('Draft2');
+
+      fireEvent.click(sw());
+      expect(tiles()[0]).toBe('Showing7');
+    });
   });
 
   it('goes back to the first page when it changes', async () => {
@@ -219,7 +268,7 @@ describe('show switch', () => {
     const label = screen.getByText('Show', { selector: 'span[tabindex]' });
     act(() => label.focus());
     const tip = screen.getByRole('tooltip');
-    expect(tip).toHaveTextContent(/Everything.*Assigned to me.*Opened by me/);
+    expect(tip).toHaveTextContent(/All.*Mine.*To review/);
     expect(label).toHaveAttribute('aria-describedby', tip.id);
   });
 });
@@ -231,13 +280,15 @@ describe('role cues', () => {
     await screen.findByText('Assigned one');
     const cls = (id: string) => document.querySelector(`article[data-pr="${id}"]`)!.className;
     expect(cls('a1')).toMatch(/role_assigned/);
-    expect(cls('o1')).toMatch(/role_authored/);
-    expect(cls('b1')).toMatch(/role_both/);
-    expect(cls('o1')).not.toMatch(/role_assigned|role_both/);
+    expect(cls('o1')).toMatch(/role_assigned/);
+    expect(cls('b1')).toMatch(/role_assigned/);
+    expect(cls('r1')).toMatch(/role_reviewer/);
+    expect(cls('m1')).toMatch(/role_both/);
+    expect(cls('r1')).not.toMatch(/role_assigned|role_both/);
     expect(document.querySelector('article [style]')).toBeNull();
   });
 
-  it('shows a legend with Assigned, Opened by me and Stack at the end of the toolbar', async () => {
+  it('shows a legend with Mine, Review requested and Stack at the end of the toolbar', async () => {
     load(mixed());
     renderWithClient(<CommandTable />);
     await screen.findByText('Assigned one');
@@ -246,7 +297,7 @@ describe('role cues', () => {
       within(legend)
         .getAllByRole('listitem')
         .map((li) => li.textContent),
-    ).toEqual(['Assigned', 'Opened by me', 'Stack']);
+    ).toEqual(['Mine', 'Review requested', 'Stack']);
     expect(legend.parentElement!.lastElementChild).toBe(legend);
     expect(legend.querySelector('[style]')).toBeNull();
   });

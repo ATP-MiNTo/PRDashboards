@@ -35,25 +35,37 @@ func TestSnapshotCountsApprovalsAgainstTheRepoSetting(t *testing.T) {
 		return out
 	}
 	got := by()
-	if got[1] != (gen.Approvals{Have: 1, Need: 1}) || got[2] != (gen.Approvals{Have: 1, Need: 1, ChangesRequested: 1}) || got[3] != (gen.Approvals{Need: 1}) {
-		t.Fatalf("the default is one approval: %+v", got)
+	if got[1] != (gen.Approvals{Have: 1}) || got[2] != (gen.Approvals{Have: 1, ChangesRequested: 1}) || got[3] != (gen.Approvals{}) {
+		t.Fatalf("the default requires no approval: %+v", got)
 	}
 
 	ctx := context.Background()
-	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, 2); err != nil {
+	two := 2
+	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, &two); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.p.Relink(ctx); err != nil {
 		t.Fatal(err)
 	}
 	got = by()
-	if got[1] != (gen.Approvals{Have: 1, Need: 2}) || got[2].Need != 2 || got[3].Need != 1 {
+	if got[1] != (gen.Approvals{Have: 1, Need: 2}) || got[2].Need != 2 || got[3].Need != 0 {
 		t.Fatalf("the setting is per repository and a rebuild applies it: %+v", got)
 	}
 	// The merge sees the same number as the page.
 	l, ok := r.p.Linked("PR_a")
 	if !ok || l.ApprovalsRequired != 2 {
 		t.Fatalf("%+v %v", l, ok)
+	}
+	// 0 stored explicitly is a setting like any other, not a reason to keep the old one.
+	zero := 0
+	if err := r.store.PutRepo(ctx, "R-acme/web", "squash", nil, true, &zero); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.p.Relink(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got = by(); got[1] != (gen.Approvals{Have: 1}) || got[2].Need != 0 {
+		t.Fatalf("back to nothing required: %+v", got)
 	}
 }
 
@@ -62,7 +74,8 @@ func TestStoredSnapshotWithoutApprovalsGetsThemFromItsReviews(t *testing.T) {
 	a.Reviews = []github.Review{approved("1", "alice"), approved("2", "bob")}
 	r := newRig(t, a)
 	r.sync()
-	if err := r.store.PutRepo(context.Background(), "R-acme/web", "squash", nil, true, 3); err != nil {
+	three := 3
+	if err := r.store.PutRepo(context.Background(), "R-acme/web", "squash", nil, true, &three); err != nil {
 		t.Fatal(err)
 	}
 	var doc map[string]any
@@ -95,6 +108,37 @@ func TestStoredSnapshotWithoutApprovalsGetsThemFromItsReviews(t *testing.T) {
 	}
 	if err := json.Unmarshal(fresh.Current().JSON, &served); err != nil || served.Prs[0].Approvals["have"] != 2 || served.Prs[0].Approvals["need"] != 3 {
 		t.Fatalf("served %s %v", fresh.Current().JSON, err)
+	}
+}
+
+func TestStoredSnapshotTakesTheCurrentApprovalSettingEvenAtZero(t *testing.T) {
+	a := pr("PR_a", 1, "acme/web", "feat/a", "main", "a")
+	a.Reviews = []github.Review{approved("1", "alice")}
+	r := newRig(t, a)
+	r.sync()
+	// The snapshot was stored while the repo needed 2 (or the old default of 1); the setting is 0 now.
+	// A need of 0 is a real value, so the stored 2 must not be mistaken for "already filled in".
+	var doc map[string]any
+	if err := json.Unmarshal(r.p.Current().JSON, &doc); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range doc["prs"].([]any) {
+		p.(map[string]any)["approvals"] = map[string]any{"have": 1, "need": 2, "changesRequested": 0}
+	}
+	old, _ := json.Marshal(doc)
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, _ = zw.Write(old)
+	_ = zw.Close()
+	if err := r.store.SaveSnapshot(context.Background(), 9, buf.Bytes(), r.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	fresh := r.newPoller(nil, nil)
+	if err := fresh.Load(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := fresh.Current().Snapshot.Prs[0].Approvals; got != (gen.Approvals{Have: 1}) {
+		t.Fatalf("%+v", got)
 	}
 }
 

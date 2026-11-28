@@ -6,6 +6,7 @@ import { renderWithClient } from '@/test-utils';
 import { ToastProvider } from '../Toast/Toast';
 
 const api = vi.hoisted(() => ({
+  getAccounts: vi.fn(),
   markPrReady: vi.fn(),
   getSnapshot: vi.fn(),
 }));
@@ -28,6 +29,10 @@ const view = (row = pr('a', 5, { headSha: 'sha-5' }), onMerge = vi.fn(), launche
 
 beforeEach(() => {
   Object.values(api).forEach((f) => f.mockReset());
+  api.getAccounts.mockResolvedValue({
+    github: { connected: true, login: 'octocat', method: 'pat' },
+    jira: { connected: false, needsReconnect: false, sites: [], selectedSiteId: null },
+  });
   api.markPrReady.mockResolvedValue({ prId: 'a', state: 'OPEN' });
   api.getSnapshot.mockResolvedValue({ prs: [] });
 });
@@ -61,6 +66,47 @@ describe('MergeCell merge button', () => {
     view(pr('a', 5), vi.fn(), true);
     expect(screen.getByRole('status', { name: 'Merged' })).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+describe('MergeCell in a repository the account can only read', () => {
+  const repo = (role: 'READ' | 'TRIAGE' | 'WRITE' | undefined) => ({
+    ...pr('a', 5).repo,
+    nameWithOwner: 'ATP-MiNTo/PRDashboards',
+    viewerPermission: role,
+  });
+  const reason = "Read-only here: your token's account can't write to ATP-MiNTo/PRDashboards";
+
+  it.each(['READ', 'TRIAGE'] as const)('disables Merge for a %s role, with the reason', (role) => {
+    const onMerge = view(pr('a', 5, { repo: repo(role) }));
+    const button = screen.getByRole('button', { name: 'Merge' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAccessibleDescription(reason);
+    expect(document.querySelector('[data-tip]')).toHaveAttribute('data-tip', reason);
+    fireEvent.click(button);
+    expect(onMerge).not.toHaveBeenCalled();
+  });
+
+  it('keeps Merge for a writer and for a snapshot without the role', () => {
+    view(pr('a', 5, { repo: repo('WRITE') }));
+    expect(screen.getByRole('button', { name: 'Merge' })).toBeEnabled();
+  });
+
+  it('disables Ready of a draft somebody else opened, and never calls the server', async () => {
+    view(pr('a', 5, { isDraft: true, author: 'priya', repo: repo('READ') }));
+    const button = await screen.findByRole('button', { name: 'Ready' });
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAccessibleDescription(reason);
+    fireEvent.click(button);
+    expect(api.markPrReady).not.toHaveBeenCalled();
+  });
+
+  it('lets the author of the draft mark it ready, by login or by role', async () => {
+    view(pr('a', 5, { isDraft: true, author: 'OctoCat', repo: repo('READ') }));
+    await waitFor(() => expect(api.getAccounts).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ready' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    await waitFor(() => expect(api.markPrReady).toHaveBeenCalledTimes(1));
   });
 });
 

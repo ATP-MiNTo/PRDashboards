@@ -7,6 +7,8 @@ export type Settings = Schemas['Settings'];
 export type Setup = Schemas['Setup'];
 export type Accounts = Schemas['Accounts'];
 export type GithubAccount = Schemas['GithubAccount'];
+export type GithubToken = Schemas['GithubToken'];
+export type SnapshotRepo = Schemas['SnapshotRepo'];
 export type JiraAccount = Schemas['JiraAccount'];
 export type Provider = Schemas['Provider'];
 export type ClientCredentials = Schemas['ClientCredentials'];
@@ -105,6 +107,13 @@ export const putSetupClient = (provider: Provider, credentials: ClientCredential
   send('PUT', `/api/setup/${provider}`, credentials);
 export const putGithubPat = (token: string) =>
   json<GithubAccount>('PUT', '/api/github/pat', { token });
+export const addGithubToken = (body: Schemas['AddTokenRequest']) =>
+  json<GithubToken>('POST', '/api/github/tokens', body);
+export const renameGithubToken = ({ id, name }: { id: string; name: string }) =>
+  json<GithubToken>('PUT', `/api/github/tokens/${id}`, { name });
+export const deleteGithubToken = (id: string) => send('DELETE', `/api/github/tokens/${id}`);
+export const checkGithubToken = (id: string) =>
+  json<Accounts>('POST', `/api/github/tokens/${id}/check`);
 export const getAccounts = () => json<Accounts>('GET', '/api/accounts');
 export const disconnectAccount = (provider: Provider) =>
   send('DELETE', `/api/accounts/${provider}`);
@@ -198,6 +207,8 @@ export const getActivity = (cursor?: number) =>
 export type SyncRule = Schemas['SyncRule'];
 export type RuleTrigger = Schemas['RuleTrigger'];
 export type RuleMode = Schemas['RuleMode'];
+/** When a ticket shared by several PRs moves, for the rules that follow the default: all or any. */
+export type MultiPrMode = Settings['multiPrTickets'];
 export type RuleFilters = Schemas['RuleFilters'];
 export type RulePreview = Schemas['RulePreview'];
 export type RulesUpdate = Schemas['RulesUpdate'];

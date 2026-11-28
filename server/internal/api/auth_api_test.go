@@ -29,11 +29,12 @@ type settingsBody struct {
 	Theme                    string
 	DefaultMethodForNewRepos string
 	DeleteBranchAfterMerge   bool
+	MultiPrTickets           string
 	JiraSiteID               *string
 	ExcludedStatuses         []string
 }
 
-const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"jiraSiteId":null,"excludedStatuses":["Done","Closed"]}`
+const validSettings = `{"polling":{"githubSec":120,"jiraSec":900},"theme":"dark","defaultMethodForNewRepos":"rebase","deleteBranchAfterMerge":true,"multiPrTickets":"any","jiraSiteId":null,"excludedStatuses":["Done","Closed"]}`
 
 func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	g := newRig(t, webFS())
@@ -44,7 +45,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 	}
 	got := decode[settingsBody](t, w)
 	if got.Polling.GithubSec != 60 || got.Polling.JiraSec != 300 || got.Theme != "auto" || got.DefaultMethodForNewRepos != "squash" ||
-		got.DeleteBranchAfterMerge || got.JiraSiteID != nil || !slices.Equal(got.ExcludedStatuses, []string{"Done"}) {
+		got.DeleteBranchAfterMerge || got.MultiPrTickets != "all" || got.JiraSiteID != nil || !slices.Equal(got.ExcludedStatuses, []string{"Done"}) {
 		t.Fatalf("defaults %+v", got)
 	}
 	if !strings.Contains(w.Body.String(), `"jiraSiteId":null`) {
@@ -56,7 +57,7 @@ func TestSettingsDefaultsAndRoundTrip(t *testing.T) {
 		t.Fatalf("put: %d %s", w.Code, w.Body)
 	}
 	got = decode[settingsBody](t, g.do(http.MethodGet, "/api/settings", "", cookie(l.cookie)))
-	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge ||
+	if got.Polling.GithubSec != 120 || got.Polling.JiraSec != 900 || got.Theme != "dark" || got.DefaultMethodForNewRepos != "rebase" || !got.DeleteBranchAfterMerge || got.MultiPrTickets != "any" ||
 		!slices.Equal(got.ExcludedStatuses, []string{"Done", "Closed"}) {
 		t.Fatalf("after put %+v", got)
 	}
@@ -78,6 +79,9 @@ func TestSettingsValidation(t *testing.T) {
 		"unknown field":         strings.Replace(validSettings, `"theme"`, `"extra":1,"theme"`, 1),
 		"unknown polling key":   strings.Replace(validSettings, `"jiraSec":900`, `"jiraSec":900,"x":1`, 1),
 		"missing field":         `{"polling":{"githubSec":60,"jiraSec":300},"theme":"auto"}`,
+		"multi-PR mode":         strings.Replace(validSettings, `"multiPrTickets":"any"`, `"multiPrTickets":"first"`, 1),
+		"multi-PR default":      strings.Replace(validSettings, `"multiPrTickets":"any"`, `"multiPrTickets":"default"`, 1),
+		"multi-PR missing":      strings.Replace(validSettings, `"multiPrTickets":"any",`, ``, 1),
 		"flag as string":        strings.Replace(validSettings, `true`, `"yes"`, 1),
 		"empty excluded status": strings.Replace(validSettings, `"Closed"`, `""`, 1),
 		"excluded not a list":   strings.Replace(validSettings, `["Done","Closed"]`, `"Done"`, 1),
@@ -296,17 +300,24 @@ func TestPAT(t *testing.T) {
 	if strings.Contains(w.Body.String(), "ghp_pat") {
 		t.Fatal("token echoed")
 	}
-	if raw, _ := g.secrets.Get(secrets.GitHubToken); !strings.Contains(string(raw), "ghp_pat") {
+	if raw, _ := g.secrets.Get(secrets.GitHubTokens); !strings.Contains(string(raw), "ghp_pat") {
 		t.Fatal("token not in the secrets store")
 	}
 
 	g.prov.githubScopes.Store("")
+	// With a token stored, PUT adds the token next to it: the answer is still the summary of the
+	// primary one, and the new token is in the list with its warning.
 	acc = decode[map[string]any](t, put("github_pat_x"))
-	if acc["warning"] == nil || acc["warning"] == "" {
-		t.Fatalf("fine-grained token needs a warning: %v", acc)
+	if acc["connected"] != true || acc["warning"] != nil || acc["login"] != "octocat" {
+		t.Fatalf("summary of the primary token: %v", acc)
+	}
+	tokens := accounts(t, g, l).GithubTokens
+	if len(tokens) != 2 || tokens[1].Warning == nil || *tokens[1].Warning == "" || !tokens[1].FineGrained || tokens[0].FineGrained {
+		t.Fatalf("fine-grained token needs a warning: %+v", tokens)
 	}
 
 	g.prov.githubScopes.Store("repo")
+	_ = g.secrets.Delete(secrets.GitHubTokens)
 	w = put("ghp_pat")
 	wantProblem(t, w, http.StatusUnprocessableEntity, "insufficient_scopes")
 	if !strings.Contains(w.Body.String(), "read:org") {
@@ -330,8 +341,20 @@ func TestPAT(t *testing.T) {
 	}
 }
 
+type githubTokenBody struct {
+	ID             string
+	Name           string
+	Method         string
+	FineGrained    bool
+	Login          string
+	Warning        *string
+	NeedsReconnect bool
+}
+
 type accountsBody struct {
-	Github struct {
+	GithubTokens     []githubTokenBody
+	GithubTokenLimit int
+	Github           struct {
 		Connected bool
 		Login     string
 		Method    string
@@ -445,7 +468,7 @@ func TestCheckAccount(t *testing.T) {
 	if w := g.do(http.MethodPost, "/api/accounts/github/check", "", l.write()...); w.Code != 200 {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	_ = g.secrets.Set(secrets.GitHubToken, []byte(`{"token":"revoked","method":"pat","login":"x"}`))
+	_ = g.secrets.Set(secrets.GitHubTokens, []byte(`[{"id":"0a0b0c0d","name":"Token (x)","token":"revoked","method":"pat","login":"x"}]`))
 	wantProblem(t, g.do(http.MethodPost, "/api/accounts/github/check", "", l.write()...), http.StatusUnprocessableEntity, "invalid_token")
 
 	_ = g.oauth.SetClient(auth.Atlassian, auth.ClientCredentials{ClientID: "id", ClientSecret: "s"})

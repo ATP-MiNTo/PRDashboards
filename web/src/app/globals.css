@@ -23,6 +23,13 @@
   --radius-pill: 9999px;
   --ctl-h: 2rem;
 
+  /* The floating header pills (Header.module.css) and the room under them: toasts start at
+     --header-bottom and end at --header-edge from the right, so they never cover the header. */
+  --pill-top: 22px;
+  --pill-h: 44px;
+  --header-bottom: calc(var(--pill-top) + var(--pill-h));
+  --header-edge: calc(max(16px, env(safe-area-inset-right, 0px)) + 12px);
+
   /* Text: ink, and the muted steps. The design mutes text to 70% (65% for eyebrows), which gives
      3.3 to 3.8:1 on the glass in light mode. These steps are the lowest that reach 4.5:1 on every
      surface of the page, tinted rows and stack banners included. */
@@ -78,11 +85,14 @@
   --merge: #007fff;
   --merge-hover: #1a8cff;
 
-  /* Roles and stacks. A card is tinted whole: cyan for assigned, red for opened by the user, split
-     46/54 for both. */
+  /* Roles and stacks. A card is tinted whole: cyan-teal for a pull request assigned to the user or
+     opened by the user, red for one the user is asked to review, split 46/54 for both. */
   --rc-a: #bfeaf1;
   --rc-r: #f9c9c9;
   --stack: #8b6cf0;
+
+  /* The Blocked number: red on the normal tile. */
+  --blocked-fg: #b3202c;
   --card-a-bg: color-mix(in oklab, var(--rc-a) 28%, oklch(var(--b1)));
   --card-r-bg: color-mix(in oklab, var(--rc-r) 28%, oklch(var(--b1)));
   --card-b-bg: linear-gradient(
@@ -186,6 +196,8 @@
   --rc-a: #1d5560;
   --rc-r: #6a363c;
   --stack: #a994ff;
+  /* The Blocked number: light red on the normal dark tile. */
+  --blocked-fg: #ff9aa2;
   --card-a-bg: linear-gradient(120deg, rgba(86, 196, 214, 0.17), rgba(86, 196, 214, 0.05) 70%);
   --card-r-bg: linear-gradient(120deg, rgba(240, 128, 150, 0.17), rgba(240, 128, 150, 0.05) 70%);
   --card-b-bg: linear-gradient(
@@ -321,6 +333,45 @@ button:not(:disabled):active {
   button:not(:disabled):active {
     transform: none;
   }
+}
+
+/* The History view: an older, warmer palette (the design's "hist" mode), light brown in light and a
+   copper aurora in dark. `data-view="history"` is set on <html> while the view is open
+   (CommandTable.tsx). The daisyUI tokens are re-set, so everything made from them follows: the page
+   glows, the glass, the sidebar and the header. The dark glass and aurora are fixed colours, so they
+   are set here too. */
+:root[data-view='history'] {
+  --p: 60% 0.085 68;
+  --pc: 98% 0.01 85;
+  --s: 56% 0.06 38;
+  --sc: 98% 0.01 85;
+  --a: 62% 0.07 100;
+  --ac: 20% 0.02 90;
+  --b1: 98.5% 0.012 88;
+  --b2: 94% 0.028 85;
+  --b3: 89% 0.04 82;
+  --bc: 28% 0.03 60;
+}
+
+:root[data-view='history'][data-mode='dark'] {
+  --p: 72% 0.045 70;
+  --pc: 20% 0.02 70;
+  --s: 68% 0.03 50;
+  --sc: 20% 0.02 70;
+  --a: 72% 0.04 95;
+  --ac: 20% 0.015 90;
+  --b1: 25% 0.008 80;
+  --b2: 21% 0.008 80;
+  --b3: 30% 0.01 80;
+  --bc: 90% 0.01 85;
+  --page-bg: #1a1410;
+  --page-image:
+    radial-gradient(48rem 34rem at 8% -8%, rgba(176, 132, 92, 0.26), transparent 62%),
+    radial-gradient(44rem 34rem at 100% 0%, rgba(150, 120, 80, 0.18), transparent 62%),
+    radial-gradient(40rem 30rem at 45% 115%, rgba(190, 120, 100, 0.14), transparent 62%),
+    linear-gradient(160deg, #1a1410, #15110e 55%, #181310);
+  --glass-bg: linear-gradient(180deg, rgba(210, 170, 130, 0.09), rgba(210, 170, 130, 0.04));
+  --glass-line: rgba(220, 180, 140, 0.16);
 }
 
 /* Glass pane. */

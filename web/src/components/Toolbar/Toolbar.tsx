@@ -13,16 +13,16 @@ const HIDE_OPTIONS: RollOption<HideMode>[] = [
 ];
 
 const SHOW_OPTIONS: RollOption<ShowMode>[] = [
-  { id: 'everything', label: 'Everything' },
-  { id: 'assigned', label: 'Assigned to me' },
-  { id: 'authored', label: 'Opened by me' },
+  { id: 'all', label: 'All' },
+  { id: 'mine', label: 'Mine', tone: 'green' },
+  { id: 'review', label: 'To review', tone: 'red' },
 ];
 
-const LEGEND = [
-  { id: 'assigned', label: 'Assigned' },
-  { id: 'authored', label: 'Opened by me' },
+const LEGEND: { id: string; label: string; hint?: string }[] = [
+  { id: 'mine', label: 'Mine', hint: 'Assigned to you or opened by you' },
+  { id: 'reviewer', label: 'Review requested' },
   { id: 'stack', label: 'Stack' },
-] as const;
+];
 
 /** Said at the end of both hints, as in the design. */
 const SWITCH_NOTE = 'Click the button to switch to the next state.';
@@ -109,13 +109,13 @@ export function Toolbar({
           <Hint label="Show">
             <span className={styles.hintTitle}>Show</span>
             <span>
-              <b>Everything</b> Assigned to you and opened by you.
+              <b>All</b> Everything.
             </span>
             <span>
-              <b>Assigned to me</b> Assigned to you.
+              <b>Mine</b> Assigned to you or opened by you.
             </span>
             <span>
-              <b>Opened by me</b> Opened by you.
+              <b>To review</b> Waiting on your review.
             </span>
             <span className={styles.hintNote}>{SWITCH_NOTE}</span>
           </Hint>
@@ -156,7 +156,7 @@ export function Toolbar({
       </div>
       <ul className={styles.legend} aria-label="Legend">
         {LEGEND.map((l) => (
-          <li key={l.id} className={styles.legendItem}>
+          <li key={l.id} className={styles.legendItem} title={l.hint}>
             <span className={`${styles.legendDot} ${styles[`dot_${l.id}`]}`} aria-hidden="true" />
             {l.label}
           </li>

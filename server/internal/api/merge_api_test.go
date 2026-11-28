@@ -163,6 +163,8 @@ func TestMergePermissionAndPolicyProblems(t *testing.T) {
 			"missing_permission", "The token needs one of these GitHub permissions: pull_requests: write or contents: write"},
 		{&github.PermissionError{Message: "Nope"}, "missing_permission", "The token lacks a GitHub permission this action needs: Nope"},
 		{fmt.Errorf("wrapped: %w", &github.PermissionError{Accepted: []string{"contents=write"}}), "missing_permission", "contents: write"},
+		{&github.PermissionError{Accepted: []string{"contents=write"}, Repo: "ATP-MiNTo/PRDashboards", Action: "merge in"},
+			"missing_permission", "This token can't merge in ATP-MiNTo/PRDashboards: it needs the GitHub permission contents: write. A fine-grained token works for one owner only"},
 		{&github.OrgBlocked{Org: "acme", Reason: "policy", Message: "secret wording"}, "org_blocked", "The acme organization policy does not allow this token"},
 		{&github.OrgBlocked{Reason: "policy"}, "org_blocked", "An organization policy does not allow this token"},
 		{&github.OrgBlocked{Org: "acme", Reason: "sso"}, "org_blocked", "An organization has not authorized the token"},
@@ -300,8 +302,8 @@ func TestReposListGetAndPut(t *testing.T) {
 	if triggers, _, _ := g.p.counts(); triggers != 0 {
 		t.Fatal("saving settings must not start an outside refresh")
 	}
-	if one.ApprovalsRequired != 1 {
-		t.Fatalf("a repo that never set it needs one approval: %d", one.ApprovalsRequired)
+	if one.ApprovalsRequired != 0 {
+		t.Fatalf("a repo that never set it needs no approval: %d", one.ApprovalsRequired)
 	}
 	w = g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"rebase"`) {
@@ -410,13 +412,20 @@ func TestRepoApprovalsRequired(t *testing.T) {
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].ApprovalsRequired != 10 {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
-	for name, v := range map[string]string{"0": "0", "11": "11", "negative": "-1", "string": `"2"`, "fraction": "1.5", "null": "null"} {
+	for name, v := range map[string]string{"11": "11", "negative": "-1", "string": `"2"`, "fraction": "1.5", "null": "null"} {
 		if w := put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"approvalsRequired":` + v + `}`); w.Code != http.StatusBadRequest {
 			t.Errorf("%s: %d %s", name, w.Code, w.Body)
 		}
 	}
 	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); r.ApprovalsRequired != 10 {
 		t.Fatalf("a rejected update changed it: %+v", r)
+	}
+	// 0 is a value of its own, not "left out": it sets the setting to nothing required.
+	if r := read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"approvalsRequired":0}`)); r.ApprovalsRequired != 0 {
+		t.Fatalf("0 is allowed and stored: %+v", r)
+	}
+	if r := read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false}`)); r.ApprovalsRequired != 0 {
+		t.Fatalf("%+v", r)
 	}
 }
 
@@ -434,20 +443,20 @@ func TestRepoMethodInheritanceAndDeleteBranchChoice(t *testing.T) {
 		}
 		return r
 	}
-	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); !r.InheritMethod || r.DeleteBranch != gen.Default {
+	if r := read(g.do(http.MethodGet, "/api/repos/R1", "", cookie(g.l.cookie))); !r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceDefault {
 		t.Fatalf("a new repo follows the defaults: %+v", r)
 	}
 	r := read(put(`{"defaultMethod":"rebase","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"no"}`))
-	if r.InheritMethod || r.DeleteBranch != gen.No || r.DefaultMethod != "rebase" {
+	if r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceNo || r.DefaultMethod != "rebase" {
 		t.Fatalf("%+v", r)
 	}
 	// The delete-branch choice left out stays; the inheritance left out is false, like the method it goes with.
 	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false}`))
-	if r.InheritMethod || r.DeleteBranch != gen.No {
+	if r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceNo {
 		t.Fatalf("%+v", r)
 	}
 	r = read(put(`{"defaultMethod":"merge","branchRules":[],"clearNew":false,"inheritMethod":true,"deleteBranch":"yes"}`))
-	if !r.InheritMethod || r.DeleteBranch != gen.Yes {
+	if !r.InheritMethod || r.DeleteBranch != gen.DeleteBranchChoiceYes {
 		t.Fatalf("%+v", r)
 	}
 	if _, relinks, _ := g.p.counts(); relinks != 3 {
@@ -465,7 +474,7 @@ func TestRepoMethodInheritanceAndDeleteBranchChoice(t *testing.T) {
 	}
 	w := g.do(http.MethodPut, "/api/repos", `{"repos":[{"id":"R1","update":{"defaultMethod":"squash","branchRules":[],"clearNew":false,"inheritMethod":false,"deleteBranch":"default"}}]}`, g.l.write()...)
 	var list gen.Repos
-	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].InheritMethod || list.Repos[0].DeleteBranch != gen.Default {
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &list) != nil || list.Repos[0].InheritMethod || list.Repos[0].DeleteBranch != gen.DeleteBranchChoiceDefault {
 		t.Fatalf("%d %s", w.Code, w.Body)
 	}
 }

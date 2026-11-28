@@ -6,6 +6,7 @@ import {
   fakeState,
   resetFakes,
   signIn,
+  useOnlyGitHubToken,
 } from "./helpers";
 
 // TECH_SPEC section 12, flows 5 and 6: merge with a Jira move, a failed move that is retried, and
@@ -151,7 +152,9 @@ test("a failed move is kept and retried", async ({ page, request }) => {
   );
 
   await configure(request, "atlassian", { transitionMode: "" });
-  await history.getByRole("button", { name: "Retry the move of INP-104" }).click();
+  await history
+    .getByRole("button", { name: "Retry the move of INP-104" })
+    .click();
   await expect(history.getByText("did not move")).toHaveCount(0);
   await expect(history.getByText("INP-104 moved to Done")).toBeVisible();
 
@@ -210,12 +213,7 @@ test("a token without Contents write says which permission is missing", async ({
   page,
   request,
 }) => {
-  const useToken = async (token: string) => {
-    await page.goto(APP + "/setup/");
-    await page.getByLabel("Personal access token").fill(token);
-    await page.getByRole("button", { name: "Validate and save" }).click();
-    await expect(page.getByText("Connected as octocat")).toBeVisible();
-  };
+  const useToken = (token: string) => useOnlyGitHubToken(page, token);
   await useToken("github_pat_contents_read");
   try {
     await page.goto(APP + "/");
@@ -229,7 +227,7 @@ test("a token without Contents write says which permission is missing", async ({
     await panel.getByRole("button", { name: "Merge without ticket" }).click();
 
     await expect(panel.getByRole("alert")).toContainText(
-      "The token needs the GitHub permission contents: write",
+      `The token "Token (octocat)" can't merge in acme/api: it needs the GitHub permission contents: write. A fine-grained token works for one owner only`,
     );
     expect((await fakeState<GitHubState>(request, "github")).merges).toBe(0);
     await expect(row).toBeVisible();

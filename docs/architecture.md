@@ -62,8 +62,8 @@ sequenceDiagram
   participant B as Browser
 
   T->>P: refresh (joins running one if any)
-  P->>G: two GraphQL searches in parallel, assigned and authored, each paginated (one query per 50 PRs)
-  P->>G: two merged PR searches (only if PRs left the open list)
+  P->>G: three GraphQL searches in parallel, assigned, authored and review requested, each paginated (one query per 50 PRs)
+  P->>G: three merged PR searches (only if PRs left the open list)
   P->>P: link tickets, detect stacks (in memory)
   P->>J: JQL key in (...) per 100 keys (Jira interval)
   P->>S: upsert repos, prs, links (one transaction)
@@ -107,7 +107,7 @@ sequenceDiagram
 
 ### Calls and performance
 
-- No N+1 calls. The PR list is two paginated GraphQL searches, assigned to me and opened by me, run in parallel and merged by PR id. Tickets are one JQL per 100 keys.
+- No N+1 calls. The PR list is three paginated GraphQL searches per connected GitHub token (at most 10), assigned to me, opened by me and review requested from me, run in parallel for one token and merged by PR id across the tokens ([features/github-tokens.md](features/github-tokens.md)). Tickets are one JQL per 100 keys.
   Transitions are fetched only for the tickets being moved. The only single-PR call is the re-check
   before a merge.
 - One refresh at a time. Browser tabs read the snapshot and never trigger outside calls on their
@@ -156,6 +156,7 @@ sequenceDiagram
 | Security middleware | [features/security.md](features/security.md) | Built |
 | Storage and secrets | [features/storage.md](features/storage.md) | Built |
 | GitHub and Jira auth | [features/auth.md](features/auth.md) | Built |
+| Several GitHub tokens | [features/github-tokens.md](features/github-tokens.md) | Built |
 | Poller and snapshot | [features/poller.md](features/poller.md) | Built |
 | Command Table | [features/command-table.md](features/command-table.md) | Built |
 | Toolbar, show by role, hidden pull requests, pager and footer | [features/toolbar-pager-footer.md](features/toolbar-pager-footer.md) | Built |

@@ -153,6 +153,9 @@ func run(ctx context.Context, o options, e env) error {
 		Rand:      e.rand,
 		Port:      o.port,
 	})
+	if err := oauth.MigrateGitHub(); err != nil {
+		return fmt.Errorf("github tokens: %w", err)
+	}
 	jiraClient := &jira.Client{HTTP: httpClient, Base: jiraAPI, Access: oauth.AtlassianAccess}
 	hub := events.NewHub(events.Options{})
 	acc := accounts{oauth: oauth, store: db}

@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { pr, snapshot, ticket } from '@/test-fixtures';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NOW, pr, snapshot, ticket } from '@/test-fixtures';
 import { renderWithClient } from '@/test-utils';
 import type { Snapshot } from '@/api/client';
 
@@ -56,6 +56,7 @@ const settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: null,
   excludedStatuses: ['Done'],
 };
@@ -141,30 +142,176 @@ describe('CommandTable', () => {
     expect(within(group).getByText('Stack 2/2')).toBeInTheDocument();
   });
 
-  it('counts the stat tiles and filters with them', async () => {
-    renderWithClient(<CommandTable />);
-    await screen.findByText('Add login');
-    const tiles = screen.getByRole('group', { name: 'Summary' });
-    expect(
-      within(tiles)
-        .getAllByRole('button')
-        .map((b) => b.textContent),
-    ).toEqual(['Showing4', 'Ready to merge1', 'Running CI0', 'Stacks1']);
-    const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
-    expect(tile(/^Showing/)).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(tile(/^Stacks/));
-    expect(tile(/^Stacks/)).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Add login')).toBeInTheDocument();
-    expect(screen.queryByText('Plain fix')).toBeNull();
-    fireEvent.click(tile(/^Ready to merge/));
-    expect(screen.queryByText('Conflicted')).toBeNull();
-    expect(screen.queryByText('Plain fix')).toBeNull();
-    expect(screen.queryByText('SSO on top')).toBeNull();
-    expect(screen.getByText('Add login')).toBeInTheDocument();
-    fireEvent.click(tile(/^Running CI/));
-    expect(screen.getByText('Nothing here')).toBeInTheDocument();
-    fireEvent.click(tile(/^Showing/));
-    expect(screen.getByText('Plain fix')).toBeInTheDocument();
+  describe('stat tiles', () => {
+    // The Stale count reads the clock: pin it to just after the fixtures' last commits.
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(NOW);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('counts the stat tiles and filters with them', async () => {
+      renderWithClient(<CommandTable />);
+      await screen.findByText('Add login');
+      const tiles = screen.getByRole('group', { name: 'Summary' });
+      expect(
+        within(tiles)
+          .getAllByRole('button')
+          .map((b) => b.textContent),
+      ).toEqual([
+        'Showing4',
+        'Ready to merge1',
+        'Running CI0',
+        'Blocked2',
+        'Draft1',
+        'Stale1',
+        'Stacks1',
+      ]);
+      const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+      expect(tile(/^Showing/)).toHaveAttribute('aria-pressed', 'true');
+      fireEvent.click(tile(/^Stacks/));
+      expect(tile(/^Stacks/)).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByText('Add login')).toBeInTheDocument();
+      expect(screen.queryByText('Plain fix')).toBeNull();
+      fireEvent.click(tile(/^Ready to merge/));
+      expect(screen.queryByText('Conflicted')).toBeNull();
+      expect(screen.queryByText('Plain fix')).toBeNull();
+      expect(screen.queryByText('SSO on top')).toBeNull();
+      expect(screen.getByText('Add login')).toBeInTheDocument();
+      fireEvent.click(tile(/^Running CI/));
+      expect(screen.getByText('Nothing here')).toBeInTheDocument();
+      fireEvent.click(tile(/^Showing/));
+      expect(screen.getByText('Plain fix')).toBeInTheDocument();
+    });
+
+    it('marks only the Blocked tile with a red number, in the strip, and keeps it pressed when it is the filter', async () => {
+      renderWithClient(<CommandTable />);
+      await screen.findByText('Add login');
+      const tiles = screen.getByRole('group', { name: 'Summary' });
+      const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+      expect(tile(/^Blocked/).className).toMatch(/statBlocked/);
+      for (const other of [/^Showing/, /^Ready/, /^Running/, /^Draft/, /^Stale/, /^Stacks/]) {
+        expect(tile(other).className).not.toMatch(/statBlocked/);
+      }
+      expect(tile(/^Blocked/).className).not.toMatch(/statOn/);
+      fireEvent.click(tile(/^Blocked/));
+      expect(tile(/^Blocked/)).toHaveAttribute('aria-pressed', 'true');
+      expect(tile(/^Blocked/).className).toMatch(/statBlocked.*statOn/);
+      expect(tiles.querySelector('[style]')).toBeNull();
+    });
+
+    it('filters to the blocked, draft and stale pull requests', async () => {
+      renderWithClient(<CommandTable />);
+      await screen.findByText('Add login');
+      const tiles = screen.getByRole('group', { name: 'Summary' });
+      const tile = (name: RegExp) => within(tiles).getByRole('button', { name });
+      const shown = () =>
+        ['Add login', 'SSO on top', 'Plain fix', 'Conflicted'].filter(
+          (t) => screen.queryByText(t) !== null,
+        );
+      fireEvent.click(tile(/^Blocked/));
+      expect(tile(/^Blocked/)).toHaveAttribute('aria-pressed', 'true');
+      expect(shown()).toEqual(['SSO on top', 'Conflicted']);
+      fireEvent.click(tile(/^Draft/));
+      expect(shown()).toEqual(['Plain fix']);
+      fireEvent.click(tile(/^Stale/));
+      expect(shown()).toEqual(['Conflicted']);
+      // The numbers stay whole while one of them is the filter.
+      expect(tile(/^Blocked/)).toHaveTextContent('2');
+      fireEvent.click(tile(/^Showing/));
+      expect(shown()).toHaveLength(4);
+    });
+
+    describe('in the header once the strip has scrolled away', () => {
+      let observe: (entry: Partial<IntersectionObserverEntry>) => void;
+      beforeEach(() => {
+        vi.stubGlobal(
+          'IntersectionObserver',
+          class {
+            constructor(cb: IntersectionObserverCallback) {
+              observe = (entry) =>
+                act(() => cb([entry as IntersectionObserverEntry], this as never));
+            }
+            observe() {}
+            disconnect() {}
+          },
+        );
+      });
+      afterEach(() => vi.unstubAllGlobals());
+
+      // Hidden, it has no accessible name to query by, so it is found by its label.
+      const compact = () =>
+        document.querySelector<HTMLElement>('[aria-label="Summary, compact"]') as HTMLElement;
+      const strip = (bottom: number, isIntersecting: boolean) =>
+        observe({ isIntersecting, boundingClientRect: { bottom } as DOMRectReadOnly });
+
+      it('is inert and hidden while the strip is in view, and shows once it is not', async () => {
+        renderWithClient(<CommandTable />);
+        await screen.findByText('Add login');
+        expect(compact()).toHaveAttribute('aria-hidden', 'true');
+        expect(compact()).toHaveAttribute('inert');
+        expect(screen.queryByRole('group', { name: 'Summary, compact' })).toBeNull();
+        strip(300, true);
+        expect(compact()).toHaveAttribute('aria-hidden', 'true');
+        // Below the fold, not scrolled past: still hidden.
+        strip(2000, false);
+        expect(compact()).toHaveAttribute('aria-hidden', 'true');
+        strip(20, false);
+        expect(compact()).not.toHaveAttribute('aria-hidden');
+        expect(compact()).not.toHaveAttribute('inert');
+        const names = within(compact())
+          .getAllByRole('button')
+          .map((b) => b.getAttribute('aria-label'));
+        expect(names).toEqual([
+          'Showing: 4',
+          'Ready to merge: 1',
+          'Running CI: 0',
+          'Blocked: 2',
+          'Draft: 1',
+          'Stale: 1',
+          'Stacks: 1',
+        ]);
+        strip(300, true);
+        expect(compact()).toHaveAttribute('aria-hidden', 'true');
+      });
+
+      it('marks the Blocked button with a red number like the tile, and keeps it pressed when it is on', async () => {
+        renderWithClient(<CommandTable />);
+        await screen.findByText('Add login');
+        strip(20, false);
+        const blocked = () => within(compact()).getByRole('button', { name: 'Blocked: 2' });
+        expect(blocked().className).toMatch(/csBlocked/);
+        const others = within(compact())
+          .getAllByRole('button')
+          .filter((b) => b !== blocked());
+        expect(others).toHaveLength(6);
+        for (const b of others) expect(b.className).not.toMatch(/csBlocked/);
+        fireEvent.click(blocked());
+        expect(blocked()).toHaveAttribute('aria-pressed', 'true');
+        expect(blocked().className).toMatch(/csBlocked.*csOn/);
+      });
+
+      it('applies the same filters as the tiles, and shows which one is on', async () => {
+        renderWithClient(<CommandTable />);
+        await screen.findByText('Add login');
+        strip(20, false);
+        fireEvent.click(within(compact()).getByRole('button', { name: 'Draft: 1' }));
+        expect(screen.getByText('Plain fix')).toBeInTheDocument();
+        expect(screen.queryByText('Add login')).toBeNull();
+        expect(within(compact()).getByRole('button', { name: 'Draft: 1' })).toHaveAttribute(
+          'aria-pressed',
+          'true',
+        );
+        expect(
+          within(screen.getByRole('group', { name: 'Summary' })).getByRole('button', {
+            name: /^Draft/,
+          }),
+        ).toHaveAttribute('aria-pressed', 'true');
+        // "Showing" counts the filtered list, and lifts the filter.
+        fireEvent.click(within(compact()).getByRole('button', { name: 'Showing: 1' }));
+        expect(screen.getByText('Add login')).toBeInTheDocument();
+      });
+    });
   });
 
   it('shows an Authorize link for a blocked organization while other rows load', async () => {
@@ -488,6 +635,22 @@ describe('CommandTable', () => {
     expect(button).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('Add login')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Merged pull requests' })).toBeNull();
+  });
+
+  it('tints the whole page while the History view is open (data-view on <html>)', async () => {
+    const { unmount } = renderWithClient(<CommandTable />);
+    await screen.findByText('Add login');
+    const root = document.documentElement;
+    expect(root.dataset.view).toBeUndefined();
+    const button = screen.getByRole('button', { name: 'History' });
+    fireEvent.click(button);
+    expect(root.dataset.view).toBe('history');
+    fireEvent.click(button);
+    expect(root.dataset.view).toBeUndefined();
+    fireEvent.click(button);
+    expect(root.dataset.view).toBe('history');
+    unmount();
+    expect(root.dataset.view).toBeUndefined();
   });
 
   it('leaves out the pull requests of a repository switched off in the sidebar', async () => {

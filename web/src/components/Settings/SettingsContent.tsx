@@ -4,8 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { useSaveSettings, useSettings } from '@/api/queries';
 import type { Settings } from '@/api/client';
 import { POLLING_STEPS, pollingLabel, stepPolling } from '@/lib/polling';
-import { useTheme } from '@/theme/useTheme';
-import { DARK_FROM_HOUR, LIGHT_FROM_HOUR } from '@/theme/theme';
 import { RepositoriesSection } from './RepositoriesSection';
 import styles from './Settings.module.css';
 
@@ -139,31 +137,9 @@ function PollingSection({ onOpenRules }: { onOpenRules: () => void }) {
   );
 }
 
-const hh = (h: number) => String(h).padStart(2, '0');
-
-/** Auto theme. The light and dark choice is the sun and moon button in the header. */
-function ThemeSection() {
-  const { theme, mode, setTheme } = useTheme();
-  return (
-    <section className={styles.section} aria-labelledby="set-theme">
-      <h3 id="set-theme">Theme</h3>
-      <label className={styles.check}>
-        <input
-          type="checkbox"
-          checked={theme === 'auto'}
-          disabled={theme === undefined}
-          onChange={(e) => setTheme(e.target.checked ? 'auto' : (mode ?? 'light'))}
-        />
-        Auto (light from {hh(LIGHT_FROM_HOUR)}:00 to {hh(DARK_FROM_HOUR)}:00)
-      </label>
-    </section>
-  );
-}
-
 /**
- * The Settings sections, shown in the left sidebar: the repositories, the polling with the button
- * for the status sync rules, and the Auto theme switch, which is the way to it without a pointer.
- * The rules, the repository settings and the accounts open in their own dialogs.
+ * The Settings sections, shown in the left sidebar: the repositories and the polling with the button
+ * for the status sync rules. The theme is the sun and moon button in the header. The rules, the repository settings and the accounts open in their own dialogs.
  */
 export function SettingsContent({
   onOpenRules,
@@ -179,7 +155,6 @@ export function SettingsContent({
     <div className={styles.body}>
       <RepositoriesSection off={off} onOff={onOff} />
       <PollingSection onOpenRules={onOpenRules} />
-      <ThemeSection />
     </div>
   );
 }

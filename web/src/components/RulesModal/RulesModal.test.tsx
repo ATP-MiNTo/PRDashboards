@@ -39,6 +39,7 @@ const settings = {
   theme: 'auto',
   defaultMethodForNewRepos: 'squash',
   deleteBranchAfterMerge: false,
+  multiPrTickets: 'all',
   jiraSiteId: null,
   excludedStatuses: ['Done'],
 };
@@ -357,15 +358,66 @@ describe('disable, delete and the mode', () => {
   it('saves the mode of shared tickets at once with the baseline, so nothing moves', async () => {
     await open();
     const first = await expand('First');
-    expect(within(first).getByLabelText('Tickets shared by several PRs')).toHaveValue('all');
+    expect(within(first).getByLabelText('Tickets shared by several PRs')).toHaveValue('default');
     pick(within(first), 'Tickets shared by several PRs', 'any');
     await waitFor(() => expect(api.putRules).toHaveBeenCalledTimes(1));
     expect(saved().baseline).toBe(true);
     expect(saved().rules.map((r) => [r.id, r.mode])).toEqual([
       ['a', 'any'],
-      ['b', 'all'],
+      ['b', 'default'],
     ]);
     expect(api.previewRule).not.toHaveBeenCalled();
+  });
+
+  it('offers the choice that follows the sidebar first and words it with the current setting', async () => {
+    await open();
+    const first = await expand('First');
+    const select = within(first).getByLabelText('Tickets shared by several PRs');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => o.textContent),
+    ).toEqual([
+      'Default (when the last PR meets it)',
+      'When the last PR meets it',
+      'When the first PR meets it',
+    ]);
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((o) => (o as HTMLOptionElement).value),
+    ).toEqual(['default', 'all', 'any']);
+  });
+
+  it('shows the first-PR setting in the default choice and keeps an explicit mode', async () => {
+    api.getSettings.mockResolvedValue({ ...settings, multiPrTickets: 'any' });
+    api.getRules.mockResolvedValue({
+      rules: [rule('a', { name: 'First' }), rule('b', { name: 'Second', mode: 'all' })],
+    });
+    await open();
+    const first = await expand('First');
+    expect(
+      await within(first).findByRole('option', { name: 'Default (when the first PR meets it)' }),
+    ).toBeInTheDocument();
+    pick(within(first), 'Tickets shared by several PRs', 'default');
+    expect(api.putRules).not.toHaveBeenCalled();
+    const second = await expand('Second');
+    expect(within(second).getByLabelText('Tickets shared by several PRs')).toHaveValue('all');
+  });
+
+  it('saves the choice that follows the sidebar with the baseline', async () => {
+    api.getRules.mockResolvedValue({
+      rules: [rule('a', { name: 'First', mode: 'any' }), rule('b', { name: 'Second' })],
+    });
+    await open();
+    const first = await expand('First');
+    pick(within(first), 'Tickets shared by several PRs', 'default');
+    await waitFor(() => expect(api.putRules).toHaveBeenCalledTimes(1));
+    expect(saved().baseline).toBe(true);
+    expect(saved().rules.map((r) => [r.id, r.mode])).toEqual([
+      ['a', 'default'],
+      ['b', 'default'],
+    ]);
   });
 
   it('keeps the mode in the draft while the rule has other unsaved edits', async () => {
@@ -383,7 +435,7 @@ describe('disable, delete and the mode', () => {
     expect(
       within(first).getByLabelText('Tickets shared by several PRs'),
     ).toHaveAccessibleDescription(
-      /When a ticket is linked to several PRs\. All: the ticket moves only when every linked PR meets the rule\. Any: the first PR that meets it moves the ticket\./,
+      /When a ticket is linked to several PRs\. Default: follows "Multi-PR tickets move when" in the Repositories setting of the sidebar\. All: the ticket moves only when every linked PR meets the rule\. Any: the first PR that meets it moves the ticket\./,
     );
   });
 
@@ -465,7 +517,7 @@ describe('adding a rule', () => {
       trigger: 'ci_passing',
       target: 'Done',
       enabled: true,
-      mode: 'all',
+      mode: 'default',
     });
     await waitFor(() => expect(within(card(3)).queryByText('Unsaved')).toBeNull());
   });

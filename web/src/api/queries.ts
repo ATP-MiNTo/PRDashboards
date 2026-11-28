@@ -7,8 +7,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import {
+  addGithubToken,
   approvePr,
   checkAccount,
+  checkGithubToken,
+  deleteGithubToken,
+  renameGithubToken,
   markPrReady,
   requestChangesPr,
   dismissRetry,
@@ -55,6 +59,7 @@ import {
   type TicketLinks,
   type Settings,
 } from './client';
+import { repoTokensOf } from '@/lib/accounts';
 
 export const keys = {
   session: ['session'],
@@ -101,6 +106,10 @@ export const useSaveClient = () =>
     putSetupClient(provider, credentials),
   );
 export const useSavePat = () => useAction(putGithubPat);
+export const useAddToken = () => useAction(addGithubToken);
+export const useRenameToken = () => useAction(renameGithubToken);
+export const useRemoveToken = () => useAction(deleteGithubToken);
+export const useCheckToken = () => useAction(checkGithubToken);
 export const useDisconnect = () => useAction(disconnectAccount);
 export const useCheck = () => useAction(checkAccount);
 export const useSaveSettings = () => useAction((settings: Settings) => putSettings(settings));
@@ -114,6 +123,9 @@ export const useSnapshotPr = (id: string) =>
   useSnapshot<SnapshotPr | undefined>(
     useCallback((s: Snapshot) => s.prs.find((p) => p.id === id), [id]),
   ).data;
+
+/** Which token reads each repository, from the snapshot the page already has (no call of its own). */
+export const useRepoTokens = () => useSnapshot(repoTokensOf);
 
 export const useAssignedTickets = (enabled: boolean) =>
   useQuery({ queryKey: keys.assigned, queryFn: getAssignedTickets, enabled, staleTime: 60_000 });
@@ -148,7 +160,7 @@ export const useSaveRepo = () =>
   useSaveReposWith(({ id, update }: { id: string; update: RepoUpdate }) => putRepo(id, update));
 
 /**
- * The update that changes only the approvals a repository needs (1 to 10): everything else is sent
+ * The update that changes only the approvals a repository needs (0 to 10): everything else is sent
  * as the repository has it now, and the repository stays marked new or seen as it was.
  */
 export const approvalsUpdate = (repo: RepoSettings, approvalsRequired: number): RepoUpdate => ({
