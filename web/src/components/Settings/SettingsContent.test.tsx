@@ -66,9 +66,7 @@ describe('SettingsContent', () => {
   it('has the repositories and the polling, and nothing the dialogs took over, not even a theme block', async () => {
     show();
     const page = document.body;
-    expect(
-      await within(page).findByRole('heading', { name: /^Repositories setting/ }),
-    ).toBeInTheDocument();
+    expect(await within(page).findByRole('heading', { name: /^Repositories/ })).toBeInTheDocument();
     expect(await within(page).findByRole('region', { name: 'Polling' })).toBeInTheDocument();
     // They moved to the repository dialog, the accounts dialog, the rules dialog and the History view.
     for (const gone of [
@@ -93,8 +91,8 @@ describe('SettingsContent', () => {
     const names = within(page)
       .getAllByRole('heading', { level: 3 })
       .map((h) => h.textContent?.replace(/\d+\/\d+$/, ''));
-    expect(names).toEqual(['Repositories setting']);
-    const repos = within(page).getByRole('heading', { name: /^Repositories setting/ });
+    expect(names).toEqual(['Repositories']);
+    const repos = within(page).getByRole('heading', { name: /^Repositories/ });
     expect(repos.compareDocumentPosition(polling) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

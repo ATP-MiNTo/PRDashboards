@@ -9,7 +9,7 @@ import styles from './Controls.module.css';
 import { RocketIcon } from './Icons';
 import { MergeIcon } from './MergeIcon';
 
-/** How long the frost sweep after "Ready" plays. */
+/** How long the frost sweep after "Mark ready" plays. */
 const COLD_MS = 1300;
 /** How long a draft that was just marked ready is shown as waiting for its checks, if the snapshot is slow to follow. */
 const READIED_MS = 30_000;
@@ -84,7 +84,7 @@ export function MergeCell({
   const login = useAccounts().data?.github.login ?? undefined;
   const ready = useMarkReady();
   const toast = useToast();
-  // After "Ready" the snapshot can still say draft for a moment: the card keeps showing the frosted,
+  // After "Mark ready" the snapshot can still say draft for a moment: the card keeps showing the frosted,
   // disabled Merge until it catches up (or for 30 s).
   const [readied, setReadied] = useState(false);
   const [cold, setCold] = useState(false);
@@ -132,7 +132,8 @@ export function MergeCell({
   if (pr.isDraft) {
     // The account cannot write here and did not open the draft: GitHub would refuse, so say so.
     const readOnly = readyBlockOf(pr, login);
-    if (readOnly) return <Blocked reason={readOnly} className={styles.mergeOff} label="Ready" />;
+    if (readOnly)
+      return <Blocked reason={readOnly} className={styles.mergeOff} label="Mark ready" />;
     return (
       <Tip tip={DRAFT_TIP} side="left">
         <button
@@ -143,7 +144,7 @@ export function MergeCell({
           disabled={ready.isPending}
           onClick={markReady}
         >
-          Ready
+          Mark ready
         </button>
         <span id={draftId} className={styles.srOnly}>
           {DRAFT_TIP}

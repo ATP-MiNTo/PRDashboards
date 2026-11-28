@@ -112,7 +112,7 @@ describe('ReviewCell action menu', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((i) => i.textContent),
-    ).toEqual(['Approve', 'Request change']);
+    ).toEqual(['Approve', 'Request changes']);
   });
 
   it('approves with the head the card showed and says so in a toast', async () => {
@@ -152,7 +152,7 @@ describe('ReviewCell action menu', () => {
   it('opens the request dialog and sends nothing before the comment is written', async () => {
     view();
     fireEvent.click(await action());
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Request change' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Request changes' }));
     const dialog = screen.getByRole('dialog', { name: 'Request changes on acme/web #5' });
     expect(within(dialog).getByText('Change 5')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Request changes' }));
@@ -168,7 +168,7 @@ describe('ReviewCell action menu', () => {
   it('sends the comment with the head, closes and toasts', async () => {
     view();
     fireEvent.click(await action());
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Request change' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Request changes' }));
     const dialog = screen.getByRole('dialog');
     fireEvent.change(within(dialog).getByRole('textbox', { name: /Comment/ }), {
       target: { value: 'Please add a test' },
@@ -188,7 +188,7 @@ describe('ReviewCell action menu', () => {
     api.requestChangesPr.mockRejectedValue(new ApiError(409, 'head_moved'));
     view();
     fireEvent.click(await action());
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Request change' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Request changes' }));
     const dialog = screen.getByRole('dialog');
     const box = within(dialog).getByRole('textbox', { name: /Comment/ });
     fireEvent.change(box, { target: { value: 'Please add a test' } });
@@ -203,11 +203,11 @@ describe('ReviewCell action menu', () => {
   it('closes the dialog with Cancel and with Escape, and gives the focus back', async () => {
     view();
     fireEvent.click(await action());
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Request change' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Request changes' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Review action for #5' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Request change' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Request changes' }));
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(api.requestChangesPr).not.toHaveBeenCalled();

@@ -19,7 +19,7 @@ const open = (number = 1) =>
 
 describe('CiCell badge', () => {
   it.each([
-    ['passing', 'Ready'],
+    ['passing', 'Passing'],
     ['failing', 'Fails'],
     ['running', 'Running'],
     ['none', 'No CI'],

@@ -7,7 +7,7 @@ import styles from './Controls.module.css';
 import { SpinnerIcon } from './Icons';
 
 const ROLLUP: Record<SnapshotPr['ci']['state'], { tone: string; label: string }> = {
-  passing: { tone: styles.ok ?? '', label: 'Ready' },
+  passing: { tone: styles.ok ?? '', label: 'Passing' },
   failing: { tone: styles.err ?? '', label: 'Fails' },
   running: { tone: styles.warn ?? '', label: 'Running' },
   none: { tone: styles.ghost ?? '', label: 'No CI' },
@@ -30,7 +30,7 @@ const DOT: Partial<Record<Check['state'], string>> = {
 };
 
 /**
- * The CI cell: the rollup as an outlined badge ("Ready", "Fails", "Running"), and an "i" segment
+ * The CI cell: the rollup as an outlined badge ("Passing", "Fails", "Running"), and an "i" segment
  * that opens a panel with the checks and a link to all of them on GitHub. The panel is fixed to the
  * viewport (the card is glass, which would clip it), closes with Escape, a click outside or Tab,
  * and gives the focus back to the "i" button.

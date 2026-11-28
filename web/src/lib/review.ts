@@ -92,7 +92,7 @@ function unrequiredBadge(a: Approvals, you: string): ReviewBadge {
 }
 
 export interface ReviewAccess {
-  /** Whether the Action menu (Approve, Request change) is offered. */
+  /** Whether the Action menu (Approve, Request changes) is offered. */
   allowed: boolean;
   /** Why not, in a sentence for the tooltip. */
   reason: string | null;
