@@ -6,6 +6,30 @@ Versioning: [semver](https://semver.org/). The version lives in the `VERSION` fi
 root and stayed `0.x` until v1 was complete. Every merged change bumps `VERSION` and adds a dated
 entry for that version. There is no "Unreleased" section.
 
+## [2.4.4] - 2026-11-28
+
+### Fixed
+
+- The list no longer scrolls sideways at 390px: a tooltip that is not shown takes no room, and one that is shown stays inside the screen.
+- Text in the light theme reaches 4.5:1 contrast: the ticket badge, the CI chip (now "Passing", "Running", "Fails"), the size of a change,
+  the STACK chip and the Merge button (a deeper blue).
+- A long title takes two lines below 1024px, and a cut title slides to its end when its link has the focus as well as on hover. The full title is its tooltip.
+- Toasts: information and success messages are announced from one live region that is always in the page, and pause while the pointer or
+  the focus is on them. An error is announced at once, stays until you close it, and has a Dismiss button.
+- The empty list says why: GitHub is not connected (with a Connect GitHub button), a search matches nothing (Clear search), or the switches and
+  filters hide everything (Reset filters); with no open pull request it says so.
+- A refused token or client secret marks its field as invalid and points it at the error.
+- The sidebar no longer folds while the focus is inside it, however the focus got there. It folds 30 seconds after the focus leaves and the pointer is away.
+- The Settings title of the sidebar is a heading. The compact summary buttons are named with the word they show first.
+- Wording: the draft button is "Mark ready", the Repositories block is "Repositories", the menu item is "Request changes".
+- Saving a setting, a token or an account refetches only what it changes, and never resets the sync status.
+
+### Changed
+
+- All the tabs of a browser share one connection to the server's event stream (Web Locks and BroadcastChannel); each tab opens its own where they are missing.
+- Typing in the search, or an unchanged snapshot, no longer renders the sidebar, the header buttons or the cards that did not change; hiding a card renders only that card.
+  The Stale filter checks the clock once an hour. The Accounts, rules, History and merge dialogs load when first used, which takes about 42 KB (10 KB compressed) off the first load.
+
 ## [2.4.3] - 2026-11-27
 
 ### Added

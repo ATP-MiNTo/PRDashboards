@@ -96,19 +96,45 @@
   backdrop-filter: var(--glass-blur);
 }
 
-/* The title row is one button that folds the sidebar. */
+/* The title row. The heading is its text; the Collapse button is the chevron, stretched over the
+   whole row so the row stays one target. */
 .head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   margin: -0.5rem;
   padding: 0.5rem;
-  border: 0;
   border-radius: 0.5rem;
   background: transparent;
   color: inherit;
-  font: inherit;
   text-align: left;
+}
+
+.headButton {
+  display: grid;
+  place-items: center;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.headButton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.5rem;
+}
+
+.headButton:focus-visible {
+  outline: none;
+}
+
+.headButton:focus-visible::after {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .head:hover {
@@ -129,13 +155,13 @@
 }
 
 .headTitle {
+  margin: 0;
   font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.75rem;
 }
 
 .headChevron {
-  margin-left: auto;
   opacity: 0.6;
 }
 

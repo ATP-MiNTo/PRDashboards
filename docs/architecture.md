@@ -138,7 +138,7 @@ sequenceDiagram
 - `rules`, `linking`, `stacks` and the merge method resolver are pure: no network, no database, no
   clock. Time is passed in.
 - Only `github`, `jira` and `auth` make outbound calls. Only `store` touches SQLite.
-- The web app talks only to `/api/*` and `/events` on its own origin.
+- The web app talks only to `/api/*` and `/events` on its own origin. One `EventSource` serves all the tabs of a browser: a tab elected with a Web Lock reads `/events` and rebroadcasts the events to the others ([command-table.md](features/command-table.md)).
 - `api/openapi.yaml` is the contract. Go and TS types are generated from it and never edited by
   hand.
 

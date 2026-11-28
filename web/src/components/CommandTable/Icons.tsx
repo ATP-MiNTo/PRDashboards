@@ -78,7 +78,7 @@ export function CheckIcon() {
   );
 }
 
-/** The mark of the Request change item. */
+/** The mark of the Request changes item. */
 export function AlertIcon() {
   return (
     <Icon size={16}>

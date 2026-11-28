@@ -125,7 +125,7 @@ describe('CommandTable', () => {
     expect(within(child).getByRole('checkbox', { name: 'Hide #2' })).toBeInTheDocument();
     const draft = screen.getByText('Plain fix').closest('article')!;
     expect(within(draft).getByText('Draft', { selector: 'span' })).toBeInTheDocument();
-    expect(within(draft).getByRole('button', { name: 'Ready' })).toBeInTheDocument();
+    expect(within(draft).getByRole('button', { name: 'Mark ready' })).toBeInTheDocument();
     expect(within(draft).queryByRole('button', { name: 'Merge' })).toBeNull();
     expect(screen.getByText('Merge conflicts')).toBeInTheDocument();
   });
@@ -264,8 +264,8 @@ describe('CommandTable', () => {
           .map((b) => b.getAttribute('aria-label'));
         expect(names).toEqual([
           'Showing: 4',
-          'Ready to merge: 1',
-          'Running CI: 0',
+          'Ready: 1, ready to merge',
+          'CI: 0, running CI',
           'Blocked: 2',
           'Draft: 1',
           'Stale: 1',
@@ -353,7 +353,7 @@ describe('CommandTable', () => {
     expect(await screen.findByText(/rate limit reached/)).toBeInTheDocument();
     expect(screen.getByText('Jira unreachable, retry the lookup')).toBeInTheDocument();
     expect(screen.getByText('GitHub returns at most 1,000 results.')).toBeInTheDocument();
-    expect(screen.getByText('Nothing here')).toBeInTheDocument();
+    expect(screen.getByText('No open pull requests')).toBeInTheDocument();
   });
 
   it('offers to connect GitHub when it is disconnected', async () => {
@@ -477,7 +477,7 @@ describe('CommandTable', () => {
     const row = (await screen.findByText('Add login')).closest('article')!;
     expect(within(row).queryByRole('combobox', { name: 'Merge method' })).toBeNull();
     fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
-    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Merge acme/web #1?' });
     expect(within(dialog).getByRole('button', { name: 'Merge method' })).toHaveTextContent(
       'merge commit',
     );
@@ -491,7 +491,7 @@ describe('CommandTable', () => {
     renderWithClient(<CommandTable />);
     const row = (await screen.findByText('Add login')).closest('article')!;
     fireEvent.click(within(row).getByRole('button', { name: 'Merge' }));
-    const dialog = screen.getByRole('dialog', { name: 'Merge acme/web #1?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Merge acme/web #1?' });
     expect(within(dialog).getByText('Add login')).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.queryByRole('dialog', { name: 'Merge acme/web #1?' })).toBeNull();
@@ -507,7 +507,7 @@ describe('CommandTable', () => {
     expect(burger).toHaveAttribute('aria-expanded', 'true');
     const dialog = screen.getByRole('dialog', { name: 'Settings' });
     expect(
-      await within(dialog).findByRole('heading', { name: /^Repositories setting/ }),
+      await within(dialog).findByRole('heading', { name: /^Repositories/ }),
     ).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -626,7 +626,7 @@ describe('CommandTable', () => {
     const button = screen.getByRole('button', { name: 'History' });
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-pressed', 'true');
-    const view = screen.getByRole('region', { name: 'Merged pull requests' });
+    const view = await screen.findByRole('region', { name: 'Merged pull requests' });
     expect(within(view).getByText(/Nothing merged here yet/)).toBeInTheDocument();
     expect(screen.queryByText('Add login')).toBeNull();
     expect(screen.queryByRole('group', { name: 'Summary' })).toBeNull();

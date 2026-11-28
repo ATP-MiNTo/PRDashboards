@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { lazy, memo, Suspense, useState } from 'react';
 import type { MergeResult, SnapshotPr } from '@/api/client';
 import { useSnapshot, useSnapshotPr } from '@/api/queries';
 import { ageShort, initials } from '@/lib/card';
@@ -9,7 +9,6 @@ import { CiCell } from './CiCell';
 import styles from './CommandTable.module.css';
 import { CommitIcon, LayersIcon, PrIcon } from './Icons';
 import { MergeCell } from './MergeCell';
-import { MergeDialog } from './MergeDialog';
 import { NoteButton } from './NoteButton';
 import { NoteDialog } from './NoteDialog';
 import { Pill } from './Pill';
@@ -105,6 +104,9 @@ interface CardProps {
   onMerged?: (pr: SnapshotPr, result: MergeResult) => void;
 }
 
+// The merge dialog is a separate chunk, loaded the first time a Merge button is clicked.
+const MergeDialog = lazy(() => import('./MergeDialog').then((m) => ({ default: m.MergeDialog })));
+
 const MOTION_CLASS = { out: styles.ghostOut, in: styles.ghostIn, dim: styles.ghostDim } as const;
 
 function CardView({ id, hidden, dim, motion, onHide, note, onNote, launch, onMerged }: CardProps) {
@@ -125,7 +127,7 @@ function CardView({ id, hidden, dim, motion, onHide, note, onNote, launch, onMer
         </span>
         <div className={styles.cardBody}>
           <h2 className={styles.title}>
-            <Marquee className={styles.titleMq}>
+            <Marquee className={styles.titleMq} title={pr.title}>
               {url ? (
                 <a href={url} target="_blank" rel="noopener noreferrer">
                   {pr.title}
@@ -178,14 +180,16 @@ function CardView({ id, hidden, dim, motion, onHide, note, onNote, launch, onMer
         />
       )}
       {dialog && (
-        <MergeDialog
-          pr={pr}
-          onClose={() => setDialog(false)}
-          onMerged={(result) => {
-            setDialog(false);
-            onMerged?.(pr, result);
-          }}
-        />
+        <Suspense fallback={null}>
+          <MergeDialog
+            pr={pr}
+            onClose={() => setDialog(false)}
+            onMerged={(result) => {
+              setDialog(false);
+              onMerged?.(pr, result);
+            }}
+          />
+        </Suspense>
       )}
     </article>
   );

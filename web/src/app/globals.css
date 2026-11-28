@@ -82,14 +82,14 @@
   --accent-hover: color-mix(in oklab, oklch(var(--p)) 90%, #000);
 
   /* Merge: the blue of the Merge button and its aura. */
-  --merge: #007fff;
-  --merge-hover: #1a8cff;
+  --merge: #0066cc;
+  --merge-hover: #0a70d8;
 
   /* Roles and stacks. A card is tinted whole: cyan-teal for a pull request assigned to the user or
      opened by the user, red for one the user is asked to review, split 46/54 for both. */
   --rc-a: #bfeaf1;
   --rc-r: #f9c9c9;
-  --stack: #8b6cf0;
+  --stack: #6f4bd8;
 
   /* The Blocked number: red on the normal tile. */
   --blocked-fg: #b3202c;
@@ -111,8 +111,15 @@
   --stack-step-bg: color-mix(in oklab, var(--stack) 28%, transparent);
 
   /* Size of a change in a card: additions and deletions, tinted from the success and error colours. */
-  --diff-add: color-mix(in oklch, oklch(var(--su)) 40%, oklch(var(--bc)));
-  --diff-del: color-mix(in oklch, oklch(var(--er)) 72%, oklch(var(--bc)));
+  --diff-add: #1d6a2a;
+  --diff-del: #a8161f;
+
+  /* Text tones that need 4.5:1 on a tinted card in light: the ticket badge and the CI chip. The
+     winter info, success, warning and error colours are pastels, so light uses fixed inks. */
+  --ticket-fg: #0c5a70;
+  --ci-ok: #14603a;
+  --ci-warn: #78490a;
+  --ci-err: #9c1c27;
 
   /* Toolbar names, kept for the existing modules. */
   --tb-bg: oklch(var(--b1));
@@ -213,6 +220,12 @@
   --stack-group-line: rgba(170, 150, 255, 0.25);
   --stack-group-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   --stack-chip-fg: #1a1530;
+  --diff-add: color-mix(in oklch, oklch(var(--su)) 40%, oklch(var(--bc)));
+  --diff-del: color-mix(in oklch, oklch(var(--er)) 72%, oklch(var(--bc)));
+  --ticket-fg: color-mix(in oklab, oklch(var(--in)) 55%, oklch(var(--bc)));
+  --ci-ok: color-mix(in oklab, oklch(var(--su)) 55%, oklch(var(--bc)));
+  --ci-warn: color-mix(in oklab, oklch(var(--wa)) 55%, oklch(var(--bc)));
+  --ci-err: color-mix(in oklab, oklch(var(--er)) 60%, oklch(var(--bc)));
 
   --on-fill: #1a1400;
   --good: #a6e8c4;

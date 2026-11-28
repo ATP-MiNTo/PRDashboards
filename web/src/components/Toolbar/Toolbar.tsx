@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { SORT_OPTIONS, type SortKey } from '@/lib/sort';
 import type { ShowMode } from '@/lib/show';
 import type { HideMode } from '@/lib/view';
@@ -42,7 +42,7 @@ export interface ToolbarProps {
   counts: Record<HideMode, number>;
 }
 
-export function Toolbar({
+export const Toolbar = memo(function Toolbar({
   sort,
   reversed,
   onSort,
@@ -164,4 +164,4 @@ export function Toolbar({
       </ul>
     </div>
   );
-}
+});

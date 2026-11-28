@@ -89,7 +89,7 @@ test("a second token takes the repository where it has the higher role", async (
   // The VIA badge of each repository is the name of its token, with the hint beside it, so the
   // two tokens differ by their text and not only by colour.
   const sidebar = await openSettings(page);
-  await sidebar.getByRole("button", { name: /^Repositories setting/ }).click();
+  await sidebar.getByRole("button", { name: /^Repositories/ }).click();
   const repoRow = (name: string) =>
     sidebar.getByRole("listitem").filter({
       has: page.getByRole("button", { name: `Settings for ${name}` }),

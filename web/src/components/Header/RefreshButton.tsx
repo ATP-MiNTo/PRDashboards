@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import { memo, useEffect, useId, useRef, useState, type RefObject } from 'react';
 import type { Snapshot, SyncStatus } from '@/api/client';
 import { useSyncNow } from '@/api/queries';
 import { refreshToast } from '@/lib/refresh';
@@ -44,7 +44,7 @@ export function useSpin(ref: RefObject<HTMLElement | null>, spinning: boolean): 
  * The refresh circle: starts a sync, spins while one runs, and shows the sync details in a popover
  * on hover and keyboard focus. A refresh that this button started ends with a toast.
  */
-export function RefreshButton({
+export const RefreshButton = memo(function RefreshButton({
   snapshot,
   status,
 }: {
@@ -128,4 +128,4 @@ export function RefreshButton({
       )}
     </span>
   );
-}
+});

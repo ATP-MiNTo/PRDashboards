@@ -200,7 +200,7 @@ export function RepositoriesSection({
           onClick={() => setExpanded(!expanded)}
         >
           <span className={styles.foldLabel}>
-            <span className={styles.eyebrow}>Repositories setting</span>
+            <span className={styles.eyebrow}>Repositories</span>
             {repos.isSuccess && (
               <span
                 className={styles.count}

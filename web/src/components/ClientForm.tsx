@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import styles from '@/app/page.module.css';
 import { ApiError, type Provider } from '@/api/client';
 import { useSaveClient } from '@/api/queries';
@@ -30,6 +30,11 @@ export function ClientForm({
   const [clientSecret, setClientSecret] = useState('');
   const [appSlug, setAppSlug] = useState('');
   const save = useSaveClient();
+  const errorId = useId();
+  const invalid = {
+    'aria-invalid': save.isError || undefined,
+    'aria-describedby': save.isError ? errorId : undefined,
+  };
 
   const link = withSlug ? appInstallUrl(installUrl) : null;
 
@@ -67,6 +72,7 @@ export function ClientForm({
             autoComplete="off"
             required
             maxLength={256}
+            {...invalid}
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
           />
@@ -79,6 +85,7 @@ export function ClientForm({
             autoComplete="off"
             required
             maxLength={512}
+            {...invalid}
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
           />
@@ -90,6 +97,7 @@ export function ClientForm({
               name="appSlug"
               autoComplete="off"
               maxLength={100}
+              {...invalid}
               pattern="[a-z0-9][a-z0-9\-]*"
               title="Lowercase letters, digits and dashes"
               value={appSlug}
@@ -104,7 +112,7 @@ export function ClientForm({
           Save credentials
         </button>
         {save.isError && (
-          <p role="alert" className={styles.error}>
+          <p id={errorId} role="alert" className={styles.error}>
             {describeProblem(save.error instanceof ApiError ? save.error.code : undefined)}
           </p>
         )}

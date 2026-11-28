@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import styles from './Header.module.css';
 import { Icon } from './Icon';
 
@@ -8,7 +8,13 @@ import { Icon } from './Icon';
  * The history circle: toggles the history view. After the first toggle the clock hand winds three
  * turns one way when the view opens and the other way when it closes.
  */
-export function HistoryButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+export const HistoryButton = memo(function HistoryButton({
+  active,
+  onToggle,
+}: {
+  active: boolean;
+  onToggle: () => void;
+}) {
   const [used, setUsed] = useState(false);
   const wind = used ? (active ? styles.unwind : styles.wind) : undefined;
   return (
@@ -32,4 +38,4 @@ export function HistoryButton({ active, onToggle }: { active: boolean; onToggle:
       </Icon>
     </button>
   );
-}
+});

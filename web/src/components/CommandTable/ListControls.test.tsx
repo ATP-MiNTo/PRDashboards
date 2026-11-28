@@ -459,10 +459,11 @@ describe('search', () => {
     expect(rowOrder()).toEqual(['a']);
     type('nothing like this');
     expect(rowOrder()).toEqual([]);
-    expect(screen.getByText('Nothing here')).toBeInTheDocument();
-    expect(
-      screen.getByText('No open pull requests match these switches and filters.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('No matches')).toBeInTheDocument();
+    expect(screen.getByText('No pull request matches this search.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(search()).toHaveValue('');
+    expect(rowOrder()).toEqual(['a', 'b', 'c']);
     type('');
     expect(rowOrder()).toEqual(['a', 'b', 'c']);
   });
@@ -589,7 +590,7 @@ describe('paging', () => {
 
     load([]);
     renderWithClient(<CommandTable />);
-    await waitFor(() => expect(screen.getByText('Nothing here')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('No open pull requests')).toBeInTheDocument());
     expect(screen.queryByRole('combobox', { name: 'Pull requests per page' })).toBeNull();
   });
 });

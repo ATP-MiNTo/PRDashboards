@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TOAST_MS, ToastProvider, useToast, type ToastKind } from './Toast';
 
@@ -19,21 +19,27 @@ const press = (name: string) =>
     screen.getByRole('button', { name }).click();
   });
 
+const live = () => screen.getByRole('status');
+
 describe('toasts', () => {
-  it('shows a message as a status and removes it after 3.2 seconds', () => {
+  it('keeps one polite live region mounted, and shows a message in it for 3.2 seconds', () => {
     render(
       <ToastProvider>
         <Button message="Refreshed" />
       </ToastProvider>,
     );
     expect(TOAST_MS).toBe(3200);
-    expect(screen.queryByRole('status')).toBeNull();
+    const region = live();
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(region).toBeEmptyDOMElement();
     press('show Refreshed');
-    expect(screen.getByRole('status')).toHaveTextContent('Refreshed');
+    expect(live()).toBe(region);
+    expect(region).toHaveTextContent('Refreshed');
     act(() => vi.advanceTimersByTime(TOAST_MS - 1));
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(region).toHaveTextContent('Refreshed');
     act(() => vi.advanceTimersByTime(1));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(region).toBeEmptyDOMElement();
+    expect(live()).toBe(region);
   });
 
   it('stacks several toasts, each leaving after its own time', () => {
@@ -46,11 +52,11 @@ describe('toasts', () => {
     press('show One');
     act(() => vi.advanceTimersByTime(1000));
     press('show Two');
-    expect(screen.getAllByRole('status').map((s) => s.textContent)).toEqual(['One', 'Two']);
+    expect([...live().children].map((s) => s.textContent)).toEqual(['One', 'Two']);
     act(() => vi.advanceTimersByTime(TOAST_MS - 1000));
-    expect(screen.getAllByRole('status').map((s) => s.textContent)).toEqual(['Two']);
+    expect([...live().children].map((s) => s.textContent)).toEqual(['Two']);
     act(() => vi.advanceTimersByTime(1000));
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(live()).toBeEmptyDOMElement();
   });
 
   it('gives each kind its own class and defaults to info', () => {
@@ -64,14 +70,66 @@ describe('toasts', () => {
     press('show a');
     press('show b');
     press('show c');
-    const classes = screen.getAllByRole('status').map((s) => s.className);
+    const classes = [...live().children, screen.getByRole('alert')].map((s) => s.className);
     expect(new Set(classes).size).toBe(3);
+  });
+
+  it('shows an error as an alert outside the status region, until it is dismissed', () => {
+    render(
+      <ToastProvider>
+        <Button message="Merge failed" kind="error" />
+      </ToastProvider>,
+    );
+    press('show Merge failed');
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('Merge failed');
+    expect(live()).not.toContainElement(alert);
+    act(() => vi.advanceTimersByTime(TOAST_MS * 10));
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('pauses while the pointer is over a toast and goes on with the time left', () => {
+    render(
+      <ToastProvider>
+        <Button message="Hold" />
+      </ToastProvider>,
+    );
+    press('show Hold');
+    const toast = live().firstElementChild!;
+    act(() => vi.advanceTimersByTime(2000));
+    fireEvent.mouseEnter(toast);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(live()).toHaveTextContent('Hold');
+    fireEvent.mouseLeave(toast);
+    act(() => vi.advanceTimersByTime(TOAST_MS - 2000 - 1));
+    expect(live()).toHaveTextContent('Hold');
+    act(() => vi.advanceTimersByTime(1));
+    expect(live()).toBeEmptyDOMElement();
+  });
+
+  it('pauses while the focus is inside a toast and resumes when it leaves', () => {
+    render(
+      <ToastProvider>
+        <Button message="Focus" />
+      </ToastProvider>,
+    );
+    press('show Focus');
+    const toast = live().firstElementChild!;
+    fireEvent.focus(toast);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(live()).toHaveTextContent('Focus');
+    fireEvent.blur(toast);
+    act(() => vi.advanceTimersByTime(TOAST_MS));
+    expect(live()).toBeEmptyDOMElement();
   });
 
   it('does nothing without a provider', () => {
     render(<Button message="Lost" />);
     press('show Lost');
     expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('clears its timers when it unmounts', () => {

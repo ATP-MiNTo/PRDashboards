@@ -65,7 +65,7 @@ function renderSection(off: string[] = [], onOff = vi.fn()) {
   return onOff;
 }
 
-const fold = () => screen.findByRole('button', { name: /^Repositories setting/ });
+const fold = () => screen.findByRole('button', { name: /^Repositories/ });
 
 describe('RepositoriesSection', () => {
   it('is folded by default and shows how many repositories the list shows', async () => {

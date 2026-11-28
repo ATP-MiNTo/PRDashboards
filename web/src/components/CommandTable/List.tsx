@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { MergeResult, Snapshot, SnapshotPr } from '@/api/client';
 import { useSnapshot } from '@/api/queries';
 import { mergeSummary } from '@/lib/merge';
-import { groupsOf, type Group } from '@/lib/snapshot';
+import { groupsOf, prsById, type Group } from '@/lib/snapshot';
 import { sortGroups } from '@/lib/sort';
 import { reducedMotion } from '@/lib/storage';
 import { applyHidden, locate, paginate, pinLaunched, shownIn, type Launched } from '@/lib/view';
@@ -23,6 +23,7 @@ export const LAUNCH_MS = 3000;
 export const LAUNCH_REDUCED_MS = 1200;
 
 const NO_GROUPS: Group[] = [];
+const NO_REPOS: ReadonlySet<string> = new Set();
 
 interface Playing extends Launch {
   where: Launched;
@@ -33,10 +34,13 @@ export function Notice({
   title,
   children,
   error,
+  action,
 }: {
   title?: string;
   children: string;
   error?: boolean;
+  /** A button that fixes what the message says, under the text. */
+  action?: ReactNode;
 }) {
   return (
     <div className={styles.empty} role={error ? 'alert' : undefined}>
@@ -44,11 +48,73 @@ export function Notice({
       <p className={error ? `${styles.emptyBody} ${styles.emptyError}` : styles.emptyBody}>
         {children}
       </p>
+      {action}
     </div>
   );
 }
 
-export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
+const selectGithubState = (s: Snapshot) => s.sources.github.state;
+const selectTotal = (s: Snapshot) => s.prs.length;
+
+/**
+ * What an empty list says, by what empties it: GitHub not connected, a search that matches nothing,
+ * switches and filters that hide everything, or really no open pull request. Each with the button
+ * that undoes the cause.
+ */
+function EmptyState({ prefs, onConnect }: { prefs: ListPrefs; onConnect: () => void }) {
+  const github = useSnapshot(selectGithubState).data;
+  const total = useSnapshot(selectTotal).data ?? 0;
+  const { terms, setQuery, setFilter, setShow, setOff, setMode, hidden } = prefs;
+  const reset = useCallback(() => {
+    setFilter('all');
+    setShow('all');
+    setOff(NO_REPOS);
+    setMode(hidden.size > 0 ? 'all' : 'visible');
+  }, [setFilter, setShow, setOff, setMode, hidden]);
+  const button = (label: string, onClick: () => void) => (
+    <button type="button" className={styles.emptyAction} onClick={onClick}>
+      {label}
+    </button>
+  );
+
+  if (total === 0 && github === 'disconnected') {
+    return (
+      <Notice title="GitHub is not connected" action={button('Connect GitHub', onConnect)}>
+        Connect GitHub to see the pull requests assigned to you or opened by you.
+      </Notice>
+    );
+  }
+  if (total === 0) {
+    return (
+      <Notice title="No open pull requests">
+        Nothing is assigned to you or opened by you right now.
+      </Notice>
+    );
+  }
+  if (terms.length > 0) {
+    return (
+      <Notice title="No matches" action={button('Clear search', () => setQuery(''))}>
+        No pull request matches this search.
+      </Notice>
+    );
+  }
+  return (
+    <Notice title="Nothing here" action={button('Reset filters', reset)}>
+      No open pull requests match these switches and filters.
+    </Notice>
+  );
+}
+
+export const List = memo(function List({
+  prefs,
+  now,
+  onConnect,
+}: {
+  prefs: ListPrefs;
+  now: number;
+  /** Opens the Accounts dialog, from the empty state of a list that has no GitHub connection. */
+  onConnect: () => void;
+}) {
   const { filter, terms, sort, reversed, mode, show, hidden, toggleHidden, pageSize, page } = prefs;
   const { off, notes, setNote } = prefs;
   // Merged cards stay in the list while their launch plays, even after the snapshot dropped them.
@@ -56,15 +122,15 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
   const wheres = useMemo(() => [...playing.values()].map((p) => p.where), [playing]);
   const select = useCallback(
     (s: Snapshot) => {
-      const byId = new Map(s.prs.map((p) => [p.id, p]));
+      const byId = prsById(s);
       const groups = sortGroups(groupsOf(s, filter, show, terms, off, now), byId, sort, reversed);
-      return pinLaunched(applyHidden(groups, hidden, mode), wheres, new Set(byId.keys()));
+      return pinLaunched(applyHidden(groups, hidden, mode), wheres, byId);
     },
     [filter, terms, sort, reversed, show, off, hidden, mode, wheres, now],
   );
   const groups = useSnapshot<Group[]>(select).data ?? NO_GROUPS;
   const toast = useToast();
-  const pages = paginate(groups, pageSize);
+  const pages = useMemo(() => paginate(groups, pageSize), [groups, pageSize]);
   const current = Math.min(page, Math.max(0, pages.length - 1));
 
   // A card about to leave the list fades out first and the toggle is applied when it ends. One that
@@ -75,6 +141,14 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
     const all = timers.current;
     return () => all.forEach(clearTimeout);
   }, []);
+
+  // What the callbacks below read when they run. Keeping it in a ref leaves the callbacks, which
+  // every card receives, the same function from one render to the next, so a change to one card
+  // does not render the others.
+  const latest = useRef({ hidden, motion, mode, groups });
+  useEffect(() => {
+    latest.current = { hidden, motion, mode, groups };
+  });
 
   const play = useCallback((id: string, m: Exclude<Motion, null> | null) => {
     setMotion((cur) => {
@@ -87,6 +161,7 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
 
   const hide = useCallback(
     (id: string) => {
+      const { hidden, motion, mode } = latest.current;
       const isHidden = hidden.has(id);
       if (reducedMotion() || motion.has(id)) {
         toggleHidden(id);
@@ -112,7 +187,7 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
       }, GHOST_MS);
       timers.current.add(t);
     },
-    [hidden, motion, mode, play, toggleHidden],
+    [play, toggleHidden],
   );
 
   // The server accepted a merge: the card plays the launch, then leaves and the toast sums it up.
@@ -123,7 +198,7 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
         toast.show(summary.text, summary.failed ? 'error' : 'info');
         return;
       }
-      const where = locate(groups, pr.id);
+      const where = locate(latest.current.groups, pr.id);
       const done = () => {
         setPlaying((cur) => {
           const next = new Map(cur);
@@ -146,7 +221,7 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
       );
       timers.current.add(t);
     },
-    [groups, toast],
+    [toast],
   );
 
   const card = (id: string) => {
@@ -170,9 +245,7 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
   return (
     <>
       {groups.length === 0 ? (
-        <Notice title="Nothing here">
-          No open pull requests match these switches and filters.
-        </Notice>
+        <EmptyState prefs={prefs} onConnect={onConnect} />
       ) : (
         <div className={styles.list}>
           {(pages[current] ?? []).map((g) =>
@@ -196,4 +269,4 @@ export function List({ prefs, now }: { prefs: ListPrefs; now: number }) {
       />
     </>
   );
-}
+});

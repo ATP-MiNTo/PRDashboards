@@ -1,6 +1,6 @@
 import type { Snapshot } from '@/api/client';
 import type { ShowMode } from './show';
-import { blockOf, groupsOf, isStale, type Filter, type Group } from './snapshot';
+import { blockOf, groupsOf, isStale, prsById, type Filter, type Group } from './snapshot';
 
 /** Which pull requests the list shows: visible only, all with hidden ones dimmed, hidden only. */
 export type HideMode = 'visible' | 'all' | 'hidden';
@@ -129,7 +129,7 @@ const count = (groups: Group[]) => groups.reduce((n, g) => n + g.ids.length, 0);
 /** What the stat tiles say about the list as the Show, hide and search switches leave it. */
 export function listStats(s: Snapshot, v: ListView): ListStats {
   const base = applyHidden(groupsOf(s, 'all', v.show, v.terms, v.off, v.now), v.hidden, v.mode);
-  const byId = new Map(s.prs.map((p) => [p.id, p]));
+  const byId = prsById(s);
   const out: ListStats = {
     showing: 0,
     ready: 0,
@@ -185,7 +185,7 @@ export function locate(groups: readonly Group[], id: string): Omit<Launched, 'id
 export function pinLaunched(
   groups: Group[],
   launched: readonly Launched[],
-  present: ReadonlySet<string>,
+  present: { has(id: string): boolean },
 ): Group[] {
   if (!launched.some((l) => !present.has(l.id))) return groups;
   const out = groups.map((g) => ({ ...g, ids: [...g.ids] }));

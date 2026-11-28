@@ -103,7 +103,7 @@ export function ReviewCell({ pr }: { pr: SnapshotPr }) {
               <span className={`${styles.menuIcon} ${styles.menuChange}`}>
                 <AlertIcon />
               </span>
-              Request change
+              Request changes
             </MenuItem>
           </>
         )}

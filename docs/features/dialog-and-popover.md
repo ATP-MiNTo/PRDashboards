@@ -7,7 +7,7 @@ Status: Built. PRD: [PRD.md](../PRD.md). Spec: [TECH_SPEC.md](../TECH_SPEC.md) s
 Three small shared components that the cards' controls are built from, taken from the approved design:
 a centred dialog (the merge dialog and the request-changes dialog), a popup menu opened by a button
 (the Action menu, the "My tickets" menu, the method and the ticket status dropdowns of the merge
-dialog) and a tooltip (the blocked Merge, the Ready button, the review badge). The PRD and spec do
+dialog) and a tooltip (the blocked Merge, the Mark ready button, the review badge). The PRD and spec do
 not describe them; they are part of the v2 UI migration. The older [Dropdown](../../web/src/components/Dropdown/Dropdown.tsx) (a combobox) stays for the settings.
 
 ## Data model
@@ -28,7 +28,7 @@ None. No server data and no browser storage; all state is component state.
 2. `PopMenu` renders a trigger button (`aria-haspopup="menu"`, `aria-expanded`, `aria-controls` while open) and, while open, a `role="menu"` in a portal, placed by `usePopover`. A click, Enter, Space or the arrow keys open it; with `hover` it also opens after 120 ms of hover and closes 250 ms after the pointer leaves (a menu opened by a click stays until it is closed). The focus goes to the first enabled item when it was opened on purpose; the arrow keys move between enabled items; Escape closes it and returns the focus to the button; Tab or a mouse press elsewhere closes it. `onOpen` runs each time it opens, which is where the "My tickets" menu starts loading.
 3. `MenuItem` is a `role="menuitem"` button. A disabled one has `aria-disabled` and ignores clicks, but is not skipped by assistive technology. `active` marks the current choice with the neutral fill of the design.
 4. `Modal` takes `wide` for the rules and Accounts dialogs (at most 48rem instead of 32rem). `InfoTip` is the design's "i" ghost button: it shows a dark note under it (portalled, placed by `usePopover` with `shift`, the horizontal offset of the placement) on hover and focus, closes on Escape without closing what is around it, and the note is also its accessible description.
-5. `Tip` wraps one control and sets `data-tip`; the bubble is drawn by CSS (`::before`) on hover and while a control inside has keyboard focus (`:has(:focus-visible)`), on top (default) or on the left. The generated text has an empty accessible alternative (`content: attr(data-tip) / ''`), so it is not read twice.
+5. `Tip` wraps one control and sets `data-tip`; the bubble is drawn by CSS (`::before`) on hover and while a control inside has keyboard focus (`:has(:focus-visible)`), on top (default) or on the left. The generated text has an empty accessible alternative (`content: attr(data-tip) / ''`), so it is not read twice. A hidden bubble is `display: none`, never `opacity: 0` or `visibility: hidden`, which would still add its width to the scrollable area of the page (a centred bubble beside the edge made the list scroll sideways at 390px); it fades in with an animation when it shows. When the pointer enters or the focus arrives, `placeTip` measures the wrapper against the viewport and sets `data-align` (`center`, or `start` or `end` near the left or right edge, so the bubble grows inwards) and `--tip-max` (the room it has, at most 20rem), so a shown bubble stays inside the viewport.
 
 ## Outside calls
 
@@ -48,5 +48,5 @@ None.
 - [Modal.test.tsx](../../web/src/components/Modal/Modal.test.tsx): role and focus, Escape and the scrim, `dismissible`, the Tab trap, focus return, `wide`.
 - [InfoTip.test.tsx](../../web/src/components/InfoTip/InfoTip.test.tsx): the description, hover and focus, Escape.
 - [PopMenu.test.tsx](../../web/src/components/PopMenu/PopMenu.test.tsx): open, select, disabled items, arrow keys, Escape, outside press, Tab, toggle, disabled trigger, hover open and close, a click that pins it.
-- [Tip.test.tsx](../../web/src/components/Tip/Tip.test.tsx), [usePopover.test.tsx](../../web/src/components/Dropdown/usePopover.test.tsx) (the placements, the shift and the horizontal clamp), [Dropdown.test.tsx](../../web/src/components/Dropdown/Dropdown.test.tsx).
+- [Tip.test.tsx](../../web/src/components/Tip/Tip.test.tsx) (`data-tip`, the placement near each edge and on the left, no `opacity` in the hidden rule, `display: none`), the list page at 390px in [e2e/sidebar.spec.ts](../../e2e/sidebar.spec.ts), [usePopover.test.tsx](../../web/src/components/Dropdown/usePopover.test.tsx) (the placements, the shift and the horizontal clamp), [Dropdown.test.tsx](../../web/src/components/Dropdown/Dropdown.test.tsx).
 - The components in use are covered by the tests listed in [command-table.md](command-table.md).

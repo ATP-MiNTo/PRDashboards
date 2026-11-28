@@ -94,7 +94,7 @@ describe('MergeCell in a repository the account can only read', () => {
 
   it('disables Ready of a draft somebody else opened, and never calls the server', async () => {
     view(pr('a', 5, { isDraft: true, author: 'priya', repo: repo('READ') }));
-    const button = await screen.findByRole('button', { name: 'Ready' });
+    const button = await screen.findByRole('button', { name: 'Mark ready' });
     expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button).toHaveAccessibleDescription(reason);
     fireEvent.click(button);
@@ -104,8 +104,8 @@ describe('MergeCell in a repository the account can only read', () => {
   it('lets the author of the draft mark it ready, by login or by role', async () => {
     view(pr('a', 5, { isDraft: true, author: 'OctoCat', repo: repo('READ') }));
     await waitFor(() => expect(api.getAccounts).toHaveBeenCalled());
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ready' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mark ready' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }));
     await waitFor(() => expect(api.markPrReady).toHaveBeenCalledTimes(1));
   });
 });
@@ -115,7 +115,7 @@ describe('MergeCell draft', () => {
 
   it('shows Ready for a draft, not Merge, with a tooltip', () => {
     view(draft());
-    expect(screen.getByRole('button', { name: 'Ready' })).toHaveAccessibleDescription(
+    expect(screen.getByRole('button', { name: 'Mark ready' })).toHaveAccessibleDescription(
       'Draft. Mark ready for review to merge.',
     );
     expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull();
@@ -123,7 +123,7 @@ describe('MergeCell draft', () => {
 
   it('marks it ready with the head the card showed, then frosts a disabled Merge for a moment', async () => {
     view(draft());
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }));
     await waitFor(() =>
       expect(api.markPrReady).toHaveBeenCalledWith('a', { expectedHeadSha: 'sha-5' }),
     );
@@ -137,7 +137,7 @@ describe('MergeCell draft', () => {
   it('ends the frost sweep after about a second, and goes back to Ready if the snapshot never catches up', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     view(draft());
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }));
     await act(() => vi.advanceTimersByTimeAsync(50));
     expect(screen.getByRole('button', { name: 'Merge' }).className).toMatch(/cold/);
     await act(() => vi.advanceTimersByTimeAsync(1400));
@@ -145,7 +145,7 @@ describe('MergeCell draft', () => {
     expect(after.className).not.toMatch(/cold/);
     expect(after).toHaveAttribute('aria-disabled', 'true');
     await act(() => vi.advanceTimersByTimeAsync(30_000));
-    expect(screen.getByRole('button', { name: 'Ready' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark ready' })).toBeInTheDocument();
   });
 
   it.each([
@@ -158,18 +158,18 @@ describe('MergeCell draft', () => {
   ])('says in a toast why marking ready failed: %#', async (error, text) => {
     api.markPrReady.mockRejectedValue(error);
     view(draft());
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }));
     expect(await screen.findByText(text)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Ready' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Mark ready' })).toBeEnabled();
   });
 
   it('disables Ready while the request is out', async () => {
     let finish: (v: unknown) => void = () => {};
     api.markPrReady.mockReturnValue(new Promise((r) => (finish = r)));
     view(draft());
-    fireEvent.click(screen.getByRole('button', { name: 'Ready' }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ready' })).toBeDisabled());
-    expect(screen.getByRole('button', { name: 'Ready' })).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Mark ready' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Mark ready' })).toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Mark ready' })).toHaveAttribute('aria-busy', 'true');
     finish({ prId: 'a', state: 'OPEN' });
   });
 });

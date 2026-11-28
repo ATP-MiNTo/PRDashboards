@@ -1,6 +1,7 @@
+import { memo, useCallback } from 'react';
 import type { Snapshot } from '@/api/client';
 import { useSnapshot } from '@/api/queries';
-import { safeLink } from '@/lib/snapshot';
+import { prsById, safeLink } from '@/lib/snapshot';
 import styles from './CommandTable.module.css';
 import { LayersIcon } from './Icons';
 
@@ -12,7 +13,7 @@ interface StackFacts {
 
 /** The tickets across a stack (each key once, in stack order), the positions shown and the stack's size. */
 export function stackFacts(s: Snapshot, ids: readonly string[]): StackFacts {
-  const byId = new Map(s.prs.map((p) => [p.id, p]));
+  const byId = prsById(s);
   const seen = new Map<string, StackFacts['tickets'][number]>();
   const positions: number[] = [];
   let size = ids.length;
@@ -63,8 +64,8 @@ export function TicketBadge({
 }
 
 /** The line above a stack: the STACK chip, its tickets, the merge hint and one step badge per member. */
-export function StackBanner({ ids }: { ids: readonly string[] }) {
-  const facts = useSnapshot((s) => stackFacts(s, ids)).data;
+export const StackBanner = memo(function StackBanner({ ids }: { ids: readonly string[] }) {
+  const facts = useSnapshot(useCallback((s: Snapshot) => stackFacts(s, ids), [ids])).data;
   if (!facts) return null;
   const n = facts.positions.length;
   return (
@@ -92,4 +93,4 @@ export function StackBanner({ ids }: { ids: readonly string[] }) {
       </span>
     </div>
   );
-}
+});

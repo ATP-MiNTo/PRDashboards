@@ -56,6 +56,18 @@ export function safeLink(raw: string | null): SafeLink | null {
   return { href: u.href, host: u.host };
 }
 
+const byIdCache = new WeakMap<Snapshot, ReadonlyMap<string, SnapshotPr>>();
+
+/** The pull requests of a snapshot by id. Built once per snapshot, however many selectors ask. */
+export function prsById(s: Snapshot): ReadonlyMap<string, SnapshotPr> {
+  let m = byIdCache.get(s);
+  if (!m) {
+    m = new Map(s.prs.map((p) => [p.id, p]));
+    byIdCache.set(s, m);
+  }
+  return m;
+}
+
 export type Readiness = 'ready' | 'blocked' | 'draft';
 
 export interface Block {
@@ -212,11 +224,13 @@ export function groupsOf(
     }
     g.ids.push(pr.id);
   }
-  return groups.sort((a, b) => order(s, a) - order(s, b));
-}
-
-function order(s: Snapshot, g: Group): number {
-  return s.prs.findIndex((p) => p.id === g.ids[0]);
+  // A group sits where its first member sits in the snapshot. The index of each id is looked up once.
+  const index = new Map<string, number>();
+  s.prs.forEach((p, i) => {
+    if (!index.has(p.id)) index.set(p.id, i);
+  });
+  const at = (g: Group) => index.get(g.ids[0]!) ?? -1;
+  return groups.sort((a, b) => at(a) - at(b));
 }
 
 export function relativeTime(iso: string | null, now: number): string {

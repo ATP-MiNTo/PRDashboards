@@ -417,7 +417,7 @@ test("requests changes from the card, with a required comment", async ({
 }) => {
   const card = await withAction(page, "REV-31 Needs two approvals", 31);
   await card.getByRole("button", { name: "Review action for #31" }).click();
-  await page.getByRole("menuitem", { name: "Request change" }).click();
+  await page.getByRole("menuitem", { name: "Request changes" }).click();
 
   const dialog = page.getByRole("dialog", {
     name: "Request changes on acme/review #31",
@@ -465,7 +465,7 @@ test("marks a draft ready from its card", async ({ page, request }) => {
   await expect(
     card.getByRole("button", { name: "Merge", exact: true }),
   ).toHaveCount(0);
-  await card.getByRole("button", { name: "Ready", exact: true }).click();
+  await card.getByRole("button", { name: "Mark ready", exact: true }).click();
 
   await expect(page.getByText("#32 is no longer a draft")).toBeVisible();
   expect((await fakeState<GitHubState>(request, "github")).ready).toEqual([

@@ -55,7 +55,7 @@ for (const width of [1440, 1100]) {
     await page.goto(APP + "/");
     const sidebar = await openSettings(page);
     await sidebar
-      .getByRole("button", { name: /^Repositories setting/ })
+      .getByRole("button", { name: /^Repositories/ })
       .click();
     await expect(
       sidebar.getByRole("list", { name: "Repositories" }).getByRole("listitem"),
@@ -96,6 +96,24 @@ for (const width of [1440, 1100]) {
   });
 }
 
+test("the list page does not scroll sideways at 390px, with a tooltip open or not", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(APP + "/");
+  await expect(page.locator("article[data-pr]").first()).toBeVisible();
+  const fits = () =>
+    page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    );
+  expect(await fits()).toBe(true);
+  // A tooltip near the edge stays inside the page while it is shown, too.
+  const tipped = page.locator("[data-tip]").first();
+  await tipped.scrollIntoViewIfNeeded();
+  await tipped.hover();
+  expect(await fits()).toBe(true);
+});
+
 test.describe("auto-collapse", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -109,20 +127,23 @@ test.describe("auto-collapse", () => {
       .getByRole("button", { name: "Settings sidebar" })
       .getAttribute("aria-expanded");
 
-  test("folds 30 seconds after the pointer left it, although a button in it keeps the focus", async ({
+  test("does not fold while a button in it has the focus, and folds 30 seconds after the focus left", async ({
     page,
   }) => {
     const sidebar = page.getByRole("complementary", { name: "Settings" });
     await sidebar
-      .getByRole("button", { name: /^Repositories setting/ })
+      .getByRole("button", { name: /^Repositories/ })
       .click();
     await expect(
-      sidebar.getByRole("button", { name: /^Repositories setting/ }),
+      sidebar.getByRole("button", { name: /^Repositories/ }),
     ).toBeFocused();
     await page.mouse.move(100, 300);
     await page.clock.runFor(90_000);
     expect(await expanded(page)).toBe("true");
     await page.mouse.move(800, 400);
+    await page.clock.runFor(120_000);
+    expect(await expanded(page)).toBe("true");
+    await sidebar.getByRole("button", { name: /^Repositories/ }).blur();
     await page.clock.runFor(29_000);
     expect(await expanded(page)).toBe("true");
     await page.clock.runFor(2_000);
@@ -138,7 +159,11 @@ test.describe("auto-collapse", () => {
     expect(await expanded(page)).toBe("true");
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toBeHidden();
+    // The dialog gave the focus back to the button in the sidebar, which holds it open.
     await page.mouse.move(850, 420);
+    await page.clock.runFor(120_000);
+    expect(await expanded(page)).toBe("true");
+    await sidebar.getByRole("button", { name: "Status sync rules" }).blur();
     await page.clock.runFor(31_000);
     expect(await expanded(page)).toBe("false");
   });
