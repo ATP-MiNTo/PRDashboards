@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import styles from '@/app/page.module.css';
 import { ApiError } from '@/api/client';
 import { useSavePat } from '@/api/queries';
@@ -9,6 +9,7 @@ import { describeProblem } from '@/lib/problems';
 export function PatForm() {
   const [token, setToken] = useState('');
   const save = useSavePat();
+  const errorId = useId();
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -34,6 +35,8 @@ export function PatForm() {
             autoComplete="off"
             required
             maxLength={512}
+            aria-invalid={save.isError || undefined}
+            aria-describedby={save.isError ? errorId : undefined}
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
@@ -42,7 +45,7 @@ export function PatForm() {
           Validate and save
         </button>
         {save.isError && (
-          <p role="alert" className={styles.error}>
+          <p id={errorId} role="alert" className={styles.error}>
             {describeProblem(save.error instanceof ApiError ? save.error.code : undefined)}
           </p>
         )}
