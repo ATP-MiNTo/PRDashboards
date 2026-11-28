@@ -13,7 +13,7 @@ const (
 	// that reads the list moves it into GitHubTokens and deletes it.
 	GitHubToken = "github.token"
 	// GitHubTokens is the JSON array of the GitHub credentials, primary first.
-	GitHubTokens    = "github.tokens"
+	GitHubTokens    = "github.tokens" //nolint:gosec // keychain entry name, not a credential
 	AtlassianClient = "atlassian.oauth.client"
 	AtlassianToken  = "atlassian.token"
 	SessionKey      = "session.key"
