@@ -1,5 +1,8 @@
 /* The daisyUI tooltip: a dark bubble with a small tail, shown while the pointer is over the wrapper
-   or a control inside it has keyboard focus. The text is the data-tip attribute. */
+   or a control inside it has keyboard focus. The text is the data-tip attribute. While hidden the
+   bubble is display: none, so it never adds to the scrollable width of the page (opacity or
+   visibility would still count). Tip.tsx sets data-align and --tip-max when it opens, so the bubble
+   stays inside the viewport near an edge. */
 
 .tip {
   --tip-tail: 0.1875rem;
@@ -15,9 +18,8 @@
 .tip::after {
   position: absolute;
   z-index: 1;
-  opacity: 0;
+  display: none;
   pointer-events: none;
-  transition: opacity 0.2s cubic-bezier(0, 0, 0.2, 1);
 }
 
 .tip::before {
@@ -25,7 +27,7 @@
   /* The tip is also read from the control's description: give the generated text an empty alternative so it is not read twice. */
   content: attr(data-tip) / '';
   width: max-content;
-  max-width: 20rem;
+  max-width: var(--tip-max, 20rem);
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
   background: var(--tip-color);
@@ -38,7 +40,6 @@
 
 .tip::after {
   content: '';
-  display: block;
   width: 0;
   height: 0;
   border-style: solid;
@@ -49,8 +50,26 @@
 .tip:hover::after,
 .tip:has(:focus-visible)::before,
 .tip:has(:focus-visible)::after {
-  opacity: 1;
-  transition-delay: 75ms;
+  display: block;
+  animation: tipIn 0.2s cubic-bezier(0, 0, 0.2, 1) 75ms backwards;
+}
+
+@keyframes tipIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Near the left or right edge of the viewport the bubble grows inwards instead of centred. */
+.tip[data-align='start']::before {
+  left: 0;
+  transform: none;
+}
+
+.tip[data-align='end']::before {
+  right: 0;
+  left: auto;
+  transform: none;
 }
 
 /* On top (the default). */
@@ -88,6 +107,6 @@
 @media (prefers-reduced-motion: reduce) {
   .tip::before,
   .tip::after {
-    transition: none;
+    animation: none;
   }
 }

@@ -322,8 +322,25 @@
   line-height: 1.375;
 }
 
+/* Below 1024px the title may take two lines at the full width of the card; from 1024px it is one
+   line cut at a third of the card (at least 140px), which a slide or focus reveals. */
 .title .titleMq {
-  max-width: max(140px, calc((100cqw + 32px) / 3));
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1024px) {
+  .title .titleMq {
+    display: block;
+    max-width: max(140px, calc((100cqw + 32px) / 3));
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
 }
 
 .title a {
@@ -414,7 +431,7 @@
 .ticketBadge {
   border: 1px solid oklch(var(--in));
   background: oklch(var(--bc) / 0.05);
-  color: color-mix(in oklab, oklch(var(--in)) 55%, oklch(var(--bc)));
+  color: var(--ticket-fg);
   text-decoration: none;
 }
 
@@ -582,6 +599,12 @@
 
 .emptyError {
   color: var(--bad);
+}
+
+/* The button under an empty message that undoes its cause. */
+.emptyAction {
+  composes: ui-btn from global;
+  margin-top: 1rem;
 }
 
 .pill {
